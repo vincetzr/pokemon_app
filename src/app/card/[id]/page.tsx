@@ -6,6 +6,7 @@ import { buildPricing } from '@/lib/pricing/engine';
 import { seriesStats } from '@/lib/pricing/history';
 import { historyStats } from '@/lib/db';
 import { PriceChart } from '@/components/PriceChart';
+import { SaveToCollection } from '@/components/SaveToCollection';
 import { conditionLabel, type Money, type PriceQuote } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -97,6 +98,8 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
           this app{accrued.earliest && ` since ${accrued.earliest}`}.
         </p>
       )}
+
+      <SaveToCollection cardId={card.id} variants={card.variants} />
 
       {usdQuotes.length > 0 && <QuoteTable title="TCGplayer (USD)" quotes={usdQuotes} />}
       {eurQuotes.length > 0 && <QuoteTable title="Cardmarket (EUR)" quotes={eurQuotes} />}
