@@ -124,10 +124,22 @@ async function get<T>(path: string, params?: Record<string, string | number>): P
     }
     try {
       const res = await fetch(url, {
-        headers: headers(),
-        // Card and set data is effectively static; prices update daily.
-        next: { revalidate: 60 * 60 * 6 },
+        // The attempt number is here to make each retry a DISTINCT request.
+        // React memoizes fetches by URL plus options within a render pass, and
+        // `cache: 'no-store'` only opts out of the Data Cache, not that
+        // memoization — so six byte-identical retries collapse into one network
+        // call and the loop below silently does nothing. Observed directly: a
+        // failing lookup took the full 11.8s of backoff and still returned the
+        // very first failure. Varying a header changes the memo key.
+        headers: { ...headers(), 'x-retry-attempt': String(attempt) },
+        // Caching is handled in `tcg-cache`, which can serve stale data during
+        // an outage. Next's fetch cache cannot, so it is redundant here.
+        cache: 'no-store',
       });
+
+      if (process.env.TCG_DEBUG) {
+        console.info(`[tcg] attempt ${attempt} → ${res.status} ${url.pathname}${url.search}`);
+      }
 
       if (res.ok) return (await res.json()) as T;
 

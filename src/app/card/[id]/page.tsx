@@ -24,12 +24,16 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
   const eurQuotes = pricing.quotes.filter((q) => q.price.currency === 'EUR');
 
   // Chart whichever currency actually has history behind it.
-  const usdSeries = pricing.series.filter((s) =>
-    s.points.some((p) => p.price.currency === 'USD'),
-  );
-  const eurSeries = pricing.series.filter((s) =>
-    s.points.some((p) => p.price.currency === 'EUR'),
-  );
+  //
+  // Count points PER CURRENCY, not per series. A series mixes TCGplayer (USD)
+  // and Cardmarket (EUR) points, so counting them together says "enough to
+  // chart" when the currency the chart will actually draw has a single point —
+  // which rendered an empty chart card next to a populated one.
+  const countIn = (s: (typeof pricing.series)[number], currency: 'USD' | 'EUR') =>
+    s.points.filter((p) => p.price.currency === currency).length;
+
+  const usdSeries = pricing.series.filter((s) => countIn(s, 'USD') >= 2);
+  const eurSeries = pricing.series.filter((s) => countIn(s, 'EUR') >= 2);
 
   const stats = eurSeries[0] ? seriesStats(eurSeries[0]) : usdSeries[0] ? seriesStats(usdSeries[0]) : null;
 
@@ -84,9 +88,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
 
       <div className="mt-4 space-y-4">
         {eurSeries.length > 0 && <PriceChart series={eurSeries} currency="EUR" />}
-        {usdSeries.length > 0 && usdSeries.some((s) => s.points.length >= 2) && (
-          <PriceChart series={usdSeries} currency="USD" />
-        )}
+        {usdSeries.length > 0 && <PriceChart series={usdSeries} currency="USD" />}
       </div>
 
       {accrued.points > 0 && (
