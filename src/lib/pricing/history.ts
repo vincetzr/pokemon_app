@@ -7,8 +7,8 @@
  *   observed/recorded  Real prices. Cardmarket's rolling averages give us a
  *                      short real window immediately; our own daily snapshots
  *                      extend it forward for as long as the app runs.
- *   backfilled         Real prices from a paid third party (PriceCharting),
- *                      when a token is configured.
+ *   backfilled         Real historical prices from a licensed third party. No
+ *                      such source is currently wired in — see PriceSource.
  *   modeled            Our own condition-adjusted estimates. Rendered as a
  *                      shaded band, never as a line, and never summarised into
  *                      a headline number.

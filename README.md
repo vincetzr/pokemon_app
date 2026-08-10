@@ -109,7 +109,6 @@ All optional. See `.env.example`.
 |---|---|---|
 | `POKEMONTCG_API_KEY` | Higher rate limits | Works, but bulk scanning throttles |
 | `ANTHROPIC_API_KEY` | Claude vision reading and the vision authenticity signal | On-device OCR only; vision signal absent and confidence lowered accordingly |
-| `PRICECHARTING_API_TOKEN` | Backfilled historical pricing | History limited to Cardmarket rolling averages plus what this app has recorded |
 | `DATABASE_PATH` | Where the local database lives | `./data/prices.db` |
 
 ### Building price history
@@ -206,4 +205,10 @@ one era would hide that.
   serverless hosts it resets on cold start — point `DATABASE_PATH` at a mounted
   volume, or run the snapshot job somewhere durable.
 - **Price history starts short.** Cardmarket's rolling averages give about a
-  month; everything beyond that accrues as the app runs.
+  month; everything beyond that accrues as the app runs. There is no third-party
+  backfill: PriceCharting was evaluated and rejected because its terms forbid
+  using price data in any app accessible to third parties, and its API serves no
+  historic prices at any tier.
+- **Cardmarket figures lag.** Measured on this app's own snapshots, Cardmarket
+  data was 40–50 days old while TCGplayer was 2 days old. Both are labelled with
+  the date they refer to, and a stale source is called out in the UI.

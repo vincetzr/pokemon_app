@@ -150,7 +150,14 @@ export const PROVENANCE_IS_REAL: Record<Provenance, boolean> = {
 };
 
 /** Marketplaces we read prices from. */
-export type PriceSource = 'tcgplayer' | 'cardmarket' | 'pricecharting';
+/**
+ * Marketplaces we read prices from.
+ *
+ * PriceCharting is deliberately absent: its terms forbid using price data in
+ * any application accessible to third parties without written permission, and
+ * its API serves no historic prices at any tier.
+ */
+export type PriceSource = 'tcgplayer' | 'cardmarket';
 
 /** A single money figure with full attribution. Currency is explicit — TCGplayer
  *  reports USD and Cardmarket reports EUR, and conflating them is a real bug. */

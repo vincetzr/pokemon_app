@@ -12,6 +12,17 @@ import type { CardPricing, PriceSeries, PrintVariant } from '../types';
 import { headlineQuote, quotesForCard, spreadsForCard, type ListingSpread } from './quotes';
 import { buildRealSeries } from './history';
 import { recordSnapshots } from '../db';
+import { parseApiDate } from '../tcg-api';
+
+/** Beyond this, a source's figures are old enough that the user should be told. */
+const STALE_AFTER_DAYS = 21;
+
+function ageInDays(isoDate: string | null): number | null {
+  if (!isoDate) return null;
+  const then = new Date(`${isoDate}T00:00:00Z`).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.round((Date.now() - then) / 86_400_000);
+}
 
 export interface PricingResult extends CardPricing {
   spreads: ListingSpread[];
@@ -65,6 +76,24 @@ export function buildPricing(raw: RawCard, opts: { record?: boolean } = {}): Pri
         'separately and never converted or averaged, because the exchange rate would make ' +
         'any combined figure wrong.',
     );
+  }
+
+  // Surface staleness per source. The two marketplaces refresh at very different
+  // rates — measured on this app's own snapshots, TCGplayer was 2 days old while
+  // Cardmarket was 40-50 days old, and the wider corpus puts Cardmarket's median
+  // at around 8 months. Showing a months-old figure beside a 2-day-old one
+  // without saying which is which invites the user to trust the wrong number.
+  for (const [source, updatedAt] of [
+    ['TCGplayer', raw.tcgplayer?.updatedAt],
+    ['Cardmarket', raw.cardmarket?.updatedAt],
+  ] as const) {
+    const age = ageInDays(parseApiDate(updatedAt));
+    if (age !== null && age > STALE_AFTER_DAYS) {
+      caveats.push(
+        `${source} last refreshed this card ${age} days ago, so its figures describe that date ` +
+          `rather than today.`,
+      );
+    }
   }
 
   if (quotes.length === 0) {
