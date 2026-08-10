@@ -56,52 +56,66 @@ describe('printSignal', () => {
     expect(signal.reason).toContain('pixels across the card');
   });
 
-  it('runs when resolution is sufficient', () => {
-    const img = syntheticCard({ width: 1500, height: 2095, frequency: 0.1 });
-    const signal = printSignal(img, 1500);
+  it('stops citing resolution once the photo is sharp enough', () => {
+    // 0.248 cycles/px is a 150 LPI screen on a 1500px-wide card — inside the band.
+    const signal = printSignal(
+      syntheticCard({ width: 1500, height: 2095, frequency: 0.248 }),
+      1500,
+    );
+    expect(signal.reason ?? '').not.toContain('pixels across the card');
+  });
+
+  it('scores a card carrying a halftone-band screen, capped below certainty', () => {
+    const signal = printSignal(
+      syntheticCard({ width: 1500, height: 2095, frequency: 0.248, noise: 3 }),
+      1500,
+    );
 
     expect(signal.status).toBe('ok');
-    expect(signal.score).not.toBeNull();
+    expect(signal.score!).toBeGreaterThanOrEqual(70);
+    // Competent counterfeits are offset-printed too, so the strongest honest
+    // statement is "consistent with", never proof.
+    expect(signal.score!).toBeLessThanOrEqual(95);
   });
 
-  it('scores a card carrying a halftone-band screen above one with none', () => {
-    const cardWidthPx = 1500;
-    const width = 1500;
-    const height = 2095;
-
-    // 150 LPI across a 2.48in card spanning 1500px works out to ~0.248 cycles
-    // per pixel, which sits inside the 120-200 LPI search band.
-    const withScreen = printSignal(
-      syntheticCard({ width, height, frequency: 0.248, noise: 3 }),
-      cardWidthPx,
-    );
-    const flat = printSignal(
-      syntheticCard({ width, height, frequency: 0, noise: 3 }),
-      cardWidthPx,
+  it('ABSTAINS on a flat card rather than scoring it low', () => {
+    // The safety property. Phone noise reduction and JPEG compression erase the
+    // screen from genuine cards, so a low score here would accuse almost every
+    // real card photographed on a phone.
+    const signal = printSignal(
+      syntheticCard({ width: 1500, height: 2095, frequency: 0, noise: 3 }),
+      1500,
     );
 
-    expect(withScreen.status).toBe('ok');
-    expect(flat.status).toBe('ok');
-    expect(withScreen.score!).toBeGreaterThan(flat.score!);
+    expect(signal.status).toBe('insufficient_data');
+    expect(signal.score).toBeNull();
   });
 
-  it('does not credit a screen that falls outside the halftone band', () => {
-    const cardWidthPx = 1500;
-    // A very low frequency gradient is not a print screen.
-    const outOfBand = printSignal(
+  it('abstains rather than penalising a screen outside the halftone band', () => {
+    const signal = printSignal(
       syntheticCard({ width: 1500, height: 2095, frequency: 0.01, noise: 3 }),
-      cardWidthPx,
+      1500,
     );
-    const inBand = printSignal(
-      syntheticCard({ width: 1500, height: 2095, frequency: 0.248, noise: 3 }),
-      cardWidthPx,
-    );
+    expect(signal.score).toBeNull();
+  });
 
-    expect(inBand.score!).toBeGreaterThan(outOfBand.score!);
+  it('never returns a low score under any input', () => {
+    // Exhaustive on the contract: this signal has no path to a failing score.
+    for (const frequency of [0, 0.01, 0.05, 0.12, 0.248, 0.4]) {
+      const signal = printSignal(
+        syntheticCard({ width: 1500, height: 2095, frequency, noise: 5 }),
+        1500,
+      );
+      if (signal.score !== null) {
+        expect(signal.score, `frequency ${frequency} produced an accusing score`).toBeGreaterThanOrEqual(70);
+      }
+    }
   });
 
   it('reports the measurements it based the score on', () => {
     const signal = printSignal(syntheticCard({ width: 1500, height: 2095, frequency: 0.248 }), 1500);
+    expect(signal.status).toBe('ok');
+    expect(signal.measurements.oneSided).toBe(true);
     expect(signal.measurements.screenEnergyRatio).toBeTypeOf('number');
     expect(signal.measurements.patchesAnalysed).toBeGreaterThan(0);
     expect(signal.measurements.searchBandLpi).toBe('120-200');

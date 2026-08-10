@@ -54,19 +54,26 @@ export type PrintVariant =
   | 'normal'
   | 'holofoil'
   | 'reverseHolofoil'
-  | '1stEditionNormal'
+  | '1stEdition'
   | '1stEditionHolofoil'
-  | 'unlimitedHolofoil'
-  | 'unlimited';
+  | 'unlimited'
+  | 'unlimitedHolofoil';
 
+/**
+ * Verified against 490 vintage cards across base1, base2, base3, base4 and gym1.
+ * The key is `1stEdition`, NOT `1stEditionNormal` — that name does not exist in
+ * the API, so a card priced under it silently found no data. The keys also pair
+ * strictly: `1stEdition` always co-occurs with `unlimited`, and
+ * `1stEditionHolofoil` with `unlimitedHolofoil`; the two pairs never mix.
+ */
 export const PRINT_VARIANTS: readonly PrintVariant[] = [
   'normal',
   'holofoil',
   'reverseHolofoil',
-  '1stEditionNormal',
+  '1stEdition',
   '1stEditionHolofoil',
-  'unlimitedHolofoil',
   'unlimited',
+  'unlimitedHolofoil',
 ] as const;
 
 // ---------------------------------------------------------------------------

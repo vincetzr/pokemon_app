@@ -113,7 +113,15 @@ export function buildReport(input: EngineInput): AuthReport {
 
   // Confidence is deliberately capped well below 1. Even with every signal
   // running, a photo-only analysis should never present itself as certain.
-  const confidence = Math.min(0.85, coverage * (ran.length >= 4 ? 1 : 0.8));
+  //
+  // A report that ACCUSES is capped lower still. The two error directions are
+  // not symmetric: telling someone their genuine card is suspect can cost them
+  // a sale or a trade and they have no way to argue with it, whereas failing to
+  // flag a fake leaves them where they started. An accusation must therefore
+  // clear a higher bar to present itself confidently.
+  const rawConfidence = coverage * (ran.length >= 4 ? 1 : 0.8);
+  const ceiling = verdict === 'red_flags' ? 0.65 : 0.85;
+  const confidence = Math.min(ceiling, rawConfidence);
 
   const limitations = [...UNIVERSAL_LIMITATIONS, ...(input.contextLimitations ?? [])];
 

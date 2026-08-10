@@ -3,11 +3,17 @@
  *
  * Genuine cards are mass-produced on offset presses, which lay down colour as a
  * regular halftone screen — a periodic dot pattern at roughly 133–175 lines per
- * inch. Counterfeits produced on inkjet or laser printers either lack that
- * periodic structure or show a different one. This is one of the few signals
- * that probes the manufacturing process rather than the artwork.
+ * inch. This is one of the few signals that probes the manufacturing process
+ * rather than the artwork.
  *
- * Two measured facts constrain the implementation:
+ * It is ONE-SIDED: it can support a card, never accuse one. The naive test is
+ * wrong in both directions. A rosette does not prove authenticity, because
+ * counterfeits are CMYK-printed too and offset-press fakes are documented. And
+ * a missing rosette does not indicate a fake, because phone noise reduction and
+ * JPEG chroma subsampling erase the screen from photos of genuine cards. So a
+ * detected screen scores modestly, and a missing one abstains.
+ *
+ * Three measured facts constrain the implementation:
  *
  *  1. The official card images we compare against are clean digital renders and
  *     carry NO halftone signature (measured high/low frequency energy ratios of
@@ -27,7 +33,11 @@ import { abstain } from '../engine';
 
 const ID = 'print' as const;
 const LABEL = 'Print pattern';
-const WEIGHT = 1.4;
+// Weighted low: a one-sided supporting signal should not dominate a verdict.
+const WEIGHT = 0.7;
+
+/** Spectral concentration above which a periodic screen is genuinely present. */
+const SCREEN_PRESENT_RATIO = 1.2;
 
 /** Patch size for the FFT. A power of two keeps the transform cheap. */
 const PATCH = 128;
@@ -69,18 +79,36 @@ export function printSignal(rectified: RawImage, cardWidthPx: number): AuthSigna
   ratios.sort((a, b) => a - b);
   const median = ratios[Math.floor(ratios.length / 2)]!;
 
-  // A real screen concentrates energy in the expected band well above the local
-  // background. Below ~1.2 there is no periodic structure to speak of.
-  const score = Math.round(Math.max(0, Math.min(1, (median - 1.0) / 1.4)) * 100);
+  // ONE-SIDED BY DESIGN — this signal may support, never accuse.
+  //
+  // Both directions of the naive test are wrong. A rosette does not prove a card
+  // is genuine: counterfeits are CMYK-printed too, and 2025 CGC alerts confirm
+  // offset-press fakes ("even most fakes have a rosette pattern"). And absence
+  // does not prove a fake: phone multi-frame noise reduction, JPEG chroma
+  // subsampling and mild defocus each erase a 133–175 LPI screen from a
+  // genuine card.
+  //
+  // So a detected screen contributes a modest positive, and a missing one makes
+  // the signal ABSTAIN rather than score low. Scoring absence would accuse
+  // every genuine card photographed on a phone that denoises aggressively —
+  // which is all of them.
+  if (median < SCREEN_PRESENT_RATIO) {
+    return abstain(
+      ID,
+      LABEL,
+      WEIGHT,
+      'insufficient_data',
+      'No regular print screen was resolvable in this photo. That is expected from phone noise ' +
+        'reduction and JPEG compression on a genuine card, so nothing is concluded from it.',
+    );
+  }
 
-  const summary =
-    score >= 60
-      ? 'A regular print screen is present, consistent with the offset printing used for genuine cards.'
-      : score >= 35
-        ? 'Print structure is weak or ambiguous. Photo sharpness and compression both suppress it, ' +
-          'so this is not necessarily a problem with the card.'
-        : 'No regular print screen was detected where offset printing would produce one. ' +
-          'Home-printed counterfeits show this, but so does a soft or heavily compressed photo.';
+  // Above the presence threshold the score is capped well below 100: the
+  // strongest honest statement is "consistent with offset printing", which is
+  // supporting evidence, not proof.
+  const score = Math.round(
+    70 + Math.min(1, (median - SCREEN_PRESENT_RATIO) / 0.8) * 25,
+  );
 
   return {
     id: ID,
@@ -88,12 +116,16 @@ export function printSignal(rectified: RawImage, cardWidthPx: number): AuthSigna
     status: 'ok',
     score,
     weight: WEIGHT,
-    summary,
+    summary:
+      'A regular print screen is present, consistent with the offset printing used for genuine ' +
+      'cards. Note that competent counterfeits are also offset-printed, so this supports the card ' +
+      'without proving it.',
     measurements: {
       screenEnergyRatio: Number(median.toFixed(3)),
       patchesAnalysed: patches.length,
       cardWidthPx: Math.round(cardWidthPx),
       searchBandLpi: `${HALFTONE_LPI_RANGE.min}-${HALFTONE_LPI_RANGE.max}`,
+      oneSided: true,
     },
   };
 }

@@ -18,6 +18,7 @@ import { buildPricing } from '@/lib/pricing/engine';
 import { buildReport } from '@/lib/auth/engine';
 import { geometrySignal } from '@/lib/auth/signals/geometry';
 import { printSignal } from '@/lib/auth/signals/print';
+import { visionSignal } from '@/lib/auth/signals/vision';
 import { abstain } from '@/lib/auth/engine';
 import type { ScanResult } from '@/lib/types';
 
@@ -89,6 +90,22 @@ export async function POST(request: Request) {
     }
 
     // --- Authenticity -----------------------------------------------------
+    // Vision is network-bound; start it before the CPU-bound signals so the two
+    // overlap. Bulk scans skip it for speed and cost.
+    const visionPromise = parsed.fast
+      ? Promise.resolve(
+          abstain(
+            'vision',
+            'Visual inspection',
+            1.6,
+            'not_applicable',
+            'Visual inspection is skipped in bulk scanning. Scan this card on its own for a full check.',
+          ),
+        )
+      : encodeRaw(rectified, 'jpeg', 92).then((buf) =>
+          visionSignal({ image: buf, card, imageUsable: !quality.tooBlurry && !quality.tooDark }),
+        );
+
     const signals = [
       geometrySignal({
         measuredAspect: detection.measuredAspect,
@@ -104,6 +121,7 @@ export async function POST(request: Request) {
             'The photo is too soft to analyse the print pattern. Retake it with the card flat and in focus.',
           )
         : printSignal(rectified, cardWidthPx),
+      await visionPromise,
     ];
 
     const contextLimitations: string[] = [];

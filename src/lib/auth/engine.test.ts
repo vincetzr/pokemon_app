@@ -172,3 +172,31 @@ describe('scoreFromDeviation', () => {
     expect(scoreFromDeviation(0.075, 0.03, 0.12)).toBe(50);
   });
 });
+
+describe('accusation confidence ceiling', () => {
+  it('caps confidence lower for a red-flags verdict than for a passing one', () => {
+    const full = (score: number) =>
+      buildReport({
+        cardId: 'x',
+        signals: [
+          signal('geometry', score),
+          signal('color', score),
+          signal('print', score),
+          signal('text', score),
+          signal('holo', score),
+          signal('vision', score),
+        ],
+      });
+
+    const passing = full(95);
+    const accusing = full(10);
+
+    expect(passing.verdict).toBe('consistent_with_genuine');
+    expect(accusing.verdict).toBe('red_flags');
+
+    // The two error directions are not symmetric: a wrong accusation costs the
+    // user far more than a missed fake, so it must clear a higher bar.
+    expect(accusing.confidence).toBeLessThanOrEqual(0.65);
+    expect(accusing.confidence).toBeLessThan(passing.confidence);
+  });
+});
