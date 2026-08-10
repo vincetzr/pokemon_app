@@ -20,6 +20,17 @@ export interface ExtractedText {
   setTotal: string | null;
   /** Any other set hint, e.g. text read from the set logo. */
   setHint: string | null;
+  /**
+   * How much to trust `name`, 0–1. Optional; treated as fully trusted when
+   * absent, which is right for a name the user typed or Claude vision read.
+   *
+   * This matters because the name acts as a gate on the score. OCR on a busy
+   * card frame can return something like "MAX aRIKachu. Yay" for Pikachu VMAX
+   * while reading the collector number perfectly — and gating hard on that
+   * garbage would push the CORRECT card down the list. A low confidence here
+   * softens the gate rather than letting a bad read veto a good number match.
+   */
+  nameConfidence?: number;
 }
 
 /**
@@ -177,21 +188,31 @@ export function scoreCandidate(card: Card, extracted: ExtractedText): { score: n
   // additively lets a coincidental number carry a card whose name is plainly
   // different. The name therefore acts as a gate on the final score rather than
   // as just another term.
-  return { score: base * nameGate(extracted.name, card.name), evidence };
+  return {
+    score: base * nameGate(extracted.name, card.name, extracted.nameConfidence),
+    evidence,
+  };
 }
 
 /**
  * Multiplier applied when a name was read but does not match: 1.0 above 0.75
  * similarity, falling off to 0.2 at 0.4 and below. Returns 1 when no name was
  * legible, so an unreadable name never penalises a candidate.
+ *
+ * The penalty is scaled by how much we trust the reading. A confidently-read
+ * name that disagrees is strong evidence the card is wrong; a barely-legible
+ * one that disagrees is mostly evidence that OCR struggled.
  */
-function nameGate(extractedName: string | null, cardName: string): number {
+function nameGate(extractedName: string | null, cardName: string, confidence = 1): number {
   if (!extractedName) return 1;
 
   const sim = nameSimilarity(extractedName, cardName);
-  if (sim >= 0.75) return 1;
-  if (sim <= 0.4) return 0.2;
-  return 0.2 + ((sim - 0.4) / 0.35) * 0.8;
+  const raw = sim >= 0.75 ? 1 : sim <= 0.4 ? 0.2 : 0.2 + ((sim - 0.4) / 0.35) * 0.8;
+
+  // Blend toward "no penalty" as trust in the reading falls. Below ~0.3
+  // confidence the name barely constrains the result at all.
+  const trust = Math.max(0, Math.min(1, confidence));
+  return raw + (1 - raw) * (1 - trust);
 }
 
 /** Whether the top candidate is clearly ahead enough to select without asking. */

@@ -164,3 +164,50 @@ describe('shouldAutoSelect', () => {
     expect(shouldAutoSelect([])).toBe(false);
   });
 });
+
+describe('name confidence gating', () => {
+  const pikachuVmax = card({
+    id: 'swsh4-188',
+    name: 'Pikachu VMAX',
+    number: '188',
+    set: {
+      id: 'swsh4', name: 'Vivid Voltage', series: 'Sword & Shield',
+      printedTotal: 185, total: 203, releaseDate: '2020/11/13',
+      images: { symbol: '', logo: '' },
+    },
+  });
+
+  it('does not let a garbled low-confidence name veto a perfect number match', () => {
+    // Real OCR output for this card: the collector number read perfectly but
+    // the name came back as noise at 22% confidence.
+    const { score } = scoreCandidate(pikachuVmax, {
+      name: 'MAX aRIKachu. Yay',
+      number: '188',
+      setTotal: '185',
+      setHint: null,
+      nameConfidence: 0.22,
+    });
+    expect(score).toBeGreaterThan(0.6);
+  });
+
+  it('still penalises a confidently-read name that disagrees', () => {
+    const { score } = scoreCandidate(pikachuVmax, {
+      name: 'Blastoise',
+      number: '188',
+      setTotal: '185',
+      setHint: null,
+      nameConfidence: 0.95,
+    });
+    expect(score).toBeLessThan(0.5);
+  });
+
+  it('treats a missing confidence as fully trusted', () => {
+    const without = scoreCandidate(pikachuVmax, {
+      name: 'Blastoise', number: '188', setTotal: '185', setHint: null,
+    }).score;
+    const explicit = scoreCandidate(pikachuVmax, {
+      name: 'Blastoise', number: '188', setTotal: '185', setHint: null, nameConfidence: 1,
+    }).score;
+    expect(without).toBeCloseTo(explicit, 6);
+  });
+});
