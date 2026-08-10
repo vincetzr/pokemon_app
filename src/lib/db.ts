@@ -16,7 +16,7 @@
 import Database from 'better-sqlite3';
 import type { Database as Db } from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import type { Condition, Money, PricePoint, PriceSource, Provenance, PrintVariant } from './types';
 import { conditionKey } from './types';
 
@@ -85,13 +85,29 @@ CREATE INDEX IF NOT EXISTS idx_api_cache_fetched ON api_cache (fetched_at);
 let db: Db | null = null;
 let openFailed = false;
 
+/**
+ * Resolve the database location.
+ *
+ * The default is built with `join(process.cwd(), ...)` rather than resolving a
+ * dynamic string, because the bundler's static analysis treats an arbitrary
+ * runtime path as "this module may read anything" and responds by tracing the
+ * entire project — including `public/` — into the server bundle. Keeping the
+ * default statically scoped avoids that; an explicit DATABASE_PATH is an
+ * operator decision made outside the bundle, so it opts out deliberately.
+ */
+function databasePath(): string {
+  const configured = process.env.DATABASE_PATH;
+  if (!configured) return join(process.cwd(), 'data', 'prices.db');
+  return resolve(/* turbopackIgnore: true */ configured);
+}
+
 /** Returns the database, or null if it could not be opened (read-only mode). */
 export function getDb(): Db | null {
   if (db) return db;
   if (openFailed) return null;
 
   try {
-    const path = resolve(process.env.DATABASE_PATH ?? './data/prices.db');
+    const path = databasePath();
     const dir = dirname(path);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
