@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+
+/* Dark-first: this app is used holding a phone over a card, often in poor
+   light, and a bright white screen washes out the camera preview. */
+@theme {
+  --color-ink-950: #08090d;
+  --color-ink-900: #0e1016;
+  --color-ink-850: #14161f;
+  --color-ink-800: #1b1e2a;
+  --color-ink-700: #262a3a;
+  --color-ink-600: #363b50;
+  --color-ink-400: #6b7189;
+  --color-ink-300: #9aa0b5;
+  --color-ink-200: #c7cbda;
+  --color-ink-100: #e8eaf2;
+
+  --color-bolt-500: #f5c518;
+  --color-bolt-400: #ffd83d;
+  --color-bolt-600: #d9a800;
+
+  --color-good-500: #2ea36b;
+  --color-good-400: #3fc584;
+  --color-warn-500: #d99a1f;
+  --color-warn-400: #f0b53c;
+  --color-bad-500: #d64545;
+  --color-bad-400: #f06565;
+  --color-info-500: #3b82c4;
+  --color-info-400: #5aa2e0;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+html {
+  color-scheme: dark;
+  /* Keep the layout still when a page grows past the fold. */
+  scrollbar-gutter: stable;
+}
+
+body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* Respect the notch / home indicator on iOS when installed to the home screen. */
+  padding-bottom: env(safe-area-inset-bottom);
+  overscroll-behavior-y: none;
+}
+
+/* Stop iOS Safari zooming the page when a form field is focused. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Hatched fill used to mark MODELED (estimated) regions on price charts, so an
+   estimate is visually distinct from an observation even in greyscale or for a
+   colour-blind viewer. Colour alone is never the only cue. */
+.estimate-hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--color-ink-400) 40%, transparent) 0 2px,
+    transparent 2px 6px
+  );
+}

@@ -1,0 +1,29 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# local env
+.env
+.env.local
+.env*.local
+
+# price snapshot database (regenerated locally; not source)
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# misc
+.DS_Store
+*.log
+npm-debug.log*
+next-env.d.ts
+tsconfig.tsbuildinfo
+coverage/
+test-results/
+screenshots/
+
+# downloaded test fixtures (see scripts/fetch-fixtures.ts)
+test-fixtures/cards/
