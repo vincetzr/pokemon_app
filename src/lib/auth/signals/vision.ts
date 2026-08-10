@@ -24,6 +24,7 @@ import 'server-only';
 import type { AuthSignal, Card } from '../../types';
 import { abstain } from '../engine';
 import { IMAGE_SIZE, encodeImage, visionAvailable, visionJson } from '../../vision/client';
+import { LEGITIMATE_VARIATION, eraForReleaseDate } from '../reference';
 
 const ID = 'vision' as const;
 const LABEL = 'Visual inspection';
@@ -109,25 +110,31 @@ to argue with it. Missing a fake leaves them where they started.
 
 Genuine cards vary enormously, and none of the following is evidence of a
 counterfeit:
-  - Off-centre cuts, miscuts, and factory print lines. These are ordinary
-    quality-control variation, and some famous error cards are more valuable
-    because of it.
-  - Wear: whitening on edges and corners, scratches, creases, sun-fading,
-    indentations. Played cards look played.
-  - Non-English printings. Japanese, Korean, Chinese and European cards
-    legitimately differ in layout, fonts, text placement, and back design.
-  - Legitimate variants: 1st Edition and Shadowless printings, League and
-    Prerelease stamps, staff promos, World Championship cards (which state that
-    they are not tournament legal), jumbo and deck-exclusive cards.
-  - Photography artifacts: glare on holo, colour cast from indoor lighting,
-    phone HDR and tone-mapping, motion blur, reflections from a sleeve or
-    toploader, moire from photographing a screen.
+${LEGITIMATE_VARIATION.map((v) => `  - ${v}`).join('\n')}
 
 If the photo is too poor to inspect properly, set imageUsable to false. That is
 a useful answer. Guessing from a bad photo is not.
 
 Every concern you raise must include the most plausible innocent explanation.
-If you cannot think of one, you are probably over-reading the image.`;
+If you cannot think of one, you are probably over-reading the image.
+
+TESTS THAT ARE WRONG — do not apply any of these, they accuse genuine cards:
+  - "The collector number is higher than the set total." Secret rares, hyper
+    rares and gold cards are numbered above the total by design.
+  - "There is no set symbol." English Base Set genuinely has none; its absence
+    identifies the set. Promos and Basic Energy also lack them.
+  - "HP is not printed in red." Red HP was 1999-2003 only. From 2007 the format
+    is an "HP 60" prefix in black.
+  - "The card has no drop shadow." Base Set 1st Edition and Shadowless have none.
+  - "The whole card is holo." Reverse holos, Cracked Ice, SV Mirage, full arts,
+    VMAX, VSTAR, ex, gold and rainbow cards are all legitimately edge-to-edge.
+  - "The colours are brighter than expected." Shadowless cards genuinely read
+    brighter than Unlimited.
+  - "It says NOT TOURNAMENT LEGAL." World Championship cards say that in
+    manufacturer-printed text.
+  - "The rarity symbol is not bottom-right." It moved to bottom-LEFT in 2017.
+  - Any judgement of physical size, thickness or weight. You cannot measure
+    those from a photograph.`;
 
 export interface VisionSignalInput {
   /** The rectified card, encoded for upload. */
@@ -159,14 +166,29 @@ export async function visionSignal(input: VisionSignalInput): Promise<AuthSignal
     );
   }
 
+  const era = input.card ? eraForReleaseDate(input.card.set.releaseDate) : null;
+
+  // Era expectations are supplied explicitly. Layout, fonts, symbol positions
+  // and holo patterns all changed substantially across 25 years, and judging a
+  // card against the wrong era's expectations is the single largest source of
+  // false concerns.
+  const eraBlock = era
+    ? `\nGENUINE CHARACTERISTICS FOR THIS ERA (${era.label}, ${era.from}-${era.to ?? 'present'}):
+  - Border: ${era.borderNote} Width about ${era.borderWidthMm[0]}-${era.borderWidthMm[1]}mm.
+  - HP is printed as ${era.hpFormat === 'prefix' ? 'a prefix, "HP 60"' : 'a suffix, "60 HP"'}, in ${era.hpColour}.
+  - Set symbol position: ${era.setSymbolPosition.replace(/-/g, ' ')}.
+  - Rarity symbol position: ${era.rarityPosition.replace(/-/g, ' ')}.
+  - Standard holo pattern: ${era.holoPattern}.
+  - Textured special rares: ${era.textured ? 'exist in this era' : 'do NOT exist in this era — a smooth full art is correct'}.
+Judge the card against THESE expectations, not against a different era's.`
+    : '';
+
   const context = input.card
     ? `This should be ${input.card.name} from ${input.card.set.name} (${input.card.number}/${input.card.set.printedTotal}), ` +
-      `released ${input.card.set.releaseDate}${input.card.rarity ? `, rarity ${input.card.rarity}` : ''}. ` +
-      `Judge it against genuine cards of THAT era and set specifically — layout, fonts, symbols and ` +
-      `holo patterns all changed substantially over the years, and comparing against the wrong era ` +
-      `produces false concerns.`
-    : `The specific card could not be identified. Assess only against general characteristics of ` +
-      `genuine Pokemon cards, and be correspondingly more cautious about raising concerns.`;
+      `released ${input.card.set.releaseDate}${input.card.rarity ? `, rarity ${input.card.rarity}` : ''}.${eraBlock}`
+    : `The specific card could not be identified, so its era is unknown. Assess only against ` +
+      `general characteristics of genuine Pokemon cards, and be markedly more cautious about ` +
+      `raising concerns — without knowing the era you cannot judge layout, fonts or symbols.`;
 
   const result = await visionJson<VisionAssessment>({
     image: await encodeImage(input.image, IMAGE_SIZE.authenticity),

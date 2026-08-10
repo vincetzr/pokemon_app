@@ -54,28 +54,45 @@ export const UNIVERSAL_LIMITATIONS: readonly string[] = [
     'professional grading service such as PSA, Beckett, or CGC.',
 ];
 
-/** What a user should actually do next, by verdict. */
+/**
+ * What a user should actually do next, by verdict.
+ *
+ * The side-by-side comparison leads deliberately. Every in-hand test is a
+ * COMPARISON against a card you know is real from the same era — none of them
+ * works as an absolute threshold. The light test in particular is widely
+ * repeated as a pass/fail and fails in both directions: counterfeits from 2024
+ * onward laminate a dark core, glued-front fakes contain a genuine card and are
+ * more opaque than normal, while thin Japanese stock, textured special
+ * illustration rares and heavy foils all "fail" it despite being genuine. It is
+ * a one-way screen at best, and is phrased that way here.
+ */
 export const NEXT_STEPS: Record<AuthVerdict, readonly string[]> = {
   consistent_with_genuine: [
-    'Hold the card up to a bright light. A genuine card is opaque because of a dark ' +
-      'inner core layer; most fakes let noticeably more light through.',
-    'Compare thickness and finish against a card you know is genuine from the same era.',
-    'Bend it very gently. A genuine card springs back; many fakes stay creased or feel limp.',
+    'Compare it side by side with a card you know is genuine from the same era. Every ' +
+      'reliable in-hand check is a comparison — none of them works as an absolute rule.',
+    'Feel the thickness and finish against that known card, and bend both very gently. ' +
+      'A genuine card springs back.',
+    'Backlighting can be informative, but only as a comparison and only one way: much ' +
+      'more light getting through than a known-genuine card is worth investigating, while ' +
+      'looking opaque proves nothing — modern counterfeits laminate a dark core.',
   ],
   inconclusive: [
     'Retake the photo: fill the frame, keep the card flat and parallel to the camera, ' +
       'and avoid glare and shadows. Most inconclusive results are caused by the photo, ' +
       'not the card.',
-    'Photograph the back as well — wrong blue tones and a misshapen Poke Ball are among ' +
-      'the easiest counterfeit tells to see by eye.',
+    'Photograph the back as well. Note that a passing back check cannot confirm the front — ' +
+      'a documented counterfeit had a fake front laminated onto a genuine card from another game.',
     'Compare side by side with a card you know is genuine from the same set.',
   ],
   red_flags: [
     'Do not treat this as proof of a counterfeit. Verify by hand before acting on it.',
-    'Backlight the card and compare it against a known-genuine card from the same era.',
+    'Compare it directly against a known-genuine card from the same era, under the same ' +
+      'light, looking at the same detail the check flagged.',
+    'Ignore centring, print lines and small ink marks — those are normal manufacturing ' +
+      'variation and some are collectible.',
     'If the card is valuable or you are mid-transaction, get it professionally ' +
       'authenticated before money changes hands.',
-    'If you bought it recently, check the seller\'s return window while you verify.',
+    "If you bought it recently, check the seller's return window while you verify.",
   ],
 };
 
