@@ -65,6 +65,21 @@ CREATE TABLE IF NOT EXISTS scans (
 );
 
 CREATE INDEX IF NOT EXISTS idx_scans_captured ON scans (captured_at DESC);
+
+-- Response cache for the Pokemon TCG API.
+--
+-- Measured against the live API, broad queries fail often: repeated identical
+-- requests returned 500/502 roughly half the time, and even narrow ones fail
+-- intermittently. Identification cannot be one API call away from breaking, so
+-- successful responses are persisted and reused. Card and set data is static;
+-- only the embedded prices age, and those are refreshed on their own cadence.
+CREATE TABLE IF NOT EXISTS api_cache (
+  cache_key  TEXT PRIMARY KEY,
+  payload    TEXT NOT NULL,
+  fetched_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_cache_fetched ON api_cache (fetched_at);
 `;
 
 let db: Db | null = null;
@@ -285,4 +300,60 @@ export function listCollection(): CollectionEntry[] {
 
 export function removeFromCollection(id: number): void {
   getDb()?.prepare(`DELETE FROM collection WHERE id = ?`).run(id);
+}
+
+// ---------------------------------------------------------------------------
+// API response cache
+// ---------------------------------------------------------------------------
+
+export interface CachedResponse<T> {
+  payload: T;
+  fetchedAt: string;
+  ageSeconds: number;
+}
+
+/** Read a cached API response, or null when absent. Age is left to the caller
+ *  to judge, so a stale entry can still be used as a fallback during an outage. */
+export function readCache<T>(key: string): CachedResponse<T> | null {
+  const handle = getDb();
+  if (!handle) return null;
+
+  try {
+    const row = handle
+      .prepare(`SELECT payload, fetched_at FROM api_cache WHERE cache_key = ?`)
+      .get(key) as { payload: string; fetched_at: string } | undefined;
+    if (!row) return null;
+
+    return {
+      payload: JSON.parse(row.payload) as T,
+      fetchedAt: row.fetched_at,
+      ageSeconds: (Date.now() - new Date(row.fetched_at).getTime()) / 1000,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeCache(key: string, payload: unknown): void {
+  const handle = getDb();
+  if (!handle) return;
+
+  try {
+    handle
+      .prepare(
+        `INSERT INTO api_cache (cache_key, payload, fetched_at) VALUES (?, ?, ?)
+         ON CONFLICT (cache_key) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
+      )
+      .run(key, JSON.stringify(payload), new Date().toISOString());
+  } catch {
+    // A cache write failure must never break the request that succeeded.
+  }
+}
+
+/** Drop cache entries older than `maxAgeDays`. */
+export function pruneCache(maxAgeDays = 30): number {
+  const handle = getDb();
+  if (!handle) return 0;
+  const cutoff = new Date(Date.now() - maxAgeDays * 86_400_000).toISOString();
+  return handle.prepare(`DELETE FROM api_cache WHERE fetched_at < ?`).run(cutoff).changes;
 }

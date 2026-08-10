@@ -12,6 +12,9 @@ import { PRINT_VARIANTS } from './types';
 
 const API_BASE = 'https://api.pokemontcg.io/v2';
 
+/** Largest page size that reliably returns 200 rather than 404. */
+export const MAX_PAGE_SIZE = 100;
+
 /** Raw shapes, as actually returned by the API. */
 export interface RawTcgPlayerPrices {
   low: number | null;
@@ -109,10 +112,15 @@ async function get<T>(path: string, params?: Record<string, string | number>): P
     url.searchParams.set(k, String(v));
   }
 
+  // The public API is materially unreliable: repeating one identical broad
+  // query returned 500/502 about half the time, and narrow queries fail
+  // intermittently too. Retries are therefore the normal path, not an edge
+  // case, and jitter keeps concurrent bulk-scan lookups from retrying in step.
   let lastError: Error | null = null;
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     if (attempt > 0) {
-      await new Promise((r) => setTimeout(r, 2 ** attempt * 250));
+      const backoff = Math.min(2 ** attempt * 200, 4000);
+      await new Promise((r) => setTimeout(r, backoff + Math.random() * 250));
     }
     try {
       const res = await fetch(url, {
@@ -253,7 +261,9 @@ export async function searchRawCards(
   const res = await get<{ data: RawCard[]; totalCount: number }>('/cards', {
     q,
     page: opts.page ?? 1,
-    pageSize: Math.min(opts.pageSize ?? 24, 250),
+    // Documented as 250, but pageSize=250 returns 404 consistently in practice
+    // while smaller pages succeed. Cap below the documented limit.
+    pageSize: Math.min(opts.pageSize ?? 24, MAX_PAGE_SIZE),
     ...(opts.orderBy ? { orderBy: opts.orderBy } : {}),
   });
   return { cards: res.data ?? [], totalCount: res.totalCount ?? 0 };
