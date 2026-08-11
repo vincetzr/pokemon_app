@@ -34,7 +34,7 @@ import { abstain } from '../engine';
 const ID = 'print' as const;
 const LABEL = 'Print pattern';
 // Weighted low: a one-sided supporting signal should not dominate a verdict.
-const WEIGHT = 0.7;
+export const WEIGHT = 0.7;
 
 /** Spectral concentration above which a periodic screen is genuinely present. */
 const SCREEN_PRESENT_RATIO = 1.2;

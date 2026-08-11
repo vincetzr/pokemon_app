@@ -17,7 +17,7 @@ import {
 } from '../image/rectify';
 import { buildReport } from './engine';
 import { geometrySignal } from './signals/geometry';
-import { printSignal } from './signals/print';
+import { printSignal, WEIGHT as PRINT_WEIGHT } from './signals/print';
 import { assessQuality, type QualityReport } from '../image/quality';
 
 export interface AnalyzeOptions {
@@ -108,13 +108,22 @@ function originalCardWidth(detection: DetectionResult): number {
   return (top + bottom) / 2;
 }
 
+/**
+ * Stands in for the print signal when blur has already made it meaningless.
+ *
+ * The weight must match `printSignal`'s own, and is imported rather than
+ * repeated: coverage is `ranWeight / totalWeight`, so a stand-in carrying a
+ * different weight silently changes the reported confidence depending on which
+ * path produced the abstention. This one drifted to 1.4 when the print signal
+ * was reweighted to 0.7, which understated coverage on every blurry photo.
+ */
 function blurAbstention() {
   return {
     id: 'print' as const,
     label: 'Print pattern',
     status: 'insufficient_data' as const,
     score: null,
-    weight: 1.4,
+    weight: PRINT_WEIGHT,
     summary: 'The photo is too soft to analyse the print pattern.',
     measurements: {},
     reason:
