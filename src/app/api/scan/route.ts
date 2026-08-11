@@ -14,7 +14,7 @@ import { assessQuality } from '@/lib/image/quality';
 import { identifyCard } from '@/lib/identify/pipeline';
 import { getCardCached } from '@/lib/tcg-cache';
 import { toCard } from '@/lib/tcg-api';
-import { buildPricing } from '@/lib/pricing/engine';
+import { buildPricing, fetchConditions } from '@/lib/pricing/engine';
 import { buildReport } from '@/lib/auth/engine';
 import { geometrySignal } from '@/lib/auth/signals/geometry';
 import { printSignal } from '@/lib/auth/signals/print';
@@ -74,12 +74,18 @@ export async function POST(request: Request) {
     // --- Price ------------------------------------------------------------
     let pricing: ScanResult['pricing'] = null;
     let card: ScanResult['card'] = chosen?.card ?? null;
+    let conditions = null;
 
     if (chosen) {
       const cached = await getCardCached(chosen.card.id);
       if (cached) {
         card = toCard(cached.data);
         pricing = buildPricing(cached.data);
+        // Real per-condition prices. Skipped in bulk mode, where the user wants
+        // a fast value ranking rather than a full breakdown per card.
+        if (!parsed.fast) {
+          conditions = await fetchConditions(card, card.variants[0] ?? 'normal');
+        }
         if (cached.degraded) {
           pricing.caveats.unshift(
             `Prices are from cached data (${Math.round(cached.ageSeconds / 3600)}h old) ` +
@@ -140,7 +146,11 @@ export async function POST(request: Request) {
 
     const auth = buildReport({ cardId: card?.id ?? null, signals, contextLimitations });
 
-    const result: ScanResult & { quality: typeof quality; detection: { method: string; confidence: number } } = {
+    const result: ScanResult & {
+      quality: typeof quality;
+      detection: { method: string; confidence: number };
+      conditions: Awaited<ReturnType<typeof fetchConditions>>;
+    } = {
       scanId: parsed.scanId ?? crypto.randomUUID(),
       capturedAt: new Date().toISOString(),
       identify,
@@ -150,6 +160,7 @@ export async function POST(request: Request) {
       imageRef: `data:image/jpeg;base64,${(await encodeRaw(rectified, 'jpeg', 82)).toString('base64')}`,
       quality,
       detection: { method: detection.method, confidence: detection.confidence },
+      conditions,
     };
 
     return NextResponse.json(result);

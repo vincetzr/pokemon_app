@@ -8,10 +8,11 @@
 
 import 'server-only';
 import type { RawCard } from '../tcg-api';
-import type { CardPricing, PriceSeries, PrintVariant } from '../types';
+import type { Card, CardPricing, PriceSeries, PrintVariant } from '../types';
 import { headlineQuote, quotesForCard, spreadsForCard, type ListingSpread } from './quotes';
 import { buildRealSeries } from './history';
 import { recordSnapshots } from '../db';
+import { fetchConditionPricing, type ConditionPricing } from './sources/tcgplayer-listings';
 import { parseApiDate } from '../tcg-api';
 
 /** Beyond this, a source's figures are old enough that the user should be told. */
@@ -26,6 +27,24 @@ function ageInDays(isoDate: string | null): number | null {
 
 export interface PricingResult extends CardPricing {
   spreads: ListingSpread[];
+}
+
+/**
+ * Fetch real per-condition prices from live TCGplayer listings.
+ *
+ * Separate from `buildPricing` because it is a network call to a different
+ * service and must not delay or endanger the core price panel. Returns null on
+ * any failure; the UI simply omits the condition table.
+ */
+export async function fetchConditions(
+  card: Card,
+  variant: PrintVariant,
+): Promise<ConditionPricing | null> {
+  try {
+    return await fetchConditionPricing(card, variant);
+  } catch {
+    return null;
+  }
 }
 
 /**

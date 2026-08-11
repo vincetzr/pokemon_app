@@ -5,11 +5,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { CameraCapture, type CaptureResult } from '@/components/CameraCapture';
 import { AuthReportCard } from '@/components/AuthReportCard';
+import { ConditionPrices } from '@/components/ConditionPrices';
+import type { ConditionPricing } from '@/lib/pricing/sources/tcgplayer-listings';
 import type { Card, IdentifyCandidate, ScanResult } from '@/lib/types';
 
 interface ScanResponse extends ScanResult {
   quality: { sharpness: number; glareFraction: number; warnings: string[] };
   detection: { method: string; confidence: number };
+  conditions: ConditionPricing | null;
 }
 
 export default function ScanPage() {
@@ -101,6 +104,8 @@ export default function ScanPage() {
               </div>
             </div>
           )}
+
+          {result.conditions && <ConditionPrices pricing={result.conditions} />}
 
           {result.identify.candidates.length > 1 && !result.identify.autoSelected && (
             <CandidateList candidates={result.identify.candidates} />

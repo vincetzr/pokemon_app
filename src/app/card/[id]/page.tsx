@@ -2,10 +2,11 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { getCardCached } from '@/lib/tcg-cache';
 import { toCard } from '@/lib/tcg-api';
-import { buildPricing } from '@/lib/pricing/engine';
+import { buildPricing, fetchConditions } from '@/lib/pricing/engine';
 import { seriesStats } from '@/lib/pricing/history';
 import { historyStats } from '@/lib/db';
 import { PriceChart } from '@/components/PriceChart';
+import { ConditionPrices } from '@/components/ConditionPrices';
 import { SaveToCollection } from '@/components/SaveToCollection';
 import { conditionLabel, type Money, type PriceQuote } from '@/lib/types';
 
@@ -20,6 +21,11 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
   const card = toCard(cached.data);
   const pricing = buildPricing(cached.data);
   const accrued = historyStats(id);
+
+  // Real per-condition prices from live listings. Awaited here rather than
+  // streamed because it is the answer to "what is my card worth" — the whole
+  // point of the page — and it resolves in about a second from cache.
+  const conditions = await fetchConditions(card, card.variants[0] ?? 'normal');
 
   const usdQuotes = pricing.quotes.filter((q) => q.price.currency === 'USD');
   const eurQuotes = pricing.quotes.filter((q) => q.price.currency === 'EUR');
@@ -100,6 +106,8 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
       )}
 
       <SaveToCollection cardId={card.id} variants={card.variants} />
+
+      {conditions && <ConditionPrices pricing={conditions} />}
 
       {usdQuotes.length > 0 && <QuoteTable title="TCGplayer (USD)" quotes={usdQuotes} />}
       {eurQuotes.length > 0 && <QuoteTable title="Cardmarket (EUR)" quotes={eurQuotes} />}

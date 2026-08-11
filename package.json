@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "snapshot": "tsx scripts/snapshot-prices.ts"
+    "snapshot": "tsx scripts/snapshot-prices.ts",
+    "dev:phone": "next dev --experimental-https -H 0.0.0.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

@@ -6,12 +6,30 @@ app, installable to the home screen.
 
 ```bash
 npm install
-cp .env.example .env.local   # every key is optional
-npm run dev                  # http://localhost:3000
+npm run dev          # then open http://localhost:3000
 ```
 
-The app runs with no API keys at all. Features that need one are disabled and
-say so, rather than degrading quietly.
+**To use it on your phone** (which is where the camera matters):
+
+```bash
+npm run dev:phone    # serves HTTPS on your LAN
+```
+
+Then open `https://<your-computer's-LAN-IP>:3000` on your phone and accept the
+self-signed certificate warning. The HTTPS is not optional — browsers refuse
+camera access on a plain-HTTP origin that isn't localhost. If you'd rather not
+bother, the **Photo** button next to the shutter opens your phone's own camera
+app and works over plain HTTP.
+
+**For the authenticity checks to be worth much, set an Anthropic API key:**
+
+```bash
+cp .env.example .env.local
+# add ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Without it the app still identifies and prices cards, but the visual inspection
+signal cannot run, and the report will say so and lower its own confidence.
 
 ---
 
@@ -21,7 +39,9 @@ say so, rather than degrading quietly.
 perspective, reads its name and collector number, and resolves it to a specific
 printing.
 
-**Price** — current market prices from TCGplayer and Cardmarket, price history
+**Price by condition** — real per-condition prices read from live TCGplayer
+listings: cheapest and typical asking price for Near Mint through Damaged, with
+the number of listings behind each figure. Plus current market price, history
 charted over time, and the listing spread.
 
 **Check authenticity** — a set of signals scored individually, combined into a
