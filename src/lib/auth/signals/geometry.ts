@@ -16,7 +16,7 @@
  */
 
 import type { AuthSignal } from '../../types';
-import { CARD_ASPECT, ASPECT_TOLERANCE } from '../../card-geometry';
+import { CARD_ASPECT, ASPECT_TOLERANCE, GROSS_DEVIATION } from '../../card-geometry';
 import { abstain, scoreFromDeviation } from '../engine';
 
 const ID = 'geometry' as const;
@@ -58,6 +58,26 @@ export function geometrySignal(input: GeometryInput): AuthSignal {
   }
 
   const deviation = Math.abs(input.measuredAspect - CARD_ASPECT) / CARD_ASPECT;
+
+  // Past this, the outline is not a mis-cut card — it is not a card at all.
+  // Nobody trims a quarter off a card's width and keeps it, so a reading this
+  // far out means the detector locked onto a table edge, a sleeve, a binder
+  // page or a second card. Measured on a photo containing no card, detection
+  // returned a square-ish region at 0.45 confidence, which cleared the gate
+  // above and then scored 0/100 — turning a failed measurement into an
+  // accusation, which is the one outcome this engine exists to prevent.
+  if (deviation > GROSS_DEVIATION) {
+    return abstain(
+      ID,
+      LABEL,
+      WEIGHT,
+      'insufficient_data',
+      `The outline found in this photo is ${(deviation * 100).toFixed(0)}% away from a card's ` +
+        `proportions, which means the card edges were not located rather than that the card is ` +
+        `mis-cut. Fill more of the frame and shoot against a plain, contrasting surface.`,
+    );
+  }
+
   const score = scoreFromDeviation(deviation, ASPECT_TOLERANCE.nominal, ASPECT_TOLERANCE.suspicious * 2);
 
   const pct = (deviation * 100).toFixed(1);

@@ -32,6 +32,16 @@ export const ASPECT_TOLERANCE = {
 };
 
 /**
+ * Beyond this the reading describes a detection failure rather than a card.
+ *
+ * Real mis-cuts and trims live in the low single-digit percentages; a quarter
+ * of a card's width is not a trim, it is the detector having found something
+ * that is not a card. Signals treat it as grounds to abstain rather than as
+ * grounds to accuse.
+ */
+export const GROSS_DEVIATION = 0.25;
+
+/**
  * Minimum pixels across the card's 63mm width for each analysis tier.
  *
  * Derived rather than guessed: genuine cards are offset-printed with a halftone

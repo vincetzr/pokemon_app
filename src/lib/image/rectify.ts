@@ -118,14 +118,29 @@ export async function detectCard(input: Buffer): Promise<DetectionResult> {
   const fullH = meta.height ?? img.height;
   const sx = fullW / w;
   const sy = fullH / h;
-  const corners: [Point, Point, Point, Point] = [
+  let corners: [Point, Point, Point, Point] = [
     { x: tl.x * sx, y: tl.y * sy },
     { x: tr.x * sx, y: tr.y * sy },
     { x: br.x * sx, y: br.y * sy },
     { x: bl.x * sx, y: bl.y * sy },
   ];
 
-  const measuredAspect = quadAspect(corners);
+  let measuredAspect = quadAspect(corners);
+
+  // A card photographed on its side measures the RECIPROCAL of a card's aspect,
+  // and nothing downstream survives that. The homography squashes 63x88 into
+  // 88x63, so the rectified image is a distortion we introduced; the geometry
+  // signal reads 95% off standard and scores zero, accusing a perfectly ordinary
+  // card because of how it was held; and identification compares a stretched
+  // card against upright reference art. Rotating the corner ordering fixes all
+  // three. Which of the two sideways orientations this was cannot be recovered
+  // from an outline alone — that is for identification to resolve by trying the
+  // half-turn as well.
+  if (Math.abs(measuredAspect - 1 / CARD_ASPECT) < Math.abs(measuredAspect - CARD_ASPECT)) {
+    corners = [corners[3], corners[0], corners[1], corners[2]];
+    measuredAspect = quadAspect(corners);
+  }
+
   const fill = component.size / (w * h);
   const aspectError = Math.abs(measuredAspect - CARD_ASPECT) / CARD_ASPECT;
 

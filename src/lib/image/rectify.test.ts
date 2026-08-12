@@ -142,3 +142,61 @@ describe.skipIf(!hasFixtures)('rectifyCard', () => {
     expect(b).toBeLessThan(r * 0.75);
   }, 30_000);
 });
+
+describe.skipIf(!hasFixtures)('detectCard on a card photographed sideways', () => {
+  /**
+   * The same composite, but on a landscape canvas so a turned card fits.
+   *
+   * The resize and the rotate are separate sharp calls on purpose. Sharp runs
+   * its pipeline in a fixed internal order rather than call order, so chaining
+   * `.resize({width:900}).rotate(90)` produced a 900x900 square — a fixture
+   * that tested nothing, since a square outline is neither a card's aspect nor
+   * its reciprocal.
+   */
+  async function sidewaysPhoto(id: string): Promise<Buffer> {
+    const surface = { r: 62, g: 52, b: 44 };
+    const upright = await sharp(join(FIXTURES, `${id}.png`)).resize({ width: 900 }).toBuffer();
+    const card = await sharp(upright).rotate(90, { background: surface }).toBuffer();
+    const meta = await sharp(card).metadata();
+
+    return sharp({
+      create: { width: 1900, height: 1500, channels: 3, background: surface },
+    })
+      .composite([{ input: card, left: Math.round((1900 - meta.width!) / 2), top: Math.round((1500 - meta.height!) / 2) }])
+      .jpeg({ quality: 92 })
+      .toBuffer();
+  }
+
+  it('reports a card aspect rather than its reciprocal', async () => {
+    const det = await detectCard(await sidewaysPhoto('base1-4'));
+
+    // Before the corner ordering was rotated this measured ~1.4 — the
+    // reciprocal — which scored zero on the geometry signal and accused a
+    // perfectly ordinary card of being mis-cut because of how it was held.
+    expect(det.measuredAspect).toBeGreaterThan(CARD_ASPECT * 0.9);
+    expect(det.measuredAspect).toBeLessThan(CARD_ASPECT * 1.1);
+  }, 30_000);
+
+  it('rectifies a sideways card to an upright card, not a squashed one', async () => {
+    const photo = await sidewaysPhoto('base1-4');
+    const det = await detectCard(photo);
+    const rect = await rectifyCard(photo, det.corners);
+
+    // Same yellow-border probe as the upright case. It only passes if the
+    // homography mapped the card's real top edge to the output's top edge.
+    const { data, width, height } = rect;
+    let r = 0, g = 0, b = 0, n = 0;
+    const band = Math.round(height * 0.02);
+    for (let y = band; y < band * 2; y++) {
+      for (let x = Math.round(width * 0.2); x < Math.round(width * 0.8); x++) {
+        const i = (y * width + x) * 3;
+        r += data[i]!; g += data[i + 1]!; b += data[i + 2]!; n++;
+      }
+    }
+    r /= n; g /= n; b /= n;
+
+    expect(r).toBeGreaterThan(150);
+    expect(g).toBeGreaterThan(120);
+    expect(b).toBeLessThan(r * 0.75);
+  }, 30_000);
+});
