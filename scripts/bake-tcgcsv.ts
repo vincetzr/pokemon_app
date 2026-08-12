@@ -175,20 +175,31 @@ async function getJson<T>(url: string, key: string, maxAge: number): Promise<T |
   }
 }
 
-/** The catalogue serves 200w and 400w; 400w is worth the bytes for hashing. */
+/**
+ * The catalogue serves 200w and 400w; 400w is worth the bytes for hashing.
+ *
+ * A 404 is never retried. The catalogue lists products the image CDN has
+ * nothing for — SV2a's ~165 Master Ball Pattern cards are all like this — and
+ * retrying each of them six times with backoff turned a ten-minute set into a
+ * half-hour one for no possible gain. Only transport failures and 5xx get
+ * another go.
+ */
 async function fetchImage(url: string): Promise<Buffer | null> {
   const big = url.replace(/_200w\.jpg$/, '_400w.jpg');
   for (const candidate of [big, url]) {
     for (let attempt = 0; attempt < 3; attempt++) {
+      let missing = false;
       try {
         const res = await fetch(candidate, {
           headers: { 'x-retry-attempt': String(attempt), 'User-Agent': BROWSER_USER_AGENT },
           cache: 'no-store',
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(20_000),
         });
+        if (res.status === 404 || res.status === 403) { missing = true; throw new Error(`HTTP ${res.status}`); }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return Buffer.from(await res.arrayBuffer());
       } catch {
+        if (missing) break;
         await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
       }
     }
@@ -310,8 +321,14 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // Sealed product carries no collector number and is not a card.
-    const cards = products.results.filter((p) => extended(p, 'Number') && p.imageUrl);
+    // Tell a card from a sealed product by whether it has card fields, not by
+    // whether it has a collector number. The 1996 Japanese Expansion Pack and
+    // its No Rarity printing carry no number at all — nothing is printed on
+    // the card to carry — so requiring one silently dropped both sets, which
+    // are exactly the vintage Japanese cards worth recognising.
+    const cards = products.results.filter((p) =>
+      p.imageUrl && ['Number', 'Rarity', 'HP', 'CardType'].some((f) => extended(p, f)),
+    );
     const todo = cards.filter((p) => !have.has(`tcg-${p.productId}`));
     console.log(`${setName} (${language}): ${todo.length} of ${cards.length} to bake`);
 
@@ -358,7 +375,14 @@ async function main(): Promise<void> {
       });
       have.add(`tcg-${p.productId}`);
 
-      if ((i + 1) % 10 === 0 || i === todo.length - 1) {
+      // Checkpoint inside the set, not just at the end of it. A run over a
+      // 500-card set is long enough to be interrupted, and losing 200 cards'
+      // worth of downloads and listings calls to get back to where it already
+      // was is both slow and rude to the services involved.
+      if ((i + 1) % 25 === 0) {
+        writeFileSync(OUT, JSON.stringify({ cards: baked, bakedAt: new Date().toISOString() }));
+      }
+      if ((i + 1) % 25 === 0 || i === todo.length - 1) {
         console.log(`  ${setName} ${i + 1}/${todo.length} (${baked.length} baked, ${((Date.now() - started) / 60_000).toFixed(1)}m)`);
       }
       await new Promise((r) => setTimeout(r, 120));
