@@ -1,0 +1,32 @@
+# The standalone scanner
+
+`index.html` is the whole scanner in one file — camera, card detection,
+authenticity checks, 2,023 baked cards with prices, and the matcher. No
+server, no network at run time.
+
+## Why this exists as a file
+
+The live viewfinder needs `getUserMedia`, and a page only gets a camera if
+the page it is embedded in grants one. Embedded in a chat panel or a preview
+frame, it never will, and nothing inside the page can change that — the
+permission belongs to the outer page. Served as a page in its own right over
+HTTPS, the browser asks the user directly and the scanner works: alignment
+frame, live coaching, automatic capture when the card sits square and still
+inside the frame.
+
+## Serving it
+
+GitHub Pages, from this `docs/` folder — Settings → Pages → Source: *Deploy
+from a branch*, then pick the branch and `/docs`. It lands at
+`https://<owner>.github.io/pokemon_app/`.
+
+Anything that serves a static file over HTTPS works equally well. HTTPS is
+not optional: browsers only expose a camera on a secure origin.
+
+## Rebuilding it
+
+The file is generated, not hand-edited. The template and the corpus live
+outside the repo during development; the bake scripts that produce the corpus
+are `scripts/bake-offline.ts` (the Pokemon TCG API) and
+`scripts/bake-tcgcsv.ts` (the TCGplayer catalogue, which is where Japanese
+printings and Base Set Shadowless come from).
