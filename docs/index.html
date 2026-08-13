@@ -1,3 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Standards mode and a device-width viewport are the whole point of this
+     block: without them a tablet lays the page out 980px wide and shows the
+     scanner shrunk to a third of the screen. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#08090d">
+<meta name="description" content="Photograph a Pokémon card and get an authenticity reading, the printing it matches, and current condition prices — measured on the device, with no network.">
+<!-- Added to the Home Screen it opens without browser chrome, which is how the
+     viewfinder gets the whole screen. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Card Scanner">
+<!-- Otherwise a collector number like 004/102 is detected as a phone number
+     and turned into a call link. -->
+<meta name="format-detection" content="telephone=no">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%20width%3D%22180%22%20height%3D%22180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20fill%3D%22%230e1016%22%2F%3E%3Crect%20x%3D%2241%22%20y%3D%2227%22%20width%3D%2298%22%20height%3D%22126%22%20rx%3D%2211%22%20fill%3D%22none%22%20stroke%3D%22%233a4058%22%20stroke-width%3D%227%22%2F%3E%3Cpath%20d%3D%22M%20104%2041%20L%2061%2099%20L%2085%2099%20L%2076%20139%20L%20119%2081%20L%2095%2081%20Z%22%20fill%3D%22%23f5c518%22%2F%3E%3C%2Fsvg%3E">
+<link rel="apple-touch-icon" href="data:image/png;base64,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">
 <title>Pokémon Card Scanner</title>
 <style>
   /* ------------------------------------------------------------------
@@ -53,7 +75,10 @@
     font-size: 15px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
-    padding-bottom: env(safe-area-inset-bottom);
+    /* viewport-fit=cover puts the page under the rounded corners and the
+       home indicator; the insets buy that space back. */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 
   .shell {
@@ -555,6 +580,9 @@
     * { transition: none !important; animation: none !important; }
   }
 </style>
+</head>
+
+<body>
 
 <div class="shell">
   <header>
@@ -5017,3 +5045,6 @@ $('search').addEventListener('input', (e) => {
   searchTimer = setTimeout(() => runSearch(v), 140);
 });
 </script>
+
+</body>
+</html>

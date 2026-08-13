@@ -23,6 +23,19 @@ from a branch*, then pick the branch and `/docs`. It lands at
 Anything that serves a static file over HTTPS works equally well. HTTPS is
 not optional: browsers only expose a camera on a secure origin.
 
+Add it to the Home Screen and it opens without browser chrome, which is how
+the viewfinder gets the whole screen.
+
+## The document head
+
+`index.html` is a complete document — doctype, charset, viewport, icon. That
+sounds like boilerplate and is not: the page began life as an artifact body,
+where the platform supplies all of it at publish time. Served as a file of its
+own, nothing does, and a browser with no doctype lays the page out in quirks
+mode against a 980px viewport — on a tablet, the whole scanner rendered
+shrunk into a corner. `test-served.mjs` measures `document.compatMode` and the
+layout width over HTTP rather than trusting the markup.
+
 ## Rebuilding it
 
 The file is generated, not hand-edited. The template and the corpus live
