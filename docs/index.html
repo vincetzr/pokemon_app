@@ -3387,7 +3387,9 @@ function renderVariantNotes(result) {
 
 function collapseCapture() {
   // After a scan the results are the page, and a card-sized target sitting
-  // above them is just distance to scroll.
+  // above them is just distance to scroll. The live viewfinder is the
+  // exception: it stays, because it is still scanning.
+  if (CAM.running) return;
   $('capture-target').hidden = true;
   $('btn-library').hidden = true;
   $('btn-bulk').hidden = true;
@@ -3592,6 +3594,9 @@ const CAM = {
   framesSeen: 0,
   retries: 0,
   autoDisabled: false,
+  armed: true,
+  clearFrames: 0,
+  lastCaptureFingerprint: null,
   preflight: 'maybe',
   lastState: '',
   firing: false,
@@ -3609,13 +3614,14 @@ const LOCK_WINDOW = 6;
 /** Frames the loop must have seen at all before a plateau means anything. */
 const MIN_FRAMES_BEFORE_LOCK = 8;
 
-/** Window the stillness vote is taken over. */
-const STILL_WINDOW = 8;
-
-/** Below this many still frames in the window, the hand is genuinely moving. */
-const STILL_MOVING = 4;
-
-/** At or above this, it has been still long enough to trust a focus reading. */
+/**
+ * Stillness is a vote over a window rather than a run, and the window is wide
+ * enough that a hand which drifts and corrects still counts as still. A
+ * narrower window flapped between "moving" and "settled" on a card held
+ * perfectly normally, and the focus gate below it could never be reached.
+ */
+const STILL_WINDOW = 10;
+const STILL_MOVING = 5;
 const STILL_BEFORE_FOCUS = 6;
 
 /** How many focus readings the plateau test looks back over. */
@@ -3639,7 +3645,11 @@ const LIVE = {
   motionMax: 0.012,     // fraction of pixels that changed by more than MOTION_DELTA
   motionExit: 0.025,    // hysteresis, so a borderline hand does not flicker the state
   sharpRatio: 0.90,     // of the recent peak
-  sharpSpread: 0.10,    // relative spread across the last few frames
+  // Spread across recent focus readings. A hand holding a card produces about
+  // ten percent of natural variation between frames; a lens actually hunting
+  // swings several times that, so this separates the two without demanding a
+  // stillness no one can hold.
+  sharpSpread: 0.16,
   lumMin: 60,
   lumMax: 205,
 };
@@ -3699,7 +3709,31 @@ const HINTS = {
   moving: ['Hold still', 'ready'],
   focusing: ['Focusing…', 'ready'],
   locked: ['Hold it — capturing', 'locked'],
+  scanned: ['Read it — show me the next card', 'locked'],
 };
+
+/** Frames the card must be absent before another read is allowed. */
+const REARM_CLEAR_FRAMES = 6;
+
+/** States that mean no card is properly in the frame. */
+const CARD_ABSENT = new Set(['searching', 'far', 'near', 'skew']);
+
+/** Below this similarity to the card just read, it is a different card. */
+const SAME_CARD_CORRELATION = 0.92;
+
+function similarity(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let ma = 0, mb = 0;
+  for (let i = 0; i < a.length; i++) { ma += a[i]; mb += b[i]; }
+  ma /= a.length; mb /= b.length;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i] - ma, y = b[i] - mb;
+    num += x * y; da += x * x; db += y * y;
+  }
+  const den = Math.sqrt(da * db);
+  return den > 0 ? num / den : 0;
+}
 
 function camSupported() {
   return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
@@ -3892,11 +3926,25 @@ function scoutFrame(video, scout) {
   // arrive until the camera settles — which is precisely when it is settling.
   const coarse = downsampleLuma(luma, w, h, MOTION_W, mean);
 
+  // What counts as movement scales with how much contrast the scene carries.
+  //
+  // A fixed threshold makes stillness a property of the CARD rather than of
+  // the hand: measured, an identical one-pixel tremor cleared the gate on a
+  // muted card and failed it continuously on a bright high-contrast one,
+  // because a sub-pixel shift moves a strong edge much further in luma than a
+  // weak one. The scanner would then read one card and sit in "hold still"
+  // forever on the next. Scaling by the frame's own spread makes it mean
+  // "moved relative to what is there to move".
+  let spread = 0;
+  for (let i = 0; i < coarse.length; i++) spread += coarse[i] * coarse[i];
+  spread = Math.sqrt(spread / coarse.length);
+  const delta = Math.max(MOTION_DELTA, 0.35 * spread);
+
   let motion = Infinity;
   if (CAM.prevLuma && CAM.prevLuma.length === coarse.length) {
     let changed = 0;
     for (let i = 0; i < coarse.length; i++) {
-      if (Math.abs(coarse[i] - CAM.prevLuma[i]) > MOTION_DELTA) changed++;
+      if (Math.abs(coarse[i] - CAM.prevLuma[i]) > delta) changed++;
     }
     motion = changed / coarse.length;
   }
@@ -4019,9 +4067,23 @@ function inspectCard(scout, corners) {
 
   const meanLum = lum.reduce((a, b) => a + b, 0) / lum.length;
 
+  // A coarse fingerprint of whatever is in the frame, so the loop can tell
+  // "still the same card" from "a different card".
+  const fp = new Float32Array(TILE_X * TILE_Y);
+  for (let ty = 0; ty < TILE_Y; ty++) {
+    for (let tx = 0; tx < TILE_X; tx++) {
+      let sum = 0, n = 0;
+      for (let y = ty * th; y < (ty + 1) * th; y += 2) {
+        for (let x = tx * tw; x < (tx + 1) * tw; x += 2) { sum += lum[y * W + x]; n++; }
+      }
+      fp[ty * TILE_X + tx] = n ? sum / n : 0;
+    }
+  }
+
   return {
     focus,
     meanLum,
+    fingerprint: fp,
     glareLargest: largest / glareTile.length,
     glareCritical: criticalTiles > 0 ? criticalGlare / criticalTiles : 0,
   };
@@ -4146,9 +4208,46 @@ function tick() {
   if (CAM.window.length > LOCK_WINDOW) CAM.window.shift();
   CAM.goodFrames = CAM.window.reduce((n, ok) => n + (ok ? 1 : 0), 0);
 
+  if (!CAM.armed) {
+    // Re-arm on the card having LEFT, or on it having CHANGED.
+    //
+    // Absence alone is not enough. Reading a card takes a second or two, and
+    // in a stack the next card is often already in place by the time the
+    // report appears — so waiting for an empty frame that never comes means
+    // the scanner reads the first card and then nothing. Comparing what is in
+    // frame now against what was just read covers that: the same card held
+    // still stays quiet, a different one is read immediately.
+    //
+    // An empty desk also does not read as 'searching': the detector finds the
+    // whole uniform surface as one region, which fills the frame and reads as
+    // 'near'. Hence the set rather than a single state.
+    const changed = CAM.last && CAM.lastCaptureFingerprint &&
+      similarity(CAM.last.fingerprint, CAM.lastCaptureFingerprint) < SAME_CARD_CORRELATION;
+
+    CAM.clearFrames = CARD_ABSENT.has(state) ? CAM.clearFrames + 1 : 0;
+
+    if (CAM.clearFrames >= REARM_CLEAR_FRAMES || changed) {
+      CAM.armed = true;
+      CAM.clearFrames = 0;
+      // The focus plateau describes a SUBJECT, not a lens. How much edge
+      // energy the name band carries depends on the card — a busy holo scores
+      // far higher than a plain common — so a peak learned from one card is a
+      // bar the next one may never clear. Carrying it across cards made the
+      // scanner lock onto the first card of a stack and then sit in
+      // "focusing…" forever on every card after it. It resets here, when the
+      // subject changes, rather than on every capture, so a card held still
+      // does not churn.
+      CAM.focusRing = [];
+      CAM.lastState = '';
+    } else {
+      setHint('scanned');
+      return;
+    }
+  }
+
   if (!CAM.autoDisabled) setHint(state);
 
-  if (state === 'locked' && CAM.goodFrames >= STABLE_FRAMES && !CAM.autoDisabled) {
+  if (state === 'locked' && CAM.goodFrames >= STABLE_FRAMES && !CAM.autoDisabled && CAM.armed) {
     fireCapture('auto');
   }
 }
@@ -4320,28 +4419,44 @@ async function fireCapture(how) {
     return;
   }
 
-  stopCamera();
   result.capture = { how, trackWidth: trackW, retries: CAM.retries };
 
   $('sec-error').hidden = true;
-  $('results').hidden = true;
   $('sec-bulk').hidden = true;
-  $('sec-progress').hidden = false;
-  renderSteps(5);
 
   try {
     renderSingle(result);
     $('sec-progress').hidden = true;
-    collapseCapture();
     $('results').hidden = false;
-    $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (err) {
     $('sec-progress').hidden = true;
     $('sec-error').hidden = false;
     $('error-text').textContent = (err && err.message) || String(err);
-  } finally {
-    CAM.firing = false;
   }
+
+  // The camera stays on and keeps scanning. A scanner you have to restart
+  // between cards is a camera with extra steps — take the card away, put the
+  // next one in the frame, and it reads that one too.
+  //
+  // Re-arming needs the card to LEAVE first, not just a timer. Holding one
+  // card steady in the frame otherwise re-reads the same card every couple of
+  // seconds, which looks like a fault and buries the result you were reading.
+  CAM.retries = 0;
+  CAM.goodFrames = 0;
+  CAM.window = [];
+  CAM.stillRing = [];
+  // The focus history survives a capture on purpose. The lens has not moved
+  // and the working distance has not changed, so the plateau it learned still
+  // describes this camera — throwing it away costs half a second of relearning
+  // on every card, which is the difference between reading a stack and
+  // missing every second one.
+  CAM.armed = false;
+  CAM.clearFrames = 0;
+  CAM.lastCaptureFingerprint = CAM.last ? CAM.last.fingerprint : null;
+  CAM.lastState = '';
+  CAM.running = true;
+  CAM.firing = false;
+  setHint('scanned');
 }
 
 function stopCamera() {
@@ -4360,6 +4475,9 @@ function stopCamera() {
   CAM.framesSeen = 0;
   CAM.retries = 0;
   CAM.autoDisabled = false;
+  CAM.armed = true;
+  CAM.clearFrames = 0;
+  CAM.lastCaptureFingerprint = null;
   CAM.lastState = '';
   CAM.guide = null;
   $('sec-camera').hidden = true;
@@ -4429,6 +4547,8 @@ async function startCamera() {
 
   CAM.running = true;
   CAM.firing = false;
+  CAM.armed = true;
+  CAM.clearFrames = 0;
   CAM.timer = setInterval(tick, 120);
   return true;
 }
@@ -4788,6 +4908,23 @@ $('btn-retry-camera').addEventListener('click', async () => {
     $('capture-target').querySelector('.big').textContent = 'Take a photo';
     $('capture-target').querySelector('.sub').textContent =
       'Then drag the frame onto the card — a guide appears on your photo.';
+    return;
+  }
+
+  // Open the camera without waiting to be asked.
+  //
+  // A browser will only hand over a camera unprompted once the user has
+  // already granted it for this site, so the first visit still needs the tap
+  // that carries the permission prompt. Every visit after that starts
+  // scanning the moment the page loads, which is the whole point: point it at
+  // a card, get the card. Failure here is silent by design — the tap target
+  // is already on screen and says what to do.
+  if (CAM.preflight === 'maybe') {
+    try {
+      cameraWorked = await startCamera();
+    } catch {
+      /* the tap target remains */
+    }
   }
 })();
 
