@@ -12,6 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "snapshot": "tsx scripts/snapshot-prices.ts",
+    "bake": "tsx scripts/bake-offline.ts",
+    "bake:catalogue": "tsx scripts/bake-tcgcsv.ts",
+    "build:scanner": "node scripts/build-scanner.mjs",
     "dev:phone": "next dev --experimental-https -H 0.0.0.0"
   },
   "dependencies": {

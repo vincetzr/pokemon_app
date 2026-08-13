@@ -1,0 +1,5050 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Standards mode and a device-width viewport are the whole point of this
+     block: without them a tablet lays the page out 980px wide and shows the
+     scanner shrunk to a third of the screen. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#08090d">
+<meta name="description" content="Photograph a Pokémon card and get an authenticity reading, the printing it matches, and current condition prices — measured on the device, with no network.">
+<!-- Added to the Home Screen it opens without browser chrome, which is how the
+     viewfinder gets the whole screen. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Card Scanner">
+<!-- Otherwise a collector number like 004/102 is detected as a phone number
+     and turned into a call link. -->
+<meta name="format-detection" content="telephone=no">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%20width%3D%22180%22%20height%3D%22180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20fill%3D%22%230e1016%22%2F%3E%3Crect%20x%3D%2241%22%20y%3D%2227%22%20width%3D%2298%22%20height%3D%22126%22%20rx%3D%2211%22%20fill%3D%22none%22%20stroke%3D%22%233a4058%22%20stroke-width%3D%227%22%2F%3E%3Cpath%20d%3D%22M%20104%2041%20L%2061%2099%20L%2085%2099%20L%2076%20139%20L%20119%2081%20L%2095%2081%20Z%22%20fill%3D%22%23f5c518%22%2F%3E%3C%2Fsvg%3E">
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAAACXBIWXMAAAsTAAALEwEAmpwYAAAJ5ElEQVR42u2d63NcZR3H8xdImst5Ttpks7l006a7aXZz2yRNKE1iW+0lJdoglwGng5KxakWrIEyLWEa0WLCgXMqUWlFpK8hVoK0VqTheB1FGR8VRRkXteEdfP55fMnXaZnez9/M8ez4vPq+SF2e+v0+ePJdzfk/VW6odDVApVBECIDQAQgMgNABCA0IDIDQAQgMgNABCA0IDIDQAQgMgNABCA0IDIDQAQgMgNABCA0IDIDQAQudPde1i3dDYoUMtMd26tEe3dvRBLniZSXYNjZHZLBHaD4lrlG5u69ZdiQk9ODqth1ZfBkUg6WXZ1TOhw162F3kZI3QZaAxHde/gZgQsMX3Dk7q53RN7kULo0ozKDToaH0O2MhPzRmybpiJWCF3rhHQiuRHBfEKyr3WaELpYI3MiuQGxfKZncJMVI7XhQisd8xZ+CGUG0fg4QhdCqKUrq6AHRqZ0tHuNjnQO68jyQcgFLzPJTjLMJuumcAyh892a6xuazBhu//Clc1tMi1wOFQpEMpRdjf5VmcWWHSaTt/SMFVr2mRdcqNQ3IWNJFuCbMmYfbluJ0LnSlWHuLCOzLatuW6XONFLHEuMInetxdqYTQJlmIF5pCbfFM54oyu4TQmeJvFeQaQHInLk8c+pMC0WpEUJniayk024deStyhCsPknX63Y4oQmdLa6Q3bZBLO4eQrUxEvKzT1UFqhNBZ0r5sIG2Q8jNkow4IDQhNkAiN0AhdNNaNUgeErhC6Vzj6gV0udUBo+3HqHf2DLyn94aupA0JXAPfdpPR/X3L1aD91QGjLuXzDnMx//Zar6+qpA0JbTGyZo/983J0V+uT9ijogtMVvuNU5+sWDczILn9mB0AhtMXfuVP+XWdi6jjogtKVcOqH0f77jnid0Wwt1QGgL6WhX+g/Pni/zq8dc6oDQ9lFT6+hTB86fagiHblXUAaHt4/Yd82UWtr8LoRHawvc0/n3aTSl0Mk4dENoiZMH326dTy3zmpKsX1VAHhK62pemko5+7J7XMgvyMOiC0Ndwyo9LKLHxyu6IOCG0Ha1eptPPms2weQ2iEtoBQk6N/9XhmmeVwRX6POiC04T0uHP3YvswyCy8/4lIHhDafG7apBWUW/P5CBaEJckHkJf1/vOBmJfR7tyrqgNDm0rhE6V88lp3MQiKK0AhtMEf3qqxlfuN5NbtHTR0Q2kg+dFX2MgtPfk5RB4Q2k4FuZ/abwFyE3nUdQiO0gTS4jn7lSG6js7D+YuqA0AZyeE/uMsvpofwhUAeENoqZaSdnmYXvH1b0tkNos+jr8ubNp9y8hP78xxEaoavNat31w4fzk1l49xaERmiDOLA7f5kFaTBDHRDaCK7cqAqS+fVnXPpDI7QZz7my09F/OVHY6Hxsr0JohPb/Geu9efP3vljY6CzIm3gIjdC+c/eNhcssTAwhNEL7/HxTb3Xmte7Kh39+29XKcRAaof17tmXtjv7jc25RRufTB10uDULoAV9bd73wYHFkFvbtVAiN0P4Fecf1qmgyC1dsRGiE9inIyTFVlHnzuUjnUYRG6LI/T0eb0r9/trgyl5qHitDBFKErUGj5LOr4F+yS+WdHvddRGxihEToFe7Yrq2T+m/elzGBCMeVA6PmsG1m4dZdpvO9yxRwaoefTGnb0b56yS+Yjn1YsChE69bz5G3fbNdX4+aOuXrKEXQ6ETsHN73GsklmO0C8ZYNsOoVOw2hNDBLFJ6I9co9iHRuj5NDUq/cuv2yXzE3ep2e6mCI3Q+sKWt1+7w65582tPKN0c4qQQoVOw8xq7ZP7Xi6V/lxqhLQ1ypE9l3fLWFG66VvEuB0KnaN3lHRH/9Khdo/OJe8tz9RtCWxjkw7fZNTL/zrvfsL2Ft+0QOgVyBbFNMr/pHcO//RJeH0XoFPSvzL3lrd+U+w5DhLYkSFc5+ieP2CXzyftV2a9MRmhLgjx0q11TDfkod/lSPrRAaB8Q8Yops3z29c611AGhfeKqTcUVeu/1ijogtH/c9dHiyfzSQ66uq6cOCO0jImExZP7TcaWjHdQBoX1E2noV6wj9srcp6oDQ/rJ2VXF2T/bfoKgDQvvPjdcWLvSPvmxOA0eEDrjQj362MJnPfNOs+74ROuBCy4tDhQht2uVBCB3gIOV6ikJkfmCXSx0Q2hy2TeU/f37Ze69EKeqA0AZx780q79ZdyTjdRxHaMPK9ePO6rbTTRWjDnlc+48qnB95Xb6c/NEIbGKR8RZKrzK8ec/XixQ5CI7R5Qd4yk9v8+e/e8fhwr9mjM0IHOMin9+cm9I4rzZcZoQMapHRcyuWat8fvdEvWuguhEbpgemPZz59/7bXuCjXZITNCBzTImWkn69ZdY4P2yIzQAQ3ywd3ZzZ8/tk1ZJTNCBzTIV44sLPRT+5U182aEDnCQ0k/6zQUOVF57UulwyD6ZETqAQW4ZVwu27lp/sZ0yI3QAg7zt/ZmF3j2jrJUZoQMYZKYbZk/cV/7WXQiN0HkjssonU6lkfv0ZV0da7ZYZoQMW5FCPSjtv3rhGWS8zQgcsyA9ckVroT33QrQiZETpgQR7eM1/o0wddXVvnIDRC2xekXEV8rsxvPK90Z6RyZEboAAUpF9tf2PJ2er2qKJkROkBBSt+5c4Xet7PyZEboAAUpPZvPyvzdQ8rXlrcIjdAFc+rAnNBnTro6vqIyR2eEDkiQsotx9vasqyedipUZoQMS5OqBuQWhNJapZJkROiBByiX3P/6KOS1vERqhC+LgJ5TuiVW+zAgdkCBtfr8ZoQky0CA0QiM0QiM0Qle40K2R3rRBRjqHkK1MRDqH09ahNdKD0Fl/Td0SSxtktHsNspWJFd1jaevQFI4idLY0NEbSBjkwMuX1uHARrsRcVKN0cuQdaesgNULoLKmuadDJ0a1pw2xu70a6EhNuT6TNPzk6PVsjhM6Brp6JtIH2r5rStU4I8Ur1voqX7YCXcbr8Y4lxY5/dWKHDbd1pAxUSyU1IXQLqvEwl20zZN7d1I3Tu0w6le4cmMwYrI3Vze5w5dZHmzOG2eMaRWegd3Dz7uwidB6EMux0XLhRl9yOyYli3dvRBDkhmspuRaQF43u5GS9ToP8wqs0cOpaPx8ayChtIj4pv+n6bK9AeU1XQiuQGhfCYxsMGbajQgdHFW3U1I7SM9nsw19XYswKtsWbTISB2NjyFYmZEtuuraxdYsbqtsW403ekeustJGttLSN7RFh1q7rNutqbJ3i2mljnmHL3JqhYDFQU5nZUSWfWaTt+YqTugLpyINSyLeyzIx3bq0R0eWD0IOSGaSnWRYbcGir+KFBkBoQGgAhAZAaACEBkBoQGgAhAZAaACEBoQmBEBoAIQGQGgAhAaEBkBoAIQGQGgAhAaEBkBoAFP4H90hWIdvTFvjAAAAAElFTkSuQmCC">
+<title>Pokémon Card Scanner</title>
+<style>
+  /* ------------------------------------------------------------------
+     One committed visual world: the app's own instrument surface.
+     This is a device screen, not a document, so it keeps its dark
+     calibrated look on any host ground — every colour is painted
+     explicitly rather than inherited.
+     Tokens are the project's own, from src/app/globals.css.
+  ------------------------------------------------------------------ */
+  :root {
+    color-scheme: dark;
+
+    --ink-950: #08090d;
+    --ink-900: #0e1016;
+    --ink-850: #14161f;
+    --ink-800: #1b1e2a;
+    --ink-700: #262a3a;
+    --ink-600: #363b50;
+    --ink-400: #6b7189;
+    --ink-300: #9aa0b5;
+    --ink-200: #c7cbda;
+    --ink-100: #e8eaf2;
+
+    --bolt:    #f5c518;
+    --bolt-600:#d9a800;
+
+    --good:    #3fc584;
+    --warn:    #f0b53c;
+    --bad:     #f06565;
+    --info:    #5aa2e0;
+
+    /* Chart series, validated for contrast and CVD separation on #0e1016. */
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+
+    /* Geometric display face for instrument lettering; the stack degrades to
+       a humanist grotesque where Futura is absent. */
+    --display: Futura, 'Avenir Next Condensed', 'Avenir Next', 'Trebuchet MS', ui-sans-serif, system-ui, sans-serif;
+    --sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+    --card-aspect: 0.71591;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink-950);
+    color: var(--ink-100);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    /* viewport-fit=cover puts the page under the rounded corners and the
+       home indicator; the insets buy that space back. */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .shell {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 0 16px 72px;
+  }
+
+  /* --- masthead ------------------------------------------------------ */
+
+  header {
+    padding: 26px 0 18px;
+    border-bottom: 1px solid var(--ink-800);
+  }
+  .mark {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-family: var(--display);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 13px;
+    color: var(--ink-300);
+  }
+  .mark b {
+    color: var(--bolt);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(26px, 6.4vw, 34px);
+    line-height: 1.12;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+    margin: 12px 0 8px;
+    color: var(--ink-100);
+  }
+  .standfirst {
+    margin: 0;
+    max-width: 46ch;
+    color: var(--ink-300);
+    font-size: 14px;
+  }
+
+  /* --- section furniture --------------------------------------------- */
+
+  section { margin-top: 26px; }
+
+  .eyebrow {
+    font-family: var(--display);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 10.5px;
+    color: var(--ink-400);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .eyebrow::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--ink-800);
+  }
+
+  .panel {
+    background: var(--ink-900);
+    border: 1px solid var(--ink-800);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .note {
+    color: var(--ink-400);
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+
+  /* --- capture -------------------------------------------------------- */
+
+  /* Card-shaped, and sized like a card rather than like a hero banner — the
+     target is an instruction about how to frame the shot, so it should look
+     like the thing being photographed. */
+  #capture-target {
+    display: block;
+    width: min(100%, 236px);
+    aspect-ratio: var(--card-aspect);
+    margin: 0 auto;
+    border: 2px dashed var(--ink-600);
+    border-radius: 14px;
+    background: var(--ink-900);
+    color: var(--ink-200);
+    font-family: var(--display);
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 20px;
+    transition: border-color 120ms ease, background 120ms ease;
+  }
+  #capture-target:hover,
+  #capture-target:focus-visible {
+    border-color: var(--bolt);
+    background: var(--ink-850);
+  }
+  #capture-target .glyph {
+    width: 46px; height: 46px;
+    color: var(--bolt);
+  }
+  #capture-target .big {
+    font-size: 17px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  #capture-target .sub {
+    font-family: var(--sans);
+    letter-spacing: 0;
+    font-size: 12.5px;
+    color: var(--ink-400);
+    text-align: center;
+    max-width: 30ch;
+  }
+
+  .row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+  button.ghost {
+    flex: 1 1 auto;
+    min-height: 44px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--ink-700);
+    background: var(--ink-850);
+    color: var(--ink-200);
+    font-family: var(--sans);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button.ghost:hover { border-color: var(--ink-600); color: var(--ink-100); }
+
+  button.ghost.primary {
+    border-color: var(--bolt-600);
+    color: var(--bolt);
+    background: var(--ink-900);
+    font-family: var(--display);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 13px;
+  }
+  button.ghost.primary:hover { border-color: var(--bolt); color: var(--bolt); }
+
+  input[type=file] { display: none; }
+
+  /* --- viewfinder ------------------------------------------------------ */
+
+  .viewfinder {
+    position: relative;
+    width: 100%;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    line-height: 0;
+  }
+  .viewfinder video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    background: #000;
+  }
+  .viewfinder svg.overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .hint {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    max-width: 88%;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: rgba(8, 9, 13, 0.82);
+    border: 1px solid var(--ink-700);
+    color: var(--ink-100);
+    font-family: var(--display);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    font-size: 11.5px;
+    line-height: 1.4;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .hint[data-tone=ready] { color: var(--bolt); border-color: var(--bolt-600); }
+  .hint[data-tone=locked] { color: var(--good); border-color: var(--good); }
+
+  .readout {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    padding: 5px 9px;
+    border-radius: 6px;
+    background: rgba(8, 9, 13, 0.75);
+    border: 1px solid var(--ink-800);
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--ink-300);
+    white-space: pre;
+  }
+
+  /* --- aligner --------------------------------------------------------- */
+
+  .aligner {
+    position: relative;
+    width: 100%;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    line-height: 0;
+    touch-action: none;          /* dragging a corner must not scroll the page */
+  }
+  .aligner canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+    cursor: grab;
+  }
+  .aligner canvas:active { cursor: grabbing; }
+
+  /* --- progress ------------------------------------------------------- */
+
+  ol.steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+  ol.steps li {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    padding: 3px 0;
+    color: var(--ink-400);
+  }
+  ol.steps li .tick { width: 1.2em; color: var(--ink-600); }
+  ol.steps li[data-state=running] { color: var(--ink-200); }
+  ol.steps li[data-state=running] .tick { color: var(--bolt); }
+  ol.steps li[data-state=done] { color: var(--ink-300); }
+  ol.steps li[data-state=done] .tick { color: var(--good); }
+
+  /* --- verdict -------------------------------------------------------- */
+
+  .verdict-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pill {
+    font-family: var(--display);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    font-size: 11.5px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+  }
+  .tone-good { color: var(--good); }
+  .tone-warn { color: var(--warn); }
+  .tone-bad  { color: var(--bad); }
+
+  .figures {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .figure .k {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-400);
+    font-family: var(--display);
+  }
+  .figure .v {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 20px;
+    color: var(--ink-100);
+    margin-top: 2px;
+  }
+  .figure .v small { font-size: 12px; color: var(--ink-400); }
+
+  .meter {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--ink-800);
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .meter i { display: block; height: 100%; background: var(--bolt); }
+
+  /* --- signals -------------------------------------------------------- */
+
+  ul.signals { list-style: none; margin: 14px 0 0; padding: 0; }
+  ul.signals > li {
+    border-top: 1px solid var(--ink-800);
+    padding: 11px 0;
+  }
+  .sig-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .sig-name {
+    font-family: var(--display);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11.5px;
+    color: var(--ink-200);
+    flex: 1;
+  }
+  .sig-score {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+  }
+  .sig-abstain {
+    font-family: var(--display);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 10px;
+    color: var(--ink-400);
+    border: 1px solid var(--ink-700);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .sig-body { color: var(--ink-300); font-size: 12.5px; margin-top: 5px; }
+  .sig-meas {
+    margin-top: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-400);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+  }
+
+  /* --- identification ------------------------------------------------- */
+
+  .cand-list { display: flex; flex-direction: column; gap: 8px; }
+  .cand {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+    padding: 8px;
+    border-radius: 10px;
+    border: 1px solid var(--ink-800);
+    background: var(--ink-850);
+    color: var(--ink-100);
+    font: inherit;
+    cursor: pointer;
+  }
+  .cand:hover { border-color: var(--ink-600); }
+  .cand[aria-pressed=true] { border-color: var(--bolt); background: var(--ink-800); }
+  .cand img {
+    width: 46px;
+    border-radius: 4px;
+    display: block;
+    background: var(--ink-800);
+  }
+  .cand .who { flex: 1; min-width: 0; }
+  .cand .nm { font-size: 14px; font-weight: 600; }
+  .cand .mt { font-size: 11.5px; color: var(--ink-400); }
+  .cand .score {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    color: var(--ink-300);
+    text-align: right;
+  }
+  .cand .score b { display: block; color: var(--ink-100); font-weight: 500; }
+
+  input[type=search] {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 16px;
+    border-radius: 10px;
+    border: 1px solid var(--ink-700);
+    background: var(--ink-950);
+    color: var(--ink-100);
+    font-family: var(--sans);
+  }
+  input[type=search]:focus-visible { outline: 2px solid var(--bolt); outline-offset: 1px; }
+
+  /* --- tables --------------------------------------------------------- */
+
+  .scroll-x { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 7px 6px; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font-family: var(--display);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 10px;
+    color: var(--ink-400);
+    font-weight: 500;
+    border-bottom: 1px solid var(--ink-700);
+  }
+  tbody tr { border-bottom: 1px solid var(--ink-850); }
+  tbody tr:last-child { border-bottom: 0; }
+  td.num {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-100);
+  }
+  td.thin { color: var(--warn); }
+
+  /* --- chart ---------------------------------------------------------- */
+
+  svg.chart { width: 100%; height: auto; display: block; }
+  .obs { font-family: var(--mono); font-size: 12px; color: var(--ink-300); }
+  .obs li { padding: 2px 0; }
+
+  /* --- pile scan ------------------------------------------------------- */
+
+  ol.bulk-list { list-style: none; margin: 0; padding: 0; }
+  ol.bulk-list > li {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 0;
+    border-top: 1px solid var(--ink-800);
+  }
+  ol.bulk-list > li:first-child { border-top: 0; }
+  ol.bulk-list .rank {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    color: var(--ink-400);
+    width: 1.6em;
+  }
+  ol.bulk-list img { width: 40px; border-radius: 4px; display: block; background: var(--ink-800); }
+  ol.bulk-list .who { flex: 1; min-width: 0; }
+  ol.bulk-list .nm { font-size: 13.5px; font-weight: 600; }
+  ol.bulk-list .mt { font-size: 11px; color: var(--ink-400); }
+  ol.bulk-list .val {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  ol.bulk-list .val small { display: block; font-size: 10px; color: var(--ink-400); }
+  ol.bulk-list li.unknown .nm { color: var(--ink-300); font-weight: 500; }
+  ol.bulk-list li.unknown .val { color: var(--ink-400); }
+
+  /* --- misc ----------------------------------------------------------- */
+
+  .preview-wrap { display: flex; gap: 12px; align-items: flex-start; }
+  .preview-wrap canvas {
+    width: 108px;
+    border-radius: 6px;
+    border: 1px solid var(--ink-700);
+    display: block;
+  }
+
+  ul.plain { margin: 8px 0 0; padding-left: 1.1em; color: var(--ink-300); font-size: 12.5px; }
+  ul.plain li { margin: 5px 0; }
+
+  footer {
+    margin-top: 34px;
+    padding-top: 18px;
+    border-top: 1px solid var(--ink-800);
+    color: var(--ink-400);
+    font-size: 12px;
+  }
+  footer b { color: var(--ink-300); font-weight: 600; }
+
+  [hidden] { display: none !important; }
+
+  :focus-visible { outline: 2px solid var(--bolt); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="shell">
+  <header>
+    <div class="mark"><b>⚡</b> Pokémon card scanner</div>
+    <h1>Photograph a card. Get a real reading.</h1>
+    <p class="standfirst">
+      The authenticity checks run on your photo, on this device. The prices are real figures
+      captured from live TCGplayer listings, frozen into the page — this sandbox blocks network
+      access, so nothing here is invented to fill the gap. Pick several photos at once and it
+      ranks the pile by what each card is worth.
+    </p>
+  </header>
+
+  <section id="sec-camera" hidden>
+    <div class="eyebrow">Viewfinder</div>
+    <div class="viewfinder" id="viewfinder">
+      <video id="video" playsinline muted autoplay></video>
+      <svg class="overlay" id="overlay" aria-hidden="true"></svg>
+      <div class="readout" id="readout" hidden></div>
+      <div class="hint" id="cam-hint">Starting the camera…</div>
+    </div>
+    <div class="row">
+      <button class="ghost primary" id="btn-shutter" type="button">Capture now</button>
+      <button class="ghost" id="btn-torch" type="button" hidden>Light</button>
+      <button class="ghost" id="btn-cam-close" type="button">Close camera</button>
+    </div>
+    <p class="note" id="cam-note" style="margin:10px 0 0"></p>
+  </section>
+
+  <section id="sec-capture">
+    <div class="eyebrow">Capture</div>
+    <button id="capture-target" type="button">
+      <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.9l1.2-2h6.8l1.2 2h1.9A2.5 2.5 0 0 1 21 8.5v9A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/>
+        <circle cx="12" cy="13" r="3.6"/>
+      </svg>
+      <span class="big">Scan a card</span>
+      <span class="sub">Hold the card inside the frame. It recognises it by itself.</span>
+    </button>
+    <p class="note" id="capture-note" style="margin:10px 0 0" hidden></p>
+    <div class="row" id="cam-fallback" hidden>
+      <button class="ghost primary" id="btn-open-tab" type="button">Open in a browser tab — the scanner works there</button>
+      <button class="ghost" id="btn-retry-camera" type="button">Try again</button>
+      <button class="ghost" id="btn-use-photo" type="button">Use a photo instead</button>
+    </div>
+    <div class="row">
+      <button class="ghost" id="btn-library" type="button">Choose an existing photo</button>
+      <button class="ghost" id="btn-bulk" type="button">Scan a pile</button>
+      <button class="ghost primary" id="btn-reset" type="button" hidden>Scan another card</button>
+    </div>
+    <input type="file" id="file-camera" accept="image/*" capture="environment">
+    <input type="file" id="file-library" accept="image/*">
+    <input type="file" id="file-bulk" accept="image/*" multiple>
+  </section>
+
+  <section id="sec-align" hidden>
+    <div class="eyebrow">Line up the card</div>
+    <div class="aligner" id="aligner">
+      <canvas id="align-canvas"></canvas>
+    </div>
+    <p class="note" id="align-note" style="margin:10px 0 0"></p>
+    <div class="row">
+      <button class="ghost primary" id="btn-analyse" type="button">Analyse this card</button>
+      <button class="ghost" id="btn-align-reset" type="button">Reset frame</button>
+      <button class="ghost" id="btn-align-cancel" type="button">Different photo</button>
+    </div>
+  </section>
+
+  <section id="sec-progress" hidden>
+    <div class="eyebrow">Analysing</div>
+    <div class="panel">
+      <ol class="steps" id="steps"></ol>
+    </div>
+  </section>
+
+  <section id="sec-error" hidden>
+    <div class="panel">
+      <p id="error-text" style="margin:0;color:var(--bad)"></p>
+    </div>
+  </section>
+
+  <section id="sec-bulk" hidden>
+    <div class="eyebrow">Pile scan</div>
+    <div class="panel">
+      <p class="note" id="bulk-intro" style="margin:0 0 12px"></p>
+      <ol class="bulk-list" id="bulk-list"></ol>
+      <p class="note" id="bulk-foot" style="margin:12px 0 0"></p>
+    </div>
+  </section>
+
+  <div id="results" hidden>
+
+    <section id="sec-verdict">
+      <div class="eyebrow">Authenticity</div>
+      <div class="panel">
+        <div class="preview-wrap">
+          <canvas id="rectified" width="150" height="209" aria-label="The card, flattened to a straight-on view"></canvas>
+          <div style="flex:1;min-width:0">
+            <div class="verdict-head">
+              <span class="pill" id="verdict-pill"></span>
+            </div>
+            <p class="note" id="verdict-blurb" style="margin:8px 0 0"></p>
+          </div>
+        </div>
+
+        <div class="figures">
+          <div class="figure">
+            <div class="k">Score</div>
+            <div class="v" id="fig-score">—</div>
+            <div class="meter"><i id="bar-score" style="width:0%"></i></div>
+          </div>
+          <div class="figure">
+            <div class="k">Confidence</div>
+            <div class="v" id="fig-conf">—</div>
+            <div class="meter"><i id="bar-conf" style="width:0%"></i></div>
+          </div>
+          <div class="figure">
+            <div class="k">Checks run</div>
+            <div class="v" id="fig-ran">—</div>
+          </div>
+        </div>
+
+        <ul class="signals" id="signals"></ul>
+      </div>
+    </section>
+
+    <section id="sec-reframe" hidden>
+      <div class="panel" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <p class="note" id="reframe-note" style="margin:0;flex:1;min-width:200px"></p>
+        <button class="ghost" id="btn-reframe" type="button">Adjust the frame</button>
+      </div>
+    </section>
+
+    <section id="sec-quality">
+      <div class="eyebrow">Capture quality</div>
+      <div class="panel">
+        <p class="note" id="quality-intro" style="margin:0 0 12px"></p>
+        <div class="figures" id="quality-figures"></div>
+        <ul class="plain" id="quality-advice"></ul>
+      </div>
+    </section>
+
+    <section id="sec-identify">
+      <div class="eyebrow">Which card is it</div>
+      <div class="panel">
+        <p class="note" id="id-intro" style="margin:0 0 12px"></p>
+        <div class="cand-list" id="candidates"></div>
+        <div style="margin-top:12px">
+          <input type="search" id="search" placeholder="Not it? Search by name or number…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="cand-list" id="search-results" style="margin-top:8px"></div>
+      </div>
+    </section>
+
+    <section id="sec-variant" hidden>
+      <div class="eyebrow">What this card is</div>
+      <div class="panel" id="variant-notes"></div>
+    </section>
+
+    <section id="sec-price" hidden>
+      <div class="eyebrow">Price by condition</div>
+      <div class="panel">
+        <p class="note" id="price-intro" style="margin:0 0 10px"></p>
+        <div id="price-chart"></div>
+        <div class="scroll-x">
+          <table id="price-table">
+            <thead>
+              <tr><th>Condition</th><th>Cheapest</th><th>Typical</th><th>Listings</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="note" id="price-foot" style="margin:10px 0 0"></p>
+      </div>
+    </section>
+
+    <section id="sec-centering" hidden>
+      <div class="eyebrow">Centering</div>
+      <div class="panel">
+        <p class="note" id="centering-intro" style="margin:0 0 12px"></p>
+        <div id="centering-chart"></div>
+        <ul class="plain" id="centering-notes"></ul>
+      </div>
+    </section>
+
+    <section id="sec-history" hidden>
+      <div class="eyebrow">Price history</div>
+      <div class="panel" id="history-panel"></div>
+    </section>
+
+    <section id="sec-limits">
+      <div class="eyebrow">What this cannot tell you</div>
+      <div class="panel">
+        <ul class="plain" id="limits"></ul>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    <p>
+      <b>What is real here.</b> The viewfinder and its automatic capture run here: the live loop
+      measures framing, motion, glare and focus eight times a second and fires only when they all
+      hold, then re-checks the captured frame against the calibrated sharpness threshold and puts
+      a soft one back rather than reporting on it. Card detection, flattening, sharpness, glare,
+      proportions and print-screen analysis all run in this page on the photo you supply — the
+      same ported code the app runs on the server. Identification matches your photo against
+      perceptual hashes of
+      __CARDCOUNT__ official card images baked into this file, trying both the upright and the
+      half-turned orientation so a card photographed sideways or upside down still matches.
+    </p>
+    <p>
+      <b>What is frozen.</b> Prices and history were captured from live sources on
+      __BAKEDATE__ and cannot refresh here, because the sandbox blocks network access. The
+      AI vision check and the live price lookup need a network and therefore abstain.
+      Prices are asking prices from listings, not completed sales.
+    </p>
+    <p>
+      This is not an appraisal and not a certificate. A photograph cannot prove a card is
+      genuine. For anything valuable, use a professional grading service.
+    </p>
+  </footer>
+</div>
+
+<script type="application/json" id="corpus-data">__CORPUS__</script>
+<script>
+'use strict';
+
+/* ===================================================================
+   The corpus: real catalogue, price and descriptor data, baked in.
+   =================================================================== */
+
+const CORPUS = JSON.parse(document.getElementById('corpus-data').textContent);
+const CARDS = CORPUS.cards;
+
+/* ===================================================================
+   Geometry constants — ported from src/lib/card-geometry.ts
+   =================================================================== */
+
+const CARD_ASPECT = 63 / 88;
+const ASPECT_TOLERANCE = { nominal: 0.03, suspicious: 0.06 };
+/** Beyond this the reading describes a detection failure, not a card. */
+const GROSS_DEVIATION = 0.25;
+
+/**
+ * Professional grading slabs, by the outer aspect ratio a photo measures.
+ *
+ * This matters more than it looks. A slab is a different SHAPE from a card —
+ * around 0.62 against a card's 0.716 — so a proportions check that assumes it
+ * is looking at a bare card reads a graded card as roughly 13% mis-cut and
+ * scores it near zero. That is a false accusation aimed at the one population
+ * of cards that has already been authenticated by a third party.
+ *
+ * Dimensions are the standard outer sizes of the current holders. They are
+ * used only to recognise that the outline is a holder and stand down, never to
+ * assert which company it is on aspect alone — the three sit within a few
+ * percent of each other and a phone photo cannot separate them.
+ */
+const SLABS = [
+  { company: 'PSA', w: 83.0, h: 133.5 },
+  { company: 'BGS', w: 89.0, h: 140.0 },
+  { company: 'CGC', w: 86.0, h: 137.0 },
+  { company: 'SGC', w: 84.0, h: 133.0 },
+];
+
+/** How close the measured aspect must sit to a holder's to count as one. */
+const SLAB_TOLERANCE = 0.06;
+
+/**
+ * The window inside a holder to go looking for the card in, as fractions of
+ * the holder's own outline.
+ *
+ * Deliberately generous rather than exact. The four companies place the label
+ * and the card slightly differently and have changed both over the years, so
+ * rather than encode a table that would be wrong for somebody's holder, this
+ * crops a region the card is certainly inside — clear of the label band at the
+ * top — and lets the ordinary edge detection find the card within it. A card
+ * against the white interior of a slab is an easy target.
+ */
+const SLAB_WINDOW = { u0: 0.06, u1: 0.94, v0: 0.15, v1: 0.99 };
+
+/**
+ * Where the card sits inside a holder, derived rather than eyeballed.
+ *
+ * A PSA holder is 83 x 133.5 mm around a 63 x 88 mm card, so the card spans
+ * 63/83 = 0.759 of the width, centred, and 88/133.5 = 0.659 of the height,
+ * starting below the label band. The other companies differ by a few percent
+ * in the same direction. This is the fallback when edge detection inside the
+ * holder cannot separate the card from the white interior behind it — which
+ * happens often, because a bright white surround is exactly what the
+ * foreground/background split is worst at.
+ */
+const SLAB_CARD = { u0: 0.1205, u1: 0.8795, v0: 0.180, v1: 0.839 };
+
+function slabCardQuad(corners) {
+  const c = SLAB_CARD;
+  return [
+    quadPoint(corners, c.u0, c.v0),
+    quadPoint(corners, c.u1, c.v0),
+    quadPoint(corners, c.u1, c.v1),
+    quadPoint(corners, c.u0, c.v1),
+  ];
+}
+
+/** Bilinear position inside a quadrilateral given corners TL, TR, BR, BL. */
+function quadPoint(corners, u, v) {
+  const [tl, tr, br, bl] = corners;
+  const top = { x: tl.x + (tr.x - tl.x) * u, y: tl.y + (tr.y - tl.y) * u };
+  const bot = { x: bl.x + (br.x - bl.x) * u, y: bl.y + (br.y - bl.y) * u };
+  return { x: top.x + (bot.x - top.x) * v, y: top.y + (bot.y - top.y) * v };
+}
+
+function slabWindowQuad(corners) {
+  const w = SLAB_WINDOW;
+  return [
+    quadPoint(corners, w.u0, w.v0),
+    quadPoint(corners, w.u1, w.v0),
+    quadPoint(corners, w.u1, w.v1),
+    quadPoint(corners, w.u0, w.v1),
+  ];
+}
+
+/** True when the outline measured has a rigid holder's proportions. */
+function looksLikeSlab(aspect) {
+  if (!(aspect > 0)) return false;
+  const cardErr = Math.abs(aspect - CARD_ASPECT) / CARD_ASPECT;
+  for (const s of SLABS) {
+    const slabAspect = s.w / s.h;
+    const err = Math.abs(aspect - slabAspect) / slabAspect;
+    // Only when it is a better fit for a holder than for a bare card, so an
+    // ordinary card near the edge of tolerance is never reclassified.
+    if (err <= SLAB_TOLERANCE && err < cardErr) return true;
+  }
+  return false;
+}
+
+/**
+ * Is there a card INSIDE the outline we found?
+ *
+ * Aspect alone is not enough to tell a bare card from a card in something.
+ * A toploader measures about 0.750 — under 5% from a card's 0.716, nowhere
+ * near a slab's 0.62 — so it sails past a holder-shaped test and gets scored
+ * as a 5%-off, possibly-trimmed card. Toploaders are what valuable raw cards
+ * live in, so that is an accusation aimed at exactly the cards it hurts most.
+ *
+ * The reliable question is structural rather than dimensional: does a second,
+ * card-shaped edge sit inside the first? If so, the outer edge belongs to
+ * something the card is in, and it says nothing about how the card was cut.
+ *
+ * The area band matters. Rejecting a result that fills the crop is what stops
+ * this firing on a bare card, where the detector inside the crop simply finds
+ * the crop again.
+ */
+function findInnerCard(source, corners, outerAspect) {
+  const span = Math.round(
+    (Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) +
+     Math.hypot(corners[2].x - corners[3].x, corners[2].y - corners[3].y)) / 2,
+  );
+  const cropW = Math.max(400, Math.min(1400, span));
+  // Rectify the outer shape to ITS OWN proportions. Forcing a slab into card
+  // proportions stretches everything inside it, and the card that is genuinely
+  // in there then measures as the wrong shape and gets rejected.
+  const cropH = Math.round(cropW / (outerAspect > 0.2 && outerAspect < 3 ? outerAspect : CARD_ASPECT));
+
+  let inner;
+  try {
+    inner = detectCard(rectifyCard(source, corners, cropW, cropH));
+  } catch {
+    return null;
+  }
+  if (inner.method !== 'contour' || inner.confidence < 0.4) return null;
+
+  const xs = inner.corners.map((p) => p.x);
+  const ys = inner.corners.map((p) => p.y);
+  const w = Math.max.apply(null, xs) - Math.min.apply(null, xs);
+  const h = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+  const areaRatio = (w * h) / (cropW * cropH);
+
+  if (Math.abs(inner.measuredAspect - CARD_ASPECT) / CARD_ASPECT > 0.05) return null;
+  if (areaRatio < 0.40 || areaRatio > 0.88) return null;
+
+  return {
+    corners: inner.corners.map((c) => quadPoint(corners, c.x / (cropW - 1), c.y / (cropH - 1))),
+    areaRatio,
+  };
+}
+
+/**
+ * Classify what the outline actually is.
+ *
+ * Only 'card' releases the checks that read a card's own edges. Both 'holder'
+ * and 'unknown' suppress them — "we could not establish that this outline is
+ * the card" and "this outline is not the card" lead to the same honest place,
+ * which is not scoring it.
+ */
+function classifySubject(source, detection) {
+  if (detection.method !== 'contour') {
+    return { subject: 'unknown', inner: null, rigid: false };
+  }
+
+  const deviation = Math.abs(detection.measuredAspect - CARD_ASPECT) / CARD_ASPECT;
+  const rigid = looksLikeSlab(detection.measuredAspect);
+
+  // A bare card, straight on, needs no second look.
+  if (!rigid && deviation <= ASPECT_TOLERANCE.nominal) {
+    return { subject: 'card', inner: null, rigid: false };
+  }
+
+  const inner = findInnerCard(source, detection.corners, detection.measuredAspect);
+  if (inner) return { subject: 'holder', inner, rigid };
+
+  // Holder-shaped with nothing separable inside it — which is common, because
+  // a bright white slab interior is exactly what a foreground/background split
+  // handles worst. Still not something to measure a card's cut from.
+  if (rigid) return { subject: 'unknown', inner: null, rigid: true };
+
+  // Off-aspect with no nested card. This is the genuinely-mis-cut case the
+  // proportions check exists for, so it stays scoreable.
+  return { subject: 'card', inner: null, rigid: false };
+}
+const RESOLUTION_TIERS = { identify: 500, compare: 900, print: 1400 };
+const HALFTONE_LPI_RANGE = { min: 120, max: 200 };
+const REGIONS = { artWindow: { x: 0.09, y: 0.11, width: 0.82, height: 0.42 } };
+
+const RECTIFIED_WIDTH = 1500;
+const RECTIFIED_HEIGHT = Math.round(RECTIFIED_WIDTH / CARD_ASPECT);
+
+/**
+ * Cap on the working copy of the photo.
+ *
+ * Sized against the print tier rather than picked round. A 12MP tablet photo
+ * is 4032x3024; a card filling the frame's short edge occupies about 0.72 of
+ * it, so downscaling to 3200 left roughly 1440px across the card — barely over
+ * the 1400 the halftone check needs, and under it the moment the card sits any
+ * further away. Keeping the full 4032 keeps that check reachable, and stays
+ * well inside iOS Safari's 16.7M-pixel canvas ceiling (4032x3024 is 12.2M).
+ */
+const MAX_SOURCE_EDGE = 4032;
+
+function lpiToCyclesPerPixel(lpi, cardWidthPx) {
+  return (lpi * (63 / 25.4)) / cardWidthPx;
+}
+
+/* ===================================================================
+   Image helpers. Browser ImageData is RGBA, so every port below walks
+   a stride of 4 where the server code walks 3.
+   =================================================================== */
+
+function imageDataFromImg(img) {
+  let w = img.naturalWidth, h = img.naturalHeight;
+  const longest = Math.max(w, h);
+  if (longest > MAX_SOURCE_EDGE) {
+    const k = MAX_SOURCE_EDGE / longest;
+    w = Math.round(w * k);
+    h = Math.round(h * k);
+  }
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
+}
+
+/** Area-average downscale. Matches sharp's behaviour at large reduction
+ *  factors far better than a canvas redraw, which matters because the baked
+ *  hashes were produced by sharp. */
+function boxResize(src, outW, outH) {
+  const { data, width: w, height: h } = src;
+  const out = new Float32Array(outW * outH * 3);
+
+  for (let oy = 0; oy < outH; oy++) {
+    const y0 = Math.floor((oy * h) / outH);
+    const y1 = Math.max(y0 + 1, Math.floor(((oy + 1) * h) / outH));
+    for (let ox = 0; ox < outW; ox++) {
+      const x0 = Math.floor((ox * w) / outW);
+      const x1 = Math.max(x0 + 1, Math.floor(((ox + 1) * w) / outW));
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * w + x) * 4;
+          r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+        }
+      }
+      const o = (oy * outW + ox) * 3;
+      out[o] = r / n; out[o + 1] = g / n; out[o + 2] = b / n;
+    }
+  }
+  return out;
+}
+
+/* ===================================================================
+   Card detection — ported from src/lib/image/rectify.ts
+   =================================================================== */
+
+function otsu(values) {
+  const BINS = 256;
+  const hist = new Float64Array(BINS);
+  let max = 0;
+  for (let i = 0; i < values.length; i++) if (values[i] > max) max = values[i];
+  if (max === 0) return 0;
+
+  for (let i = 0; i < values.length; i++) {
+    hist[Math.min(BINS - 1, Math.floor((values[i] / max) * (BINS - 1)))] += 1;
+  }
+
+  const total = values.length;
+  let sum = 0;
+  for (let i = 0; i < BINS; i++) sum += i * hist[i];
+
+  let sumB = 0, wB = 0, best = 0, bestVar = -1;
+  for (let i = 0; i < BINS; i++) {
+    wB += hist[i];
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+    sumB += i * hist[i];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) ** 2;
+    if (between > bestVar) { bestVar = between; best = i; }
+  }
+  return (best / (BINS - 1)) * max;
+}
+
+function largestComponent(mask, w, h) {
+  const seen = new Uint8Array(w * h);
+  let best = null;
+  const stack = [];
+
+  for (let start = 0; start < mask.length; start++) {
+    if (mask[start] !== 1 || seen[start] === 1) continue;
+    stack.length = 0;
+    stack.push(start);
+    seen[start] = 1;
+    const points = [];
+
+    while (stack.length > 0) {
+      const idx = stack.pop();
+      const x = idx % w;
+      const y = (idx - x) / w;
+      points.push({ x, y });
+      if (x > 0 && mask[idx - 1] === 1 && seen[idx - 1] === 0) { seen[idx - 1] = 1; stack.push(idx - 1); }
+      if (x < w - 1 && mask[idx + 1] === 1 && seen[idx + 1] === 0) { seen[idx + 1] = 1; stack.push(idx + 1); }
+      if (y > 0 && mask[idx - w] === 1 && seen[idx - w] === 0) { seen[idx - w] = 1; stack.push(idx - w); }
+      if (y < h - 1 && mask[idx + w] === 1 && seen[idx + w] === 0) { seen[idx + w] = 1; stack.push(idx + w); }
+    }
+    if (!best || points.length > best.size) best = { size: points.length, points };
+  }
+  return best;
+}
+
+function clamp01(n) { return Math.max(0, Math.min(1, n)); }
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+function quadAspect(c) {
+  const [tl, tr, br, bl] = c;
+  const width = (dist(tl, tr) + dist(bl, br)) / 2;
+  const height = (dist(tl, bl) + dist(tr, br)) / 2;
+  return height === 0 ? 0 : width / height;
+}
+
+function detectCard(source) {
+  const WORK = 480;
+  const scale = WORK / source.width;
+  const w = WORK;
+  const h = Math.max(1, Math.round(source.height * scale));
+  const small = boxResize(source, w, h);
+
+  // Cards are usually brighter and more saturated than the surface under them;
+  // combining both beats either alone under warm indoor light.
+  const score = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const r = small[i * 3], g = small[i * 3 + 1], b = small[i * 3 + 2];
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    const sat = mx === 0 ? 0 : (mx - mn) / mx;
+    score[i] = lum * 0.6 + sat * 255 * 0.4;
+  }
+
+  const threshold = otsu(score);
+  const mask = new Uint8Array(w * h);
+  for (let i = 0; i < score.length; i++) mask[i] = score[i] > threshold ? 1 : 0;
+
+  const component = largestComponent(mask, w, h);
+  if (!component || component.size < w * h * 0.06) {
+    return {
+      corners: [
+        { x: 0, y: 0 },
+        { x: source.width, y: 0 },
+        { x: source.width, y: source.height },
+        { x: 0, y: source.height },
+      ],
+      confidence: 0.15,
+      method: 'full-frame',
+      measuredAspect: source.width / source.height,
+    };
+  }
+
+  let tl = component.points[0], br = tl, tr = tl, bl = tl;
+  let minSum = Infinity, maxSum = -Infinity, minDiff = Infinity, maxDiff = -Infinity;
+  for (const pt of component.points) {
+    const sum = pt.x + pt.y, diff = pt.x - pt.y;
+    if (sum < minSum) { minSum = sum; tl = pt; }
+    if (sum > maxSum) { maxSum = sum; br = pt; }
+    if (diff > maxDiff) { maxDiff = diff; tr = pt; }
+    if (diff < minDiff) { minDiff = diff; bl = pt; }
+  }
+
+  const sx = source.width / w, sy = source.height / h;
+  let corners = [tl, tr, br, bl].map((p) => ({ x: p.x * sx, y: p.y * sy }));
+
+  let measuredAspect = quadAspect(corners);
+
+  // A card photographed on its side measures the RECIPROCAL of a card's aspect,
+  // and nothing downstream survives that: the homography squashes 63x88 into
+  // 88x63, the proportions check reads 96% off standard and scores zero, and
+  // identification compares a stretched card against upright reference images.
+  // Rotating the corner ordering fixes all three at once. Which of the two
+  // sideways orientations this was cannot be known here — matching resolves
+  // that later by trying both the rectified card and its 180-degree rotation.
+  if (Math.abs(measuredAspect - 1 / CARD_ASPECT) < Math.abs(measuredAspect - CARD_ASPECT)) {
+    corners = [corners[3], corners[0], corners[1], corners[2]];
+    measuredAspect = quadAspect(corners);
+  }
+
+  const fill = component.size / (w * h);
+  const aspectError = Math.abs(measuredAspect - CARD_ASPECT) / CARD_ASPECT;
+  const confidence = clamp01(
+    0.5 * clamp01((fill - 0.06) / 0.5) + 0.5 * clamp01(1 - aspectError / 0.25)
+  );
+
+  return { corners, confidence, method: 'contour', measuredAspect };
+}
+
+/* --- homography ---------------------------------------------------- */
+
+function solveLinear(A, b) {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
+    }
+    if (Math.abs(M[pivot][col]) < 1e-12) throw new Error('Degenerate point configuration');
+    [M[col], M[pivot]] = [M[pivot], M[col]];
+    const pivotVal = M[col][col];
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const factor = M[r][col] / pivotVal;
+      if (factor === 0) continue;
+      for (let c = col; c <= n; c++) M[r][c] -= factor * M[col][c];
+    }
+  }
+  return Array.from({ length: n }, (_, i) => M[i][n] / M[i][i]);
+}
+
+function solveHomography(src, dst) {
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const { x, y } = src[i];
+    const X = dst[i].x, Y = dst[i].y;
+    A.push([x, y, 1, 0, 0, 0, -X * x, -X * y]); b.push(X);
+    A.push([0, 0, 0, x, y, 1, -Y * x, -Y * y]); b.push(Y);
+  }
+  return [...solveLinear(A, b), 1];
+}
+
+function rectifyCard(source, corners, outWidth, outHeight) {
+  const dstCorners = [
+    { x: 0, y: 0 },
+    { x: outWidth - 1, y: 0 },
+    { x: outWidth - 1, y: outHeight - 1 },
+    { x: 0, y: outHeight - 1 },
+  ];
+  const H = solveHomography(dstCorners, corners);
+
+  const out = new ImageData(outWidth, outHeight);
+  const dst = out.data;
+  const { data, width: sw, height: sh } = source;
+
+  for (let y = 0; y < outHeight; y++) {
+    for (let x = 0; x < outWidth; x++) {
+      const denom = H[6] * x + H[7] * y + H[8];
+      const sx = (H[0] * x + H[1] * y + H[2]) / denom;
+      const sy = (H[3] * x + H[4] * y + H[5]) / denom;
+      const o = (y * outWidth + x) * 4;
+      dst[o + 3] = 255;
+
+      if (sx < 0 || sy < 0 || sx >= sw - 1 || sy >= sh - 1) continue;
+
+      const x0 = Math.floor(sx), y0 = Math.floor(sy);
+      const fx = sx - x0, fy = sy - y0;
+      const i00 = (y0 * sw + x0) * 4;
+      const i10 = i00 + 4;
+      const i01 = i00 + sw * 4;
+      const i11 = i01 + 4;
+
+      for (let c = 0; c < 3; c++) {
+        const top = data[i00 + c] * (1 - fx) + data[i10 + c] * fx;
+        const bottom = data[i01 + c] * (1 - fx) + data[i11 + c] * fx;
+        dst[o + c] = Math.round(top * (1 - fy) + bottom * fy);
+      }
+    }
+  }
+  return out;
+}
+
+/* ===================================================================
+   Capture quality — ported from src/lib/image/quality.ts
+   Thresholds are the app's measured ones, unchanged.
+   =================================================================== */
+
+const QUALITY_THRESHOLDS = {
+  sharpness: 30,
+  glareFraction: 0.06,
+  shadowFraction: 0.25,
+  darkBrightness: 55,
+};
+
+function laplacianVariance(lum, width, height) {
+  let sum = 0, sumSq = 0, n = 0;
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = y * width + x;
+      const response = -4 * lum[i] + lum[i - 1] + lum[i + 1] + lum[i - width] + lum[i + width];
+      sum += response;
+      sumSq += response * response;
+      n++;
+    }
+  }
+  if (n === 0) return 0;
+  const mean = sum / n;
+  return sumSq / n - mean * mean;
+}
+
+function assessQuality(img) {
+  const { data, width, height } = img;
+  const lum = new Float32Array(width * height);
+  let sum = 0, glare = 0, shadow = 0;
+
+  for (let i = 0; i < lum.length; i++) {
+    const p = i * 4;
+    const v = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+    lum[i] = v;
+    sum += v;
+    if (v > 246) glare++;
+    if (v < 12) shadow++;
+  }
+
+  const brightness = sum / lum.length;
+  const glareFraction = glare / lum.length;
+  const shadowFraction = shadow / lum.length;
+  const sharpness = laplacianVariance(lum, width, height);
+
+  const tooBlurry = sharpness < QUALITY_THRESHOLDS.sharpness;
+  const hasGlare = glareFraction > QUALITY_THRESHOLDS.glareFraction;
+  const tooDark =
+    brightness < QUALITY_THRESHOLDS.darkBrightness ||
+    shadowFraction > QUALITY_THRESHOLDS.shadowFraction;
+
+  const warnings = [];
+  if (tooBlurry) {
+    warnings.push(
+      'The photo is soft. Hold steady, tap to focus, and make sure the card fills the frame — ' +
+      'sharpness limits how much can be checked.'
+    );
+  }
+  if (hasGlare) {
+    warnings.push(
+      'Glare covers about ' + Math.round(glareFraction * 100) + '% of the card. Angle away from ' +
+      'direct light; holo cards are especially prone to this and glare hides detail.'
+    );
+  }
+  if (tooDark) {
+    warnings.push('The photo is underexposed. More even, indirect light will improve the analysis.');
+  }
+
+  return {
+    sharpness: Math.round(sharpness),
+    glareFraction: Number(glareFraction.toFixed(4)),
+    shadowFraction: Number(shadowFraction.toFixed(4)),
+    brightness: Math.round(brightness),
+    tooBlurry, tooDark, hasGlare, warnings,
+  };
+}
+
+/* ===================================================================
+   The engine — ported from src/lib/auth/engine.ts
+   =================================================================== */
+
+const MIN_EFFECTIVE_SIGNALS = 2;
+const SCORE_THRESHOLDS = { consistent: 70, concerning: 45 };
+
+const UNIVERSAL_LIMITATIONS = [
+  'A photo cannot prove a card is genuine. The most reliable tests — card thickness, ' +
+  'the opaque core layer visible when backlit, and how the card feels and bends — ' +
+  'all require the card in hand.',
+  'This tool compares your photo against the official card image and against what ' +
+  'genuine cards typically measure. It cannot detect a counterfeit that reproduces ' +
+  'those characteristics accurately.',
+  'A result here is not an appraisal or a certificate. For anything valuable, use a ' +
+  'professional grading service such as PSA, Beckett, or CGC.',
+];
+
+const VERDICT_META = {
+  consistent_with_genuine: {
+    label: 'Consistent with genuine',
+    tone: 'good',
+    blurb:
+      'Nothing in this photo contradicts a genuine card. That is not the same as proof — ' +
+      'confirm by hand before relying on it.',
+  },
+  inconclusive: {
+    label: 'Inconclusive',
+    tone: 'warn',
+    blurb:
+      'Not enough could be determined from this photo to say either way. This usually ' +
+      'means the capture was limiting, not that the card is suspect.',
+  },
+  red_flags: {
+    label: 'Red flags',
+    tone: 'bad',
+    blurb:
+      'One or more checks came back inconsistent with a genuine card. Treat this as a ' +
+      'prompt to inspect the card closely, not as a conclusion that it is fake.',
+  },
+};
+
+function abstain(id, label, weight, status, reason) {
+  return { id, label, status, score: null, weight, summary: reason, measurements: {}, reason };
+}
+
+function scoreFromDeviation(value, good, bad) {
+  if (bad === good) return value <= good ? 100 : 0;
+  const t = (value - good) / (bad - good);
+  return Math.round(Math.max(0, Math.min(1, 1 - t)) * 100);
+}
+
+function decideVerdict(ranCount, score, coverage) {
+  if (ranCount < MIN_EFFECTIVE_SIGNALS || coverage < 0.35) return 'inconclusive';
+  if (score >= SCORE_THRESHOLDS.consistent) return 'consistent_with_genuine';
+  if (score < SCORE_THRESHOLDS.concerning) return 'red_flags';
+  return 'inconclusive';
+}
+
+function buildReport(signals, contextLimitations) {
+  const ran = signals.filter((s) => s.status === 'ok' && s.score !== null);
+  const totalWeight = signals.reduce((sum, s) => sum + s.weight, 0);
+  const ranWeight = ran.reduce((sum, s) => sum + s.weight, 0);
+
+  const score = ranWeight > 0
+    ? ran.reduce((sum, s) => sum + s.score * s.weight, 0) / ranWeight
+    : 0;
+  const coverage = totalWeight > 0 ? ranWeight / totalWeight : 0;
+
+  const verdict = decideVerdict(ran.length, score, coverage);
+
+  // Confidence is capped well below 1, and lower still for anything that
+  // accuses: the two error directions are not symmetric.
+  const rawConfidence = coverage * (ran.length >= 4 ? 1 : 0.8);
+  const ceiling = verdict === 'red_flags' ? 0.65 : 0.85;
+  const confidence = Math.min(ceiling, rawConfidence);
+
+  const concerns = ran
+    .filter((s) => s.score < SCORE_THRESHOLDS.concerning)
+    .sort((a, b) => a.score - b.score)
+    .map((s) => s.summary);
+
+  const limitations = UNIVERSAL_LIMITATIONS.concat(contextLimitations || []);
+  const abstained = signals.filter((s) => s.status !== 'ok');
+  if (abstained.length > 0) {
+    limitations.push(
+      abstained.length + ' of ' + signals.length + ' checks could not run on this photo (' +
+      abstained.map((s) => s.label).join(', ') + '), so this analysis is partial.'
+    );
+  }
+
+  return {
+    verdict,
+    score: Math.round(score),
+    // Below the effective-signal floor the verdict is decided by coverage, not
+    // by the score, and a lone signal reading 100 sitting beside the word
+    // "inconclusive" reads as a contradiction rather than as the abstention it
+    // actually is. The UI shows a dash instead.
+    scoreIsMeaningful: ran.length >= MIN_EFFECTIVE_SIGNALS && coverage >= 0.35,
+    confidence: Number(confidence.toFixed(2)),
+    signals, concerns, limitations,
+    ranCount: ran.length,
+    totalCount: signals.length,
+  };
+}
+
+/* ===================================================================
+   Signals
+   =================================================================== */
+
+function geometrySignal(input) {
+  const ID = 'geometry', LABEL = 'Shape and proportions', WEIGHT = 0.8;
+
+  if (input.method !== 'contour') {
+    return abstain(ID, LABEL, WEIGHT, 'insufficient_data',
+      input.method === 'guide'
+        ? 'The outline came from the frame you positioned rather than from the card\'s measured ' +
+          'edges. Measuring it would report the proportions of your frame, not the card\'s, so ' +
+          'this check stands down. Identification and pricing are unaffected.'
+        : 'No card outline could be measured in this photo, so its proportions cannot be checked.');
+  }
+  if (input.detectionConfidence < 0.45) {
+    return abstain(ID, LABEL, WEIGHT, 'insufficient_data',
+      'The card edges could not be located confidently enough to measure its proportions.');
+  }
+
+  const deviation = Math.abs(input.measuredAspect - CARD_ASPECT) / CARD_ASPECT;
+
+  // Everything below measures a CARD's cut. If the outline belongs to a
+  // holder, a sleeve or a toploader — or if that could not be established —
+  // there is nothing here to score.
+  //
+  // This branch is non-negotiable, and not because the number would be mildly
+  // wrong. A holder's outline deviates 5-17% from a card's, which is precisely
+  // the band where this signal scores near zero and reports "this can indicate
+  // a trimmed or wrongly-cut card". Trimming is the specific fraud that
+  // destroys a graded card's value, so scoring it aims the worst accusation
+  // available at the population least likely to deserve it.
+  if (input.subject && input.subject !== 'card') {
+    return abstain(ID, LABEL, WEIGHT, 'not_applicable',
+      input.subject === 'holder'
+        ? 'The outline in this photo is the holder or sleeve around the card rather than the ' +
+          'card itself, so the card\'s own proportions cannot be measured through it. Nothing ' +
+          'is concluded from that either way.'
+        : 'It could not be established that the outline found is the card\'s own edge rather ' +
+          'than a sleeve or holder around it, so its proportions are not measured.');
+  }
+
+  // Past this, the outline is not a mis-cut card — it is not a card. Nobody
+  // trims a quarter off a card's width and keeps it; a reading this far out
+  // means the detector locked onto a table edge, a sleeve, or a second card.
+  // Scoring it zero turns a failed measurement into an accusation, which is
+  // the one outcome this engine exists to avoid.
+  if (deviation > GROSS_DEVIATION) {
+    return abstain(ID, LABEL, WEIGHT, 'insufficient_data',
+      'The outline found in this photo is ' + (deviation * 100).toFixed(0) + '% away from a ' +
+      'card\'s proportions, which means the card edges were not located rather than that the ' +
+      'card is mis-cut. Fill more of the frame and shoot against a plain, contrasting surface.');
+  }
+
+  const score = scoreFromDeviation(deviation, ASPECT_TOLERANCE.nominal, ASPECT_TOLERANCE.suspicious * 2);
+  const pct = (deviation * 100).toFixed(1);
+
+  const summary =
+    deviation <= ASPECT_TOLERANCE.nominal
+      ? 'Proportions match a standard card (within ' + pct + '% of 63x88mm).'
+      : deviation <= ASPECT_TOLERANCE.suspicious
+        ? 'Proportions are ' + pct + '% off standard. Perspective in the photo can account for this.'
+        : 'Proportions are ' + pct + '% off a standard 63x88mm card. This can indicate a trimmed ' +
+          'or wrongly-cut card, but a steep camera angle produces the same reading.';
+
+  return {
+    id: ID, label: LABEL, status: 'ok', score, weight: WEIGHT, summary,
+    measurements: {
+      measuredAspect: input.measuredAspect.toFixed(4),
+      officialAspect: CARD_ASPECT.toFixed(4),
+      deviationPercent: pct,
+      detectionConfidence: input.detectionConfidence.toFixed(2),
+    },
+  };
+}
+
+/* --- print screen (FFT) -------------------------------------------- */
+
+const PRINT_WEIGHT = 0.7;
+const SCREEN_PRESENT_RATIO = 1.2;
+const PATCH = 128;
+
+function fft1(re, im, n) {
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      const tr = re[i]; re[i] = re[j]; re[j] = tr;
+      const ti = im[i]; im[i] = im[j]; im[j] = ti;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let curRe = 1, curIm = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const uRe = re[i + k], uIm = im[i + k];
+        const vRe = re[i + k + len / 2] * curRe - im[i + k + len / 2] * curIm;
+        const vIm = re[i + k + len / 2] * curIm + im[i + k + len / 2] * curRe;
+        re[i + k] = uRe + vRe;
+        im[i + k] = uIm + vIm;
+        re[i + k + len / 2] = uRe - vRe;
+        im[i + k + len / 2] = uIm - vIm;
+        const nextRe = curRe * wRe - curIm * wIm;
+        curIm = curRe * wIm + curIm * wRe;
+        curRe = nextRe;
+      }
+    }
+  }
+}
+
+function fft2Magnitude(input, n) {
+  const re = Float64Array.from(input);
+  const im = new Float64Array(n * n);
+  const rowRe = new Float64Array(n), rowIm = new Float64Array(n);
+
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) { rowRe[x] = re[y * n + x]; rowIm[x] = im[y * n + x]; }
+    fft1(rowRe, rowIm, n);
+    for (let x = 0; x < n; x++) { re[y * n + x] = rowRe[x]; im[y * n + x] = rowIm[x]; }
+  }
+  for (let x = 0; x < n; x++) {
+    for (let y = 0; y < n; y++) { rowRe[y] = re[y * n + x]; rowIm[y] = im[y * n + x]; }
+    fft1(rowRe, rowIm, n);
+    for (let y = 0; y < n; y++) { re[y * n + x] = rowRe[y]; im[y * n + x] = rowIm[y]; }
+  }
+
+  const out = new Float32Array(n * n);
+  for (let i = 0; i < n * n; i++) out[i] = Math.hypot(re[i], im[i]);
+  return out;
+}
+
+function samplePatches(img) {
+  const { data, width, height } = img;
+  const out = [];
+  const positions = [
+    [0.10, 0.20], [0.85, 0.20], [0.10, 0.60], [0.85, 0.60],
+    [0.30, 0.93], [0.65, 0.93], [0.50, 0.06], [0.20, 0.45],
+  ];
+
+  for (const [fx, fy] of positions) {
+    const x0 = Math.round(fx * width - PATCH / 2);
+    const y0 = Math.round(fy * height - PATCH / 2);
+    if (x0 < 0 || y0 < 0 || x0 + PATCH >= width || y0 + PATCH >= height) continue;
+
+    const patch = new Float32Array(PATCH * PATCH);
+    let sum = 0;
+    for (let y = 0; y < PATCH; y++) {
+      for (let x = 0; x < PATCH; x++) {
+        const i = ((y0 + y) * width + (x0 + x)) * 4;
+        const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        patch[y * PATCH + x] = lum;
+        sum += lum;
+      }
+    }
+    const mean = sum / patch.length;
+    let variance = 0;
+    for (let i = 0; i < patch.length; i++) variance += (patch[i] - mean) ** 2;
+    variance /= patch.length;
+
+    if (mean < 25 || mean > 240 || Math.sqrt(variance) > 70) continue;
+    for (let i = 0; i < patch.length; i++) patch[i] -= mean;
+    out.push(patch);
+  }
+  return out;
+}
+
+function screenEnergyRatio(patch, bandLow, bandHigh) {
+  const mag = fft2Magnitude(patch, PATCH);
+  let inBand = 0, inCount = 0, outBand = 0, outCount = 0;
+  const half = PATCH / 2;
+
+  for (let v = 0; v < PATCH; v++) {
+    for (let u = 0; u < PATCH; u++) {
+      const fu = (u <= half ? u : u - PATCH) / PATCH;
+      const fv = (v <= half ? v : v - PATCH) / PATCH;
+      const f = Math.hypot(fu, fv);
+      if (f === 0) continue;
+      const power = mag[v * PATCH + u];
+      if (f >= bandLow && f <= bandHigh) { inBand += power; inCount++; }
+      else if (f >= bandLow * 0.4 && f < bandLow) { outBand += power; outCount++; }
+    }
+  }
+  if (inCount === 0 || outCount === 0 || outBand === 0) return 0;
+  return inBand / inCount / (outBand / outCount);
+}
+
+function printSignal(rectified, cardWidthPx) {
+  const ID = 'print', LABEL = 'Print pattern';
+
+  if (cardWidthPx < RESOLUTION_TIERS.print) {
+    return abstain(ID, LABEL, PRINT_WEIGHT, 'insufficient_data',
+      'Print pattern analysis needs about ' + RESOLUTION_TIERS.print + ' pixels across the card; ' +
+      'this photo has roughly ' + Math.round(cardWidthPx) + '. Move closer or use a higher ' +
+      'resolution camera to enable this check.');
+  }
+
+  const patches = samplePatches(rectified);
+  if (patches.length === 0) {
+    return abstain(ID, LABEL, PRINT_WEIGHT, 'insufficient_data',
+      'No suitable flat area was found to analyse.');
+  }
+
+  const bandLow = lpiToCyclesPerPixel(HALFTONE_LPI_RANGE.min, cardWidthPx);
+  const bandHigh = lpiToCyclesPerPixel(HALFTONE_LPI_RANGE.max, cardWidthPx);
+
+  const ratios = patches.map((p) => screenEnergyRatio(p, bandLow, bandHigh)).sort((a, b) => a - b);
+  const median = ratios[Math.floor(ratios.length / 2)];
+
+  // ONE-SIDED BY DESIGN — this signal may support a card, never accuse one.
+  // Absence of a screen is what a phone's noise reduction does to a genuine
+  // card, so absence abstains rather than scoring low.
+  if (median < SCREEN_PRESENT_RATIO) {
+    return abstain(ID, LABEL, PRINT_WEIGHT, 'insufficient_data',
+      'No regular print screen was resolvable in this photo. That is expected from phone noise ' +
+      'reduction and JPEG compression on a genuine card, so nothing is concluded from it.');
+  }
+
+  const score = Math.round(70 + Math.min(1, (median - SCREEN_PRESENT_RATIO) / 0.8) * 25);
+
+  return {
+    id: ID, label: LABEL, status: 'ok', score, weight: PRINT_WEIGHT,
+    summary:
+      'A regular print screen is present, consistent with the offset printing used for genuine ' +
+      'cards. Note that competent counterfeits are also offset-printed, so this supports the card ' +
+      'without proving it.',
+    measurements: {
+      screenEnergyRatio: median.toFixed(3),
+      patchesAnalysed: patches.length,
+      cardWidthPx: Math.round(cardWidthPx),
+      searchBandLpi: HALFTONE_LPI_RANGE.min + '-' + HALFTONE_LPI_RANGE.max,
+      oneSided: 'true',
+    },
+  };
+}
+
+function blurAbstention() {
+  return {
+    id: 'print', label: 'Print pattern', status: 'insufficient_data', score: null,
+    weight: PRINT_WEIGHT,
+    summary: 'The photo is too soft to analyse the print pattern.',
+    measurements: {},
+    reason:
+      'Fine print structure is destroyed by blur, so this check would measure the ' +
+      'photo rather than the card. Retake it with the card flat and in focus.',
+  };
+}
+
+/** The AI vision check is part of the real app and genuinely cannot run here.
+ *  It is listed rather than silently dropped, so the reported coverage matches
+ *  what the app would report with the same check unavailable. */
+function visionUnavailable() {
+  return abstain('vision', 'Detailed visual comparison', 1.5, 'error',
+    'This check sends the photo to a vision model to compare fonts, holo pattern, set symbol ' +
+    'and colour against the official card. The sandbox this preview runs in blocks all network ' +
+    'access, so it could not run.');
+}
+
+/* ===================================================================
+   Centering.
+
+   This answers a DIFFERENT question from the prices above it, and keeping
+   them apart is the whole design. Neither marketplace counts centering as
+   condition — TCGplayer states outright that a card may be up to 70/30
+   centred "without any impact on its condition", and Cardmarket says
+   misalignment is a manufacturing error that does not affect the grade you
+   list at. So centering cannot move a price here. What it speaks to is
+   whether a card is worth sending to a grader, which is a question worth
+   answering on its own terms and worth never confusing with the other one.
+
+   Everything below is gated hard, because the failure mode of a centering
+   measurement is a BIAS rather than noise: an edge fitted to a drop shadow
+   on a pale table, or to a sleeve rather than the card, is wrong in a
+   consistent direction and reads as confidently as a correct one.
+   =================================================================== */
+
+/**
+ * Layouts with a border band wide enough and plain enough to measure.
+ *
+ * Driven off the identified card's rarity rather than off the pixels: a
+ * metallic or textured border is a gradient rather than a step, and a
+ * measurement that finds "a transition" in one will happily return a number
+ * that means nothing. Full-art, alt-art and borderless cards have no uniform
+ * band at all, so the metric is undefined there rather than merely noisy.
+ */
+const MEASURABLE_RARITIES = new Set([
+  'common', 'uncommon', 'rare', 'rare holo', 'holo rare', 'double rare',
+  'rare holo 1st edition', 'holo rare 1st edition', 'rare 1st edition',
+]);
+
+/** Published FRONT centering tolerances. Reference lines, never a verdict. */
+const CENTERING_BANDS = [
+  { label: 'PSA 10', ratio: 55 },
+  { label: 'PSA 9', ratio: 60 },
+  { label: 'PSA 8', ratio: 65 },
+  { label: 'PSA 7', ratio: 70 },
+];
+
+/**
+ * Fraction of the frame the card may fill before lens distortion dominates.
+ * One to two percent of barrel distortion is four to eight centering points
+ * of pure artefact, and filling the frame is what maximises it.
+ */
+const CENTERING_MAX_FILL = 0.70;
+
+function medianOf(values) {
+  const s = Array.from(values).sort((a, b) => a - b);
+  return s.length ? s[s.length >> 1] : 0;
+}
+
+function madOf(values, med) {
+  return medianOf(Array.from(values).map((v) => Math.abs(v - med)));
+}
+
+/**
+ * Walk inward from one edge and find where the border band ends.
+ *
+ * Measured to the OUTERMOST printed boundary, which is the only reference
+ * that means anything: the whole design is one fixed unit on the press
+ * sheet, so the surviving band width IS the cut offset. Measuring to the
+ * artwork window instead is catastrophic vertically — the name bar above and
+ * the text box below are asymmetric by design, so a perfectly cut card would
+ * report about 75/25 from layout alone.
+ */
+/** Geometry of one side of the rectified card, in a form both passes share. */
+function edgeWalker(rect, side) {
+  const { data, width: W, height: H } = rect;
+  const horizontal = side === 'left' || side === 'right';
+  const along = horizontal ? H : W;
+  const across = horizontal ? W : H;
+
+  // Skip the rounded-corner zone at both ends: the radius is about 3mm and
+  // the band is not at full width there.
+  const a0 = Math.round(along * 0.20);
+  const a1 = Math.round(along * 0.80);
+  const step = Math.max(1, Math.floor((a1 - a0) / 150));
+
+  return {
+    a0, a1, step, across,
+    sample(a, d) {
+      const x = horizontal ? (side === 'left' ? d : W - 1 - d) : a;
+      const y = horizontal ? a : (side === 'top' ? d : H - 1 - d);
+      const i = (Math.max(0, Math.min(H - 1, y)) * W + Math.max(0, Math.min(W - 1, x))) * 4;
+      return [data[i], data[i + 1], data[i + 2]];
+    },
+  };
+}
+
+const SIDES = ['left', 'right', 'top', 'bottom'];
+
+/**
+ * Measure the border band on all four sides.
+ *
+ * Two things here are load-bearing and were learned the hard way.
+ *
+ * The band colour is pooled across all four sides and taken as a median of
+ * medians. A single side is not a safe reference: on an off-centre card the
+ * narrow side's strip can sit partly in the design, and on any side the
+ * outermost pixels can be background rather than card.
+ *
+ * And the card's own edge is FOUND rather than assumed to be pixel zero.
+ * Rectification maps the detected quadrilateral onto the output, and that
+ * quadrilateral is derived at a low working resolution — measured here, it
+ * overshot by up to 60 pixels on three sides out of four, which contaminated
+ * every strip taken at a fixed inset and made the band read as textured. So
+ * each scanline walks in until it FIRST matches the border, calls that the
+ * card edge, and measures the band from there.
+ */
+function measureBorders(rect) {
+  const walkers = {};
+  for (const side of SIDES) walkers[side] = edgeWalker(rect, side);
+
+  // Pass one: a robust reference colour for the band.
+  const perSide = {};
+  for (const side of SIDES) {
+    const w = walkers[side];
+    // Shallow on purpose. Measured on a rectified Base Set card the yellow
+    // band runs about 44px of 1500 across and 42px of 2095 down — under 3% of
+    // the card, not the 6% its physical width in millimetres suggests. A
+    // reference sampled at 3-5% lands in the ARTWORK, which is how every side
+    // came back disagreeing with every other.
+    const d0 = Math.round(w.across * 0.006);
+    const d1 = Math.round(w.across * 0.018);
+    const px = [];
+    for (let a = w.a0; a < w.a1; a += w.step) {
+      for (let d = d0; d < d1; d++) px.push(w.sample(a, d));
+    }
+    perSide[side] = px.length ? [0, 1, 2].map((c) => medianOf(px.map((p) => p[c]))) : null;
+  }
+
+  const usable = SIDES.map((s) => perSide[s]).filter(Boolean);
+  if (usable.length < 4) return { ok: false, why: 'the border could not be sampled' };
+
+  const ref = [0, 1, 2].map((c) => medianOf(usable.map((p) => p[c])));
+
+  // Every side must be the same ink. A metallic or textured border, a
+  // full-art layout, or a strip that has landed in the design all show up
+  // here as one side disagreeing with the rest.
+  const strays = SIDES.filter((s) => {
+    const p = perSide[s];
+    return Math.hypot(p[0] - ref[0], p[1] - ref[1], p[2] - ref[2]) > 58;
+  });
+  if (strays.length > 0) {
+    return { ok: false, why: 'the ' + strays.join(' and ') + ' border is not the same plain band as the others' };
+  }
+
+  const matches = (p) => Math.hypot(p[0] - ref[0], p[1] - ref[1], p[2] - ref[2]) <= 45;
+
+  const out = {};
+  for (const side of SIDES) {
+    const w = walkers[side];
+    const limit = Math.round(w.across * 0.32);
+    const widths = [];
+
+    for (let a = w.a0; a < w.a1; a += w.step) {
+      // Where the card starts: the first run of pixels that is the band.
+      let start = -1, run = 0;
+      for (let d = 0; d < limit; d++) {
+        if (matches(w.sample(a, d))) {
+          run++;
+          if (run >= 4) { start = d - 3; break; }
+        } else run = 0;
+      }
+      if (start < 0) continue;
+
+      // Where the design starts: the first run that is no longer the band.
+      let end = -1;
+      run = 0;
+      for (let d = start + 4; d < limit; d++) {
+        if (!matches(w.sample(a, d))) {
+          run++;
+          if (run >= 3) { end = d - 2; break; }
+        } else run = 0;
+      }
+      if (end > start) widths.push(end - start);
+    }
+
+    if (widths.length < 40) {
+      return { ok: false, why: 'the ' + side + ' border and design did not separate cleanly enough' };
+    }
+    const med = medianOf(widths);
+    // MAD scaled to a standard-deviation equivalent — far less easily dragged
+    // by the handful of scanlines that cross a symbol, a stamp or a holo edge.
+    out[side] = { width: med, sigma: 1.4826 * madOf(widths, med), samples: widths.length };
+  }
+
+  return { ok: true, ref, sides: out };
+}
+
+function measureCentering(rect, ctx) {
+  const reasons = [];
+
+  if (ctx.subject !== 'card') {
+    reasons.push('The card is in a sleeve, toploader or graded holder. A holder shifts the ' +
+      'apparent border by several points through its own slack and edges, which is more than ' +
+      'the difference between grades.');
+  }
+  if (ctx.userPlaced) {
+    reasons.push('The frame was positioned by hand rather than measured from the card\'s edges. ' +
+      'Centering is a measurement OF those edges, so it can only be as good as they were found.');
+  }
+  if (!ctx.card) {
+    reasons.push('The card was not identified, so its layout is unknown and there is no way to ' +
+      'tell a plain border from a full-art one.');
+  } else if (!MEASURABLE_RARITIES.has(String(ctx.card.rarity || '').toLowerCase())) {
+    reasons.push('This card\'s layout (' + (ctx.card.rarity || 'unknown rarity') + ') does not ' +
+      'have a plain uniform border. Full-art, textured and metallic-bordered cards have no band ' +
+      'to measure, so the figure is undefined rather than just noisy.');
+  }
+  if (ctx.tooBlurry) {
+    reasons.push('The photo is too soft to place an edge to the fraction of a millimetre this needs.');
+  }
+  if (ctx.fill > CENTERING_MAX_FILL) {
+    reasons.push('The card fills ' + Math.round(ctx.fill * 100) + '% of the frame. Lens ' +
+      'distortion at the edges is worth several centering points on its own, so this needs a ' +
+      'photo taken from further back — the opposite of what the print-pattern check wants.');
+  }
+
+  if (reasons.length > 0) return { status: 'abstained', reasons };
+
+  const measured = measureBorders(rect);
+  if (!measured.ok) {
+    return {
+      status: 'abstained',
+      reasons: ['Centering could not be measured because ' + measured.why + '. That is a ' +
+        'property of this photo or this card\'s layout, not a finding about the card.'],
+    };
+  }
+  const sides = measured.sides;
+
+  const axis = (a, b) => {
+    const total = sides[a].width + sides[b].width;
+    if (total <= 0) return null;
+    const ratio = (sides[a].width / total) * 100;
+    // A small edge-localisation error d shifts the ratio by about (d/total)*50
+    // points, so 1mm of edge error is roughly 6-7 points on a WOTC border.
+    const delta = Math.hypot(sides[a].sigma, sides[b].sigma);
+    return { ratio, interval: (delta / total) * 50 };
+  };
+
+  const lr = axis('left', 'right');
+  const tb = axis('top', 'bottom');
+  if (!lr || !tb) return { status: 'abstained', reasons: ['The border widths came out as zero.'] };
+
+  const worse = Math.abs(lr.ratio - 50) >= Math.abs(tb.ratio - 50) ? lr : tb;
+
+  return {
+    status: 'ok',
+    leftRight: lr,
+    topBottom: tb,
+    worst: Math.max(lr.ratio, 100 - lr.ratio, tb.ratio, 100 - tb.ratio),
+    worstInterval: worse.interval,
+  };
+}
+
+/* ===================================================================
+   Identification: perceptual hashing against the baked corpus.
+
+   Matching artwork identifies WHICH card this is. It is deliberately not
+   fed into the authenticity verdict — a counterfeit copies the artwork
+   exactly, so a good match says nothing about whether the card is real.
+   =================================================================== */
+
+function dHashFrom(grid) {
+  // grid is (9 x 8) RGB means; compare each sample with its right neighbour.
+  let bits = '';
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const i = (y * 9 + x) * 3;
+      const j = i + 3;
+      const a = 0.299 * grid[i] + 0.587 * grid[i + 1] + 0.114 * grid[i + 2];
+      const b = 0.299 * grid[j] + 0.587 * grid[j + 1] + 0.114 * grid[j + 2];
+      bits += a > b ? '1' : '0';
+    }
+  }
+  let hex = '';
+  for (let i = 0; i < bits.length; i += 4) hex += parseInt(bits.slice(i, i + 4), 2).toString(16);
+  return hex;
+}
+
+function signatureFrom(grid, n) {
+  const means = [0, 0, 0];
+  for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) means[c] += grid[i * 3 + c];
+  for (let c = 0; c < 3; c++) means[c] /= n;
+  const grand = (means[0] + means[1] + means[2]) / 3 || 1;
+
+  const out = new Uint8Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    for (let c = 0; c < 3; c++) {
+      const scaled = (grid[i * 3 + c] * grand) / (means[c] || 1);
+      out[i * 3 + c] = Math.max(0, Math.min(255, Math.round(scaled)));
+    }
+  }
+  return out;
+}
+
+function cropImageData(img, fx, fy, fw, fh) {
+  const x0 = Math.round(fx * img.width);
+  const y0 = Math.round(fy * img.height);
+  const w = Math.max(1, Math.round(fw * img.width));
+  const h = Math.max(1, Math.round(fh * img.height));
+  const out = new ImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    const srcStart = ((y0 + y) * img.width + x0) * 4;
+    out.data.set(img.data.subarray(srcStart, srcStart + w * 4), y * w * 4);
+  }
+  return out;
+}
+
+function describeRectified(rect) {
+  const art = REGIONS.artWindow;
+  const artImg = cropImageData(rect, art.x, art.y, art.width, art.height);
+  return {
+    hashFull: dHashFrom(boxResize(rect, 9, 8)),
+    hashArt: dHashFrom(boxResize(artImg, 9, 8)),
+    sig: signatureFrom(boxResize(rect, 4, 6), 24),
+    ranks: DESC_INSETS.map((inset) => rankDescriptors(rect, inset)),
+  };
+}
+
+const POPCOUNT = new Uint8Array(16);
+for (let i = 0; i < 16; i++) POPCOUNT[i] = (i & 1) + ((i >> 1) & 1) + ((i >> 2) & 1) + ((i >> 3) & 1);
+
+function hamming(a, b) {
+  let d = 0;
+  for (let i = 0; i < a.length; i++) {
+    d += POPCOUNT[(parseInt(a[i], 16) ^ parseInt(b[i], 16)) & 15];
+  }
+  return d;
+}
+
+function sigDistance(sig, hex) {
+  let total = 0;
+  for (let i = 0; i < sig.length; i++) {
+    total += Math.abs(sig[i] - parseInt(hex.substr(i * 2, 2), 16));
+  }
+  return Math.min(1, total / sig.length / 110);
+}
+
+/* --- rank descriptors ----------------------------------------------------
+ *
+ * A 64-bit difference hash keeps 64 comparisons of an entire card, which is
+ * not much to tell two thousand cards apart, and every bit of it still moves
+ * with the lighting. Measured over forty photographs carrying perspective,
+ * a colour cast, a gamma shift, a specular streak and JPEG noise, hashes alone
+ * identified 68% correctly.
+ *
+ * Ranks fix the lighting half. Replacing each cell of a small greyscale grid
+ * by its position in the sorted order throws away absolute brightness but
+ * keeps the picture: any monotonic transform — exposure, gamma, a warm bulb,
+ * a phone's contrast curve — changes every value and preserves every order.
+ * Correlating ranks therefore compares the artwork rather than the room.
+ * ------------------------------------------------------------------------ */
+
+const DESC_FULL = { w: 16, h: 22 };
+const DESC_ART = { w: 16, h: 16 };
+const DESC_COARSE = { w: 8, h: 11 };
+
+/** Insets tried on the query, to absorb a frame that is a little loose or tight. */
+const DESC_INSETS = [0, 0.022, 0.045];
+
+/**
+ * Blend weights over [hashFull, hashArt, colour, nccFull, nccArt, nccCoarse].
+ *
+ * Chosen by sweeping candidate blends over forty photographs carrying
+ * perspective, colour casts, gamma shifts, specular glare and JPEG noise —
+ * not by taste. Every component is weak alone (30-45% on its own); the
+ * combination is what works, and the colour layout in particular pulls far
+ * more weight than its simplicity suggests, because Pokemon cards are
+ * strongly colour-coded by type.
+ */
+const MATCH_WEIGHTS = [0.22, 0.18, 0.18, 0.16, 0.08, 0.18];
+
+const B64 = (() => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const lookup = new Uint8Array(256);
+  for (let i = 0; i < chars.length; i++) lookup[chars.charCodeAt(i)] = i;
+  return (str) => {
+    const clean = str.replace(/=+$/, '');
+    const out = new Uint8Array((clean.length * 3) >> 2);
+    let bits = 0, acc = 0, o = 0;
+    for (let i = 0; i < clean.length; i++) {
+      acc = (acc << 6) | lookup[clean.charCodeAt(i)];
+      bits += 6;
+      if (bits >= 8) { bits -= 8; out[o++] = (acc >> bits) & 0xff; }
+    }
+    return out;
+  };
+})();
+
+function rankNormalise(values) {
+  const n = values.length;
+  const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => values[a] - values[b]);
+  const out = new Float32Array(n);
+  for (let r = 0; r < n; r++) out[order[r]] = (r / (n - 1)) * 255;
+  return out;
+}
+
+/**
+ * Correlation over only the cells worth trusting.
+ *
+ * A specular highlight on foil does not dim a region, it ERASES it — the cells
+ * under it carry the lamp, not the card, and no amount of normalisation
+ * recovers what was clipped away. Correlating over them drags a true match
+ * down and, worse, drags every candidate down by roughly the same amount, so
+ * the ranking collapses toward noise. Excluding them and re-centring on what
+ * survives compares the part of the card the camera actually recorded.
+ *
+ * Both means are recomputed over the surviving cells, which is why the
+ * references are kept raw rather than pre-centred.
+ */
+function maskedCorrelation(q, r, mask) {
+  let n = 0, sq = 0, sr = 0;
+  for (let i = 0; i < q.length; i++) {
+    if (!mask[i]) continue;
+    sq += q[i]; sr += r[i]; n++;
+  }
+  if (n < q.length * 0.45) return null;   // too little left to mean anything
+
+  const mq = sq / n, mr = sr / n;
+  let num = 0, dq = 0, dr = 0;
+  for (let i = 0; i < q.length; i++) {
+    if (!mask[i]) continue;
+    const a = q[i] - mq, b = r[i] - mr;
+    num += a * b; dq += a * a; dr += b * b;
+  }
+  const den = Math.sqrt(dq * dr);
+  return den > 0 ? num / den : null;
+}
+
+/** Greyscale box-downsample of an ImageData region to a fixed grid. */
+function greyGrid(img, gx, gy, gw, gh, outW, outH) {
+  const { data, width } = img;
+  const out = new Float32Array(outW * outH);
+  for (let oy = 0; oy < outH; oy++) {
+    const y0 = gy + Math.floor((oy * gh) / outH);
+    const y1 = gy + Math.max(Math.floor(((oy + 1) * gh) / outH), Math.floor((oy * gh) / outH) + 1);
+    for (let ox = 0; ox < outW; ox++) {
+      const x0 = gx + Math.floor((ox * gw) / outW);
+      const x1 = gx + Math.max(Math.floor(((ox + 1) * gw) / outW), Math.floor((ox * gw) / outW) + 1);
+      let sum = 0, n = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * width + x) * 4;
+          sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          n++;
+        }
+      }
+      out[oy * outW + ox] = n ? sum / n : 0;
+    }
+  }
+  return out;
+}
+
+/** Cells at or above this luminance carry the lamp rather than the card. */
+const BLOWN_CELL = 236;
+
+function withMask(grey) {
+  const mask = new Uint8Array(grey.length);
+  let kept = 0;
+  for (let i = 0; i < grey.length; i++) {
+    mask[i] = grey[i] < BLOWN_CELL ? 1 : 0;
+    kept += mask[i];
+  }
+  // Ranking must happen over the surviving cells only: including blown cells
+  // would push everything else down the order and change the descriptor even
+  // where the card was recorded perfectly well.
+  const idx = [];
+  for (let i = 0; i < grey.length; i++) if (mask[i]) idx.push(i);
+  const order = idx.slice().sort((a, b) => grey[a] - grey[b]);
+  const ranks = new Float32Array(grey.length);
+  for (let r = 0; r < order.length; r++) {
+    ranks[order[r]] = order.length > 1 ? (r / (order.length - 1)) * 255 : 128;
+  }
+  return { ranks, mask, kept };
+}
+
+/** The query's descriptors at one inset. */
+function rankDescriptors(rect, inset) {
+  const W = rect.width, H = rect.height;
+  const ix = Math.round(W * inset), iy = Math.round(H * inset);
+  const cw = W - 2 * ix, ch = H - 2 * iy;
+
+  const a = REGIONS.artWindow;
+  return {
+    full: withMask(greyGrid(rect, ix, iy, cw, ch, DESC_FULL.w, DESC_FULL.h)),
+    art: withMask(greyGrid(
+      rect,
+      ix + Math.round(a.x * cw), iy + Math.round(a.y * ch),
+      Math.max(1, Math.round(a.width * cw)), Math.max(1, Math.round(a.height * ch)),
+      DESC_ART.w, DESC_ART.h,
+    )),
+    coarse: withMask(greyGrid(rect, ix, iy, cw, ch, DESC_COARSE.w, DESC_COARSE.h)),
+  };
+}
+
+/** Reference descriptors, decoded and normalised once per session. */
+function cardDescriptors(c) {
+  if (c._d === undefined) {
+    c._d = c.gr && c.ar && c.gc
+      ? { full: B64(c.gr), art: B64(c.ar), coarse: B64(c.gc) }
+      : null;
+  }
+  return c._d;
+}
+
+function matchCard(desc, limit) {
+  const queries = desc.ranks || [];
+
+  const scored = CARDS.map((c) => {
+    const hFull = 1 - hamming(desc.hashFull, c.hashFull) / 64;
+    const hArt = 1 - hamming(desc.hashArt, c.hashArt) / 64;
+
+    const sig = 1 - sigDistance(desc.sig, c.sig);
+    const ref = cardDescriptors(c);
+
+    // The frame is never placed perfectly, so the best of a few insets is
+    // taken rather than insisting the user's crop matched the reference's.
+    let nF = 0, nA = 0, nC = 0;
+    if (ref) {
+      for (const q of queries) {
+        const f = maskedCorrelation(q.full.ranks, ref.full, q.full.mask);
+        const a = maskedCorrelation(q.art.ranks, ref.art, q.art.mask);
+        const k = maskedCorrelation(q.coarse.ranks, ref.coarse, q.coarse.mask);
+        const fs = f === null ? 0 : (f + 1) / 2;
+        const as = a === null ? 0 : (a + 1) / 2;
+        const ks = k === null ? 0 : (k + 1) / 2;
+        if (fs + ks > nF + nC) { nF = fs; nA = as; nC = ks; }
+      }
+    }
+
+    const score = MATCH_WEIGHTS[0] * hFull + MATCH_WEIGHTS[1] * hArt + MATCH_WEIGHTS[2] * sig +
+                  MATCH_WEIGHTS[3] * nF + MATCH_WEIGHTS[4] * nA + MATCH_WEIGHTS[5] * nC;
+
+    return { card: c, score, full: nF || hFull, art: nA || hArt, sig };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
+function rotate180(img) {
+  const out = new ImageData(img.width, img.height);
+  const n = img.width * img.height;
+  for (let i = 0; i < n; i++) {
+    const j = (n - 1 - i) * 4;
+    const k = i * 4;
+    out.data[j] = img.data[k];
+    out.data[j + 1] = img.data[k + 1];
+    out.data[j + 2] = img.data[k + 2];
+    out.data[j + 3] = 255;
+  }
+  return out;
+}
+
+/**
+ * Identify the card, allowing for it being upside down.
+ *
+ * Two separate things land here as the same problem. A card photographed on
+ * its side has already had its corners rotated by the detector, which cannot
+ * tell which of the two sideways orientations it was — and a card can simply
+ * be photographed the wrong way up. Both cases are one half-turn from correct,
+ * so the cheap fix is to match twice and keep the better reading. The winning
+ * orientation is also the one shown back to the user, so the flattened card in
+ * the report is the right way up.
+ */
+function identify(rect, limit) {
+  const upright = matchCard(describeRectified(rect), limit);
+  const flipped = rotate180(rect);
+  const inverted = matchCard(describeRectified(flipped), limit);
+
+  return inverted[0].score > upright[0].score
+    ? { candidates: inverted, image: flipped, halfTurned: true }
+    : { candidates: upright, image: rect, halfTurned: false };
+}
+
+/* ===================================================================
+   Rendering
+   =================================================================== */
+
+const $ = (id) => document.getElementById(id);
+
+/** The analysis the visible report belongs to. Centering is measured lazily
+ *  from it, because the layout gate needs the identified card. */
+let LAST_RESULT = null;
+
+const STEP_LABELS = [
+  ['read', 'Reading the photo'],
+  ['detect', 'Finding the card'],
+  ['rectify', 'Flattening to a straight-on view'],
+  ['quality', 'Measuring capture quality'],
+  ['signals', 'Running authenticity checks'],
+  ['identify', 'Matching against ' + CARDS.length + ' known cards'],
+];
+
+function renderSteps(activeIndex) {
+  const ol = $('steps');
+  ol.innerHTML = '';
+  STEP_LABELS.forEach(([, label], i) => {
+    const li = document.createElement('li');
+    li.dataset.state = i < activeIndex ? 'done' : i === activeIndex ? 'running' : 'pending';
+    li.innerHTML = '<span class="tick">' + (i < activeIndex ? '✓' : i === activeIndex ? '▸' : '·') +
+      '</span><span></span>';
+    li.lastChild.textContent = label;
+    ol.appendChild(li);
+  });
+}
+
+function money(amount, currency) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency,
+    maximumFractionDigits: amount >= 100 ? 0 : 2,
+  }).format(amount);
+}
+
+/** "1stEditionHolofoil" reads as "1st Edition Holofoil". */
+function variantLabel(v) {
+  return String(v)
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (c) => c.toUpperCase())
+    .trim();
+}
+
+const CONDITION_LABELS = {
+  NM: 'Near Mint', LP: 'Lightly Played', MP: 'Moderately Played',
+  HP: 'Heavily Played', DMG: 'Damaged',
+};
+
+function renderReport(report) {
+  const meta = VERDICT_META[report.verdict];
+  const pill = $('verdict-pill');
+  pill.textContent = meta.label;
+  pill.className = 'pill tone-' + meta.tone;
+  $('verdict-blurb').textContent = meta.blurb;
+
+  $('fig-score').textContent = report.scoreIsMeaningful ? report.score : '—';
+  $('bar-score').style.width = (report.scoreIsMeaningful ? report.score : 0) + '%';
+  $('fig-conf').textContent = Math.round(report.confidence * 100) + '%';
+  $('bar-conf').style.width = Math.round(report.confidence * 100) + '%';
+  $('fig-ran').innerHTML = report.ranCount + ' <small>of ' + report.totalCount + '</small>';
+
+  const ul = $('signals');
+  ul.innerHTML = '';
+  for (const s of report.signals) {
+    const li = document.createElement('li');
+
+    const head = document.createElement('div');
+    head.className = 'sig-head';
+    const name = document.createElement('span');
+    name.className = 'sig-name';
+    name.textContent = s.label;
+    head.appendChild(name);
+
+    if (s.status === 'ok') {
+      const sc = document.createElement('span');
+      sc.className = 'sig-score';
+      sc.style.color = s.score >= 70 ? 'var(--good)' : s.score >= 45 ? 'var(--warn)' : 'var(--bad)';
+      sc.textContent = s.score + ' / 100';
+      head.appendChild(sc);
+    } else {
+      const ab = document.createElement('span');
+      ab.className = 'sig-abstain';
+      ab.textContent = 'abstained';
+      head.appendChild(ab);
+    }
+    li.appendChild(head);
+
+    const body = document.createElement('p');
+    body.className = 'sig-body';
+    body.style.margin = '5px 0 0';
+    body.textContent = s.summary;
+    li.appendChild(body);
+
+    const keys = Object.keys(s.measurements || {});
+    if (keys.length > 0) {
+      const meas = document.createElement('div');
+      meas.className = 'sig-meas';
+      for (const k of keys) {
+        const span = document.createElement('span');
+        span.textContent = k + ' ' + s.measurements[k];
+        meas.appendChild(span);
+      }
+      li.appendChild(meas);
+    }
+    ul.appendChild(li);
+  }
+
+  const limits = $('limits');
+  limits.innerHTML = '';
+  for (const l of report.limitations) {
+    const li = document.createElement('li');
+    li.textContent = l;
+    limits.appendChild(li);
+  }
+}
+
+function candidateButton(entry, onPick) {
+  const c = entry.card;
+  const btn = document.createElement('button');
+  btn.className = 'cand';
+  btn.type = 'button';
+  btn.setAttribute('aria-pressed', 'false');
+
+  const img = document.createElement('img');
+  img.src = 'data:image/webp;base64,' + c.thumb;
+  img.alt = '';
+  img.width = 46;
+  btn.appendChild(img);
+
+  const who = document.createElement('div');
+  who.className = 'who';
+  const nm = document.createElement('div');
+  nm.className = 'nm';
+  nm.textContent = c.name;
+  const mt = document.createElement('div');
+  mt.className = 'mt';
+  // The 1996 Japanese cards carry no collector number at all — there is
+  // nothing printed on them to carry — so the number segment is dropped
+  // rather than rendered as an empty gap between separators.
+  const number = c.number ? c.number + (c.printedTotal ? '/' + c.printedTotal : '') : '';
+  mt.textContent = [
+    (c.language === 'Japanese' ? 'JP' : ''),
+    c.setName,
+    number,
+    c.rarity || '',
+  ].filter(Boolean).join(' · ');
+  who.appendChild(nm);
+  who.appendChild(mt);
+  btn.appendChild(who);
+
+  if (entry.score != null) {
+    const sc = document.createElement('div');
+    sc.className = 'score';
+    sc.innerHTML = '<b></b><span></span>';
+    sc.firstChild.textContent = Math.round(entry.score * 100) + '%';
+    sc.lastChild.textContent = 'match';
+    btn.appendChild(sc);
+  }
+
+  btn.addEventListener('click', () => onPick(c, btn));
+  return btn;
+}
+
+function selectCard(card, btn) {
+  document.querySelectorAll('.cand[aria-pressed=true]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+  if (btn) btn.setAttribute('aria-pressed', 'true');
+  renderPrices(card);
+  renderHistory(card);
+  renderCentering(card);
+}
+
+/**
+ * Centering is measured once a card is chosen, because the layout gate needs
+ * to know WHICH card it is looking at — a plain-bordered common and a
+ * borderless illustration rare from the same set need different answers, and
+ * only one of them has anything to measure.
+ */
+function renderCentering(card) {
+  const sec = $('sec-centering');
+  const chart = $('centering-chart');
+  const notes = $('centering-notes');
+  chart.innerHTML = '';
+  notes.innerHTML = '';
+
+  const state = LAST_RESULT;
+  if (!state || !state.rectifiedRaw) { sec.hidden = true; return; }
+
+  let measured;
+  try {
+    measured = measureCentering(state.rectifiedRaw, Object.assign({ card }, state.centeringContext));
+  } catch {
+    sec.hidden = true;
+    return;
+  }
+
+  sec.hidden = false;
+
+  if (measured.status !== 'ok') {
+    $('centering-intro').textContent =
+      'Centering was not measured on this photo. It is reported separately from price on ' +
+      'purpose: TCGplayer rates a card up to 70/30 off-centre as having no impact on its ' +
+      'condition at all, so this speaks to whether the card is worth grading, not to what it ' +
+      'is worth today.';
+    for (const r of measured.reasons) {
+      const li = document.createElement('li');
+      li.textContent = r;
+      notes.appendChild(li);
+    }
+    return;
+  }
+
+  const fmt = (a) => Math.round(a.ratio) + ' / ' + Math.round(100 - a.ratio) +
+    ' ±' + a.interval.toFixed(1);
+
+  $('centering-intro').textContent =
+    'Left/right ' + fmt(measured.leftRight) + ', top/bottom ' + fmt(measured.topBottom) + '. ' +
+    'Measured from the outer printed border to the edge of the design on each side, which is ' +
+    'where the cut actually shows. This is not a condition figure — TCGplayer rates a card up ' +
+    'to 70/30 off-centre as unaffected — it speaks to whether the card is worth grading.';
+
+  chart.appendChild(centeringChart(measured));
+
+  const spans = CENTERING_BANDS.filter((b) =>
+    measured.worst - measured.worstInterval < b.ratio &&
+    measured.worst + measured.worstInterval > b.ratio);
+
+  if (spans.length > 0) {
+    const li = document.createElement('li');
+    li.style.color = 'var(--warn)';
+    li.textContent =
+      'The measurement straddles the ' + spans.map((b) => b.label).join(' and ') +
+      ' line, so it cannot say which side of it this card falls on. Getting a firmer answer ' +
+      'needs a flat, unsleeved card shot square from further back on a dark matte surface.';
+    notes.appendChild(li);
+  }
+
+  for (const text of [
+    'This is FRONT centering only. Graders measure the back as well, and their back tolerance ' +
+    'is a separate gate — a card can pass the front and fail on the back.',
+    'Centering is one of four inputs to a grade. Surface, corners and edges are the others, and ' +
+    'none of them is measurable from a single photograph of the front. No grade is predicted ' +
+    'here for that reason.',
+    'A card that is badly off-centre is not damaged, and a significant miscut is often worth ' +
+    'MORE rather than less — collectors seek them out. Nothing here lowers the prices above.',
+  ]) {
+    const li = document.createElement('li');
+    li.textContent = text;
+    notes.appendChild(li);
+  }
+}
+
+/**
+ * The measurement drawn against the published tolerances.
+ *
+ * Reference lines rather than a verdict. Mapping a front-only measurement to
+ * a predicted grade would be a claim worth thousands on evidence that cannot
+ * carry it, and the inverse — telling someone their card is out of tolerance
+ * so they do not submit it — is a false devaluation they would never find out
+ * about and so could never correct.
+ */
+function centeringChart(m) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const W = 560, ROW = 54, PAD_T = 26, PAD_B = 30, LABEL_W = 96;
+  const H = PAD_T + 2 * ROW + PAD_B;
+  const x0 = LABEL_W, x1 = W - 60;
+
+  // Plot 50 to 75, since below 50 is the mirror of above it.
+  const lo = 50, hi = 75;
+  const sx = (v) => x0 + ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (x1 - x0);
+
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('class', 'chart');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label',
+    'Centering: left to right ' + Math.round(m.leftRight.ratio) + ' to ' +
+    Math.round(100 - m.leftRight.ratio) + ', top to bottom ' + Math.round(m.topBottom.ratio) +
+    ' to ' + Math.round(100 - m.topBottom.ratio) +
+    '. Published front tolerances: ' + CENTERING_BANDS.map((b) => b.label + ' ' + b.ratio).join(', '));
+
+  const add = (tag, attrs, text) => {
+    const el = document.createElementNS(ns, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    if (text != null) el.textContent = text;
+    svg.appendChild(el);
+    return el;
+  };
+
+  for (const band of CENTERING_BANDS) {
+    const x = sx(band.ratio);
+    add('line', { x1: x, y1: PAD_T - 8, x2: x, y2: H - PAD_B + 4, stroke: '#262a3a', 'stroke-width': 1, 'stroke-dasharray': '3 3' });
+    add('text', { x, y: PAD_T - 13, 'text-anchor': 'middle', fill: '#6b7189', 'font-size': 9.5, 'font-family': 'ui-sans-serif, system-ui, sans-serif' }, band.label);
+  }
+
+  [['Left / right', m.leftRight], ['Top / bottom', m.topBottom]].forEach(([label, axis], i) => {
+    const cy = PAD_T + i * ROW + ROW / 2;
+    const value = Math.max(axis.ratio, 100 - axis.ratio);
+
+    add('text', { x: x0 - 12, y: cy + 4, 'text-anchor': 'end', fill: '#c7cbda', 'font-size': 12, 'font-family': 'ui-sans-serif, system-ui, sans-serif' }, label);
+    add('line', { x1: x0, y1: cy, x2: x1, y2: cy, stroke: '#1b1e2a', 'stroke-width': 6, 'stroke-linecap': 'round' });
+
+    // The interval, drawn as the bar — the point estimate alone would imply a
+    // precision the edge localisation does not have.
+    const a = sx(value - axis.interval), b = sx(value + axis.interval);
+    add('line', { x1: a, y1: cy, x2: Math.max(b, a + 3), y2: cy, stroke: '#3987e5', 'stroke-width': 6, 'stroke-linecap': 'round' });
+    add('circle', { cx: sx(value), cy, r: 5, fill: '#0e1016', stroke: '#3987e5', 'stroke-width': 2.5 });
+
+    add('text', { x: x1 + 10, y: cy + 4, fill: '#e8eaf2', 'font-size': 12, 'font-family': 'ui-monospace, monospace' },
+      Math.round(value) + '/' + Math.round(100 - value));
+  });
+
+  add('text', { x: x0, y: H - 8, fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-sans-serif, system-ui, sans-serif' },
+    'bar spans the measurement uncertainty · dashed lines are published front tolerances');
+
+  return svg;
+}
+
+function renderPrices(card) {
+  const sec = $('sec-price');
+  if (!card.conditions || card.conditions.rows.length === 0) {
+    sec.hidden = true;
+    return;
+  }
+  sec.hidden = false;
+
+  $('price-intro').textContent =
+    'What sellers were asking on TCGplayer for ' + card.name + ' (' + card.conditions.variant +
+    '), per condition. These are asking prices, not completed sales — cards usually sell below ' +
+    'the asking price, and the gap widens as condition falls.' +
+    (card.language === 'Japanese'
+      ? ' This is the JAPANESE printing, priced in US dollars on TCGplayer\'s US marketplace — ' +
+        'which is a different market from Japan itself, where the same card can trade at a very ' +
+        'different price.'
+      : '');
+
+  const chartSlot = $('price-chart');
+  chartSlot.innerHTML = '';
+  chartSlot.appendChild(conditionChart(card.conditions.rows));
+
+  const tbody = $('price-table').querySelector('tbody');
+  tbody.innerHTML = '';
+  let thin = 0;
+  let saturated = false;
+
+  for (const r of card.conditions.rows) {
+    const tr = document.createElement('tr');
+    const weak = r.listingCount < 5;
+    if (weak) thin++;
+    if (r.listingCount >= 25) saturated = true;
+
+    const cells = [
+      [CONDITION_LABELS[r.condition] || r.condition, ''],
+      [money(r.low, 'USD'), 'num'],
+      [money(r.median, 'USD'), 'num'],
+      [r.listingCount >= 25 ? '25+' : String(r.listingCount), 'num' + (weak ? ' thin' : '')],
+    ];
+    for (const [text, cls] of cells) {
+      const td = document.createElement('td');
+      if (cls) td.className = cls;
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+
+  const notes = [];
+  if (thin > 0) {
+    notes.push(
+      (thin === 1 ? 'One condition is' : thin + ' conditions are') +
+      ' backed by fewer than five listings. With that little supply the figures move a lot, and ' +
+      'a played card can even list above a mint one — read those rows as rough.'
+    );
+  }
+  if (saturated) {
+    notes.push(
+      'Rows marked 25+ hit the page size of the listings request, which returns the 25 cheapest ' +
+      'listings for that condition. The typical figure is therefore the median of those, not of ' +
+      'every listing on the market.'
+    );
+  }
+  // Printing is a bigger lever on price than condition, and it is the one
+  // thing a photo cannot settle. A 1st Edition stamp is a 4mm glyph sitting on
+  // the foil, exactly where a phone photo is most likely to be blown out — so
+  // detecting one is possible but NOT detecting one proves nothing. Inferring
+  // "no stamp, therefore Unlimited" would silently value a 1st Edition copy at
+  // a fraction of its worth and give the owner no sign a measurement failed.
+  // So the page names the printing these figures describe and stops there.
+  const others = (card.variants || []).filter((v) => v !== card.conditions.variant);
+  if (others.length > 0) {
+    notes.push(
+      'These figures are for the ' + variantLabel(card.conditions.variant) + ' printing only. ' +
+      'This card also exists as ' + others.map(variantLabel).join(' and ') +
+      ', which trade at very different prices — a 1st Edition copy is routinely several times ' +
+      'an Unlimited one. Which you have is decided by the small stamp beside the artwork and by ' +
+      'the drop shadow around it, and this page will not guess: not seeing a stamp in a photo ' +
+      'is not evidence there is none, and guessing wrong here costs more than every other ' +
+      'figure on this page combined.'
+    );
+  }
+
+  notes.push('Captured ' + new Date(card.conditions.fetchedAt).toLocaleString() +
+    ' · TCGplayer product ' + card.conditions.productId + '.');
+  $('price-foot').textContent = notes.join(' ');
+}
+
+/**
+ * The condition ladder as a chart.
+ *
+ * Each row is a RANGE, cheapest to typical, not a single number — that gap is
+ * the honest shape of the data, and a bar chart of medians alone would hide
+ * that the cheapest Near Mint listing can sit below the typical Lightly Played
+ * one. Rows resting on very few listings are drawn hollow, so a figure backed
+ * by three sellers never looks as solid as one backed by twenty-five.
+ */
+function conditionChart(rows) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const ROW = 30, PAD_T = 18, PAD_B = 22, LABEL_W = 132, VALUE_W = 84;
+  const W = 560;
+  const H = PAD_T + rows.length * ROW + PAD_B;
+  const x0 = LABEL_W;
+  const x1 = W - VALUE_W;
+
+  const max = Math.max.apply(null, rows.map((r) => r.median));
+  const scale = (v) => x0 + (max > 0 ? (v / max) : 0) * (x1 - x0);
+
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('class', 'chart');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label',
+    'Asking price by condition: ' + rows.map((r) =>
+      (CONDITION_LABELS[r.condition] || r.condition) + ' from ' + money(r.low, 'USD') +
+      ' to ' + money(r.median, 'USD') + ' across ' + r.listingCount + ' listings').join('; '));
+
+  const add = (tag, attrs, text) => {
+    const el = document.createElementNS(ns, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    if (text != null) el.textContent = text;
+    svg.appendChild(el);
+    return el;
+  };
+
+  add('defs', {}).innerHTML =
+    '<pattern id="thin" width="5" height="5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">' +
+    '<rect width="5" height="5" fill="#0e1016"/><line x1="0" y1="0" x2="0" y2="5" stroke="#3987e5" stroke-width="2"/></pattern>';
+
+  rows.forEach((r, i) => {
+    const y = PAD_T + i * ROW;
+    const cy = y + ROW / 2;
+    const weak = r.listingCount < 5;
+
+    add('text', {
+      x: x0 - 10, y: cy + 4, 'text-anchor': 'end', fill: '#c7cbda',
+      'font-size': 12, 'font-family': 'ui-sans-serif, system-ui, sans-serif',
+    }, CONDITION_LABELS[r.condition] || r.condition);
+
+    // Track, so a short bar still reads against a known full width.
+    add('rect', { x: x0, y: cy - 7, width: x1 - x0, height: 14, rx: 3, fill: '#14161f' });
+
+    const bx = scale(r.low);
+    const bw = Math.max(2, scale(r.median) - bx);
+    add('rect', {
+      x: bx, y: cy - 7, width: bw, height: 14, rx: 3,
+      fill: weak ? 'url(#thin)' : '#3987e5',
+      stroke: weak ? '#3987e5' : 'none',
+      'stroke-width': weak ? 1 : 0,
+    });
+
+    // The cheapest listing gets its own tick: it is the number a buyer sees
+    // first and the one a seller is competing with.
+    add('line', {
+      x1: bx, y1: cy - 10, x2: bx, y2: cy + 10, stroke: '#e8eaf2', 'stroke-width': 1.5,
+    });
+
+    add('text', {
+      x: x1 + 8, y: cy + 4, fill: '#e8eaf2',
+      'font-size': 12, 'font-family': 'ui-monospace, monospace',
+    }, money(r.median, 'USD'));
+  });
+
+  add('text', {
+    x: x0, y: H - 7, fill: '#6b7189',
+    'font-size': 10, 'font-family': 'ui-sans-serif, system-ui, sans-serif',
+  }, 'bar spans cheapest → typical asking price · tick marks the cheapest');
+
+  return svg;
+}
+
+function renderHistory(card) {
+  const sec = $('sec-history');
+  const panel = $('history-panel');
+  panel.innerHTML = '';
+
+  const series = (card.series || []).filter((s) => s.points.length >= 2);
+  if (series.length === 0) { sec.hidden = true; return; }
+  sec.hidden = false;
+
+  // Currencies are never mixed or converted, so each gets its own block —
+  // TCGplayer reports dollars and Cardmarket euros, and averaging them would
+  // make any combined figure wrong.
+  series.sort((a, b) => b.points.length - a.points.length);
+
+  series.forEach((s, i) => {
+    const block = document.createElement('div');
+    if (i > 0) block.style.cssText = 'margin-top:18px;padding-top:16px;border-top:1px solid var(--ink-800)';
+
+    const intro = document.createElement('p');
+    intro.className = 'note';
+    intro.style.margin = '0 0 10px';
+
+    // Two points still get a chart, because a chart is what the reader came
+    // for — but the connector is dashed and labelled, because a line through
+    // two points draws a trend the data does not evidence.
+    const provisional = s.points.length < 3;
+
+    intro.textContent =
+      s.points.length + ' real observations for ' + card.name + ' (' + s.variant + '), ' +
+      s.currency + ', from ' + s.points[0].date + ' to ' + s.points[s.points.length - 1].date +
+      ', via ' + s.points[0].source + '.' +
+      (provisional
+        ? ' Two points are not a trend — the dashed line only connects them. History accrues one ' +
+          'real point per day as cards are viewed.'
+        : '');
+    block.appendChild(intro);
+    block.appendChild(lineChart(s, provisional));
+
+    const spikes = outliers(s.points);
+    if (spikes.length > 0) {
+      const warn = document.createElement('p');
+      warn.className = 'note';
+      warn.style.cssText = 'margin:8px 0 0;color:var(--warn)';
+      warn.textContent =
+        (spikes.length === 1 ? 'One observation sits' : spikes.length + ' observations sit') +
+        ' far outside the rest of this series (' +
+        spikes.map((p) => p.date + ' at ' + money(p.amount, s.currency)).join(', ') +
+        '). A single unusual listing moves a marketplace average sharply on a card that ' +
+        'trades rarely, so read those points as noise until a later one confirms them.';
+      block.appendChild(warn);
+    }
+
+    panel.appendChild(block);
+  });
+}
+
+/** Points more than 2.5x away from the series median, in either direction. */
+function outliers(points) {
+  const sorted = points.map((p) => p.amount).sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  if (!median) return [];
+  return points.filter((p) => p.amount > median * 2.5 || p.amount < median / 2.5);
+}
+
+function lineChart(series, provisional) {
+  // Left padding is sized for the widest money label the axis can produce; a
+  // four-figure euro value overran a narrower gutter and collided with the plot.
+  const W = 560, H = 220, PAD_L = 64, PAD_R = 12, PAD_T = 14, PAD_B = 30;
+  const pts = series.points;
+  const amounts = pts.map((p) => p.amount);
+  let min = Math.min(...amounts), max = Math.max(...amounts);
+  if (min === max) { min = min * 0.9; max = max * 1.1 || 1; }
+  const padY = (max - min) * 0.12;
+  min -= padY; max += padY;
+
+  const x = (i) => PAD_L + (i / (pts.length - 1)) * (W - PAD_L - PAD_R);
+  const y = (v) => PAD_T + (1 - (v - min) / (max - min)) * (H - PAD_T - PAD_B);
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('class', 'chart');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label',
+    'Price history: ' + pts.map((p) => p.date + ' ' + money(p.amount, series.currency)).join(', '));
+
+  const add = (tag, attrs, text) => {
+    const el = document.createElementNS(ns, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    if (text != null) el.textContent = text;
+    svg.appendChild(el);
+    return el;
+  };
+
+  // Gridlines and value axis.
+  for (let g = 0; g <= 3; g++) {
+    const v = min + ((max - min) * g) / 3;
+    const gy = y(v);
+    add('line', { x1: PAD_L, y1: gy, x2: W - PAD_R, y2: gy, stroke: '#1b1e2a', 'stroke-width': 1 });
+    add('text', {
+      x: PAD_L - 8, y: gy + 4, 'text-anchor': 'end',
+      fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-monospace, monospace',
+    }, money(v, series.currency));
+  }
+
+  // The line. Solid because every point here is a real observation; the app
+  // draws backfilled runs dashed and modeled runs as a shaded band.
+  const d = pts.map((p, i) => (i === 0 ? 'M' : 'L') + x(i) + ' ' + y(p.amount)).join(' ');
+  add('path', {
+    d, fill: 'none', stroke: '#3987e5', 'stroke-width': 2, 'stroke-linejoin': 'round',
+    'stroke-dasharray': provisional ? '5 4' : 'none',
+  });
+
+  // Outliers get their own mark rather than only a footnote: a lone spike is
+  // the one point on a sparse series a reader is most likely to misread as
+  // the card's value.
+  const spikes = new Set(outliers(pts));
+  pts.forEach((p, i) => {
+    const odd = spikes.has(p);
+    add('circle', {
+      cx: x(i), cy: y(p.amount), r: odd ? 4.5 : 3,
+      fill: '#0e1016', stroke: odd ? '#f0b53c' : '#3987e5', 'stroke-width': 2,
+      'stroke-dasharray': odd ? '2 2' : 'none',
+    });
+  });
+
+  // Date axis: first and last only, so the labels never collide.
+  add('text', {
+    x: PAD_L, y: H - 8, fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-monospace, monospace',
+  }, pts[0].date);
+  add('text', {
+    x: W - PAD_R, y: H - 8, 'text-anchor': 'end',
+    fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-monospace, monospace',
+  }, pts[pts.length - 1].date);
+
+  // Emphasise the endpoint — it is the number the reader actually wants.
+  add('text', {
+    x: x(pts.length - 1), y: y(pts[pts.length - 1].amount) - 10, 'text-anchor': 'end',
+    fill: '#e8eaf2', 'font-size': 12, 'font-family': 'ui-monospace, monospace',
+  }, money(pts[pts.length - 1].amount, series.currency));
+
+  return svg;
+}
+
+/* ===================================================================
+   Search fallback — the corpus is finite, so let people say what it is.
+   =================================================================== */
+
+function runSearch(query) {
+  const box = $('search-results');
+  box.innerHTML = '';
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return;
+
+  const hits = CARDS.filter((c) => {
+    return c.name.toLowerCase().includes(q) ||
+      (c.number + '/' + c.printedTotal) === q ||
+      c.number.toLowerCase() === q ||
+      c.setName.toLowerCase().includes(q);
+  }).slice(0, 8);
+
+  for (const c of hits) {
+    box.appendChild(candidateButton({ card: c, score: null }, selectCard));
+  }
+  if (hits.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'note';
+    p.style.margin = '4px 0 0';
+    p.textContent = 'Nothing in the ' + CARDS.length + '-card offline corpus matches that. ' +
+      'The full app searches the complete catalogue over the network.';
+    box.appendChild(p);
+  }
+}
+
+/* ===================================================================
+   The scan
+   =================================================================== */
+
+const yieldToPaint = () => new Promise((r) => setTimeout(r, 16));
+
+async function loadImage(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    // Safari applies EXIF orientation when rendering an <img>, which is why
+    // the photo goes through an element rather than createImageBitmap.
+    img.decoding = 'sync';
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error('That file could not be read as an image.'));
+      img.src = url;
+    });
+    if (img.decode) { try { await img.decode(); } catch (e) { /* onload already fired */ } }
+    return img;
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+}
+
+/**
+ * When the page is allowed to pick a card for you.
+ *
+ * Two conditions, because the absolute score alone is a poor guide. Measured
+ * over forty hard photographs, correct top matches scored a median 0.808 and
+ * wrong ones 0.715 — overlapping enough that any single threshold either
+ * selects wrong cards or refuses right ones. The MARGIN separates them
+ * cleanly: a correct top match sits a median 0.035 clear of the runner-up, a
+ * wrong one only 0.006. A wrong card selected on your behalf shows wrong
+ * prices under a real name, which is worse than showing a list, so both
+ * conditions must hold.
+ */
+const CONFIDENT_MATCH = 0.72;
+const CONFIDENT_MARGIN = 0.010;
+
+function confidentPick(candidates) {
+  const top = candidates && candidates[0];
+  if (!top || top.score < CONFIDENT_MATCH) return false;
+  const second = candidates[1];
+  return !second || top.score - second.score >= CONFIDENT_MARGIN;
+}
+
+/**
+ * The whole pipeline for one photo, with no DOM in it.
+ *
+ * Kept free of rendering so the pile scan can run it over a stack of photos
+ * without the single-card view fighting it for the same elements.
+ */
+async function analyzePhoto(file, onStep) {
+  const step = onStep || (() => {});
+  step(0);
+  await yieldToPaint();
+  const img = await loadImage(file);
+  return analyzeSource(imageDataFromImg(img), onStep);
+}
+
+/** The pipeline from a decoded frame on, shared by the file and camera paths. */
+async function analyzeSource(source, onStep, opts) {
+  const step = onStep || (() => {});
+  const options = opts || {};
+
+  step(1);
+  await yieldToPaint();
+
+  let detection;
+  if (options.corners) {
+    const c = options.corners;
+    const w = (Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y) +
+               Math.hypot(c[2].x - c[3].x, c[2].y - c[3].y)) / 2;
+    const h = (Math.hypot(c[3].x - c[0].x, c[3].y - c[0].y) +
+               Math.hypot(c[2].x - c[1].x, c[2].y - c[1].y)) / 2;
+    detection = {
+      corners: c,
+      // A frame the user positioned says where they BELIEVE the card is, which
+      // is exactly what identification needs and exactly what a proportions
+      // measurement must not be built on. Marking it 'guide' is what makes the
+      // geometry signal abstain rather than measure the user's own rectangle
+      // and report it as the card's cut.
+      method: options.userPlaced ? 'guide' : 'contour',
+      confidence: options.userPlaced ? 0.5 : 0.8,
+      measuredAspect: h > 0 ? w / h : 0,
+    };
+  } else {
+    detection = detectCard(source);
+  }
+
+  step(2);
+  await yieldToPaint();
+
+  const { subject, inner, rigid } = classifySubject(source, detection);
+  const slab = rigid;
+  const sleeved = subject !== 'card';
+
+  // Inside a holder the outline found is the holder, and everything downstream
+  // wants the CARD — a perceptual hash of a slab resembles other slabs far
+  // more than it resembles the card inside it.
+  let cardCorners = detection.corners;
+  if (inner) {
+    cardCorners = inner.corners;
+  } else if (rigid) {
+    // Nothing separable inside a rigid holder: the card's position within one
+    // is fixed geometry, so fall back to that rather than hashing the holder.
+    cardCorners = slabCardQuad(detection.corners);
+  }
+
+  const rectified = rectifyCard(source, cardCorners, RECTIFIED_WIDTH, RECTIFIED_HEIGHT);
+
+  // Pixels across the card in the ORIGINAL photo. Rectification can upscale
+  // but cannot add detail the camera never captured, so this is the honest
+  // figure for gating resolution-dependent checks.
+  const [tl, tr, br, bl] = cardCorners;
+  const cardWidthPx = (Math.hypot(tr.x - tl.x, tr.y - tl.y) + Math.hypot(br.x - bl.x, br.y - bl.y)) / 2;
+
+  step(3);
+  await yieldToPaint();
+  const quality = assessQuality(rectified);
+
+  step(4);
+  await yieldToPaint();
+  const signals = [
+    geometrySignal({
+      measuredAspect: detection.measuredAspect,
+      detectionConfidence: detection.confidence,
+      method: detection.method,
+      subject,
+    }),
+    // Through plastic the print signal is reading a holder's surface as much
+    // as a card's, and it is the one check that can actively SUPPORT a card —
+    // so it must not hand out that support on evidence it did not really see.
+    subject !== 'card'
+      ? abstain('print', 'Print pattern', PRINT_WEIGHT, 'not_applicable',
+          'The card is inside a holder or sleeve. Plastic scatters the fine detail this check ' +
+          'reads, so nothing is concluded from it either way.')
+      : quality.tooBlurry ? blurAbstention() : printSignal(rectified, cardWidthPx),
+    visionUnavailable(),
+  ];
+
+  step(5);
+  await yieldToPaint();
+  const id = identify(rectified, 5);
+
+  const contextLimitations = [
+    'Identification here matches your photo against ' + CARDS.length + ' official card images ' +
+    'baked into this page. Matching artwork identifies which card this is; it says nothing ' +
+    'about whether the card is genuine, because a counterfeit copies the artwork exactly.',
+  ];
+  contextLimitations.push.apply(contextLimitations, quality.warnings);
+
+  if (slab) {
+    contextLimitations.push(
+      'The outline measured has the proportions of a grading holder. A slab covers the card\'s ' +
+      'edges and surface behind plastic, so several checks cannot see what they need to.'
+    );
+  }
+
+  const foreign = foreignPrinting(id.candidates[0]);
+  if (foreign) {
+    contextLimitations.push(
+      'The artwork matches a known card but the rest of the card does not, which usually means a ' +
+      'printing this offline build does not carry — a Japanese or other-language release, or a ' +
+      'reprint from a set outside the ones baked in.'
+    );
+  }
+
+  // Centering needs the identified card's layout, so it is measured lazily
+  // once a candidate has been chosen rather than here.
+  const frameArea = source.width * source.height;
+  const bx = cardCorners.map((c) => c.x), by = cardCorners.map((c) => c.y);
+  const fill = ((Math.max.apply(null, bx) - Math.min.apply(null, bx)) *
+                (Math.max.apply(null, by) - Math.min.apply(null, by))) / frameArea;
+
+  return {
+    detection, quality, cardWidthPx, slab, sleeved, subject, foreign,
+    rectifiedRaw: rectified,
+    centeringContext: {
+      subject,
+      userPlaced: !!options.userPlaced,
+      tooBlurry: quality.tooBlurry,
+      fill,
+    },
+    rectified: id.image,
+    halfTurned: id.halfTurned,
+    candidates: id.candidates,
+    report: buildReport(signals, contextLimitations),
+  };
+}
+
+/**
+ * Spot a printing that is not the one in the corpus.
+ *
+ * The artwork on a Pokemon card is shared across regions while the frame, the
+ * text and the typography are not, so a Japanese printing of a card hashes
+ * close on the art window and far on the whole card. That divergence is the
+ * one language signal available without reading any text — it cannot say WHICH
+ * language, only that this is not the English printing the prices describe.
+ *
+ * The same divergence appears for a reprint of the same art in a set outside
+ * the baked corpus, which is why the wording it drives says "a printing this
+ * build does not carry" rather than naming a region.
+ */
+function foreignPrinting(top) {
+  if (!top) return null;
+  if (top.art < 0.86 || top.full > 0.74) return null;
+  return { name: top.card.name, art: top.art, full: top.full };
+}
+
+function drawRectified(canvas, rectified) {
+  const dctx = canvas.getContext('2d');
+  const tmp = document.createElement('canvas');
+  tmp.width = rectified.width;
+  tmp.height = rectified.height;
+  tmp.getContext('2d').putImageData(rectified, 0, 0);
+  dctx.imageSmoothingQuality = 'high';
+  dctx.clearRect(0, 0, canvas.width, canvas.height);
+  dctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+}
+
+/**
+ * The capture readout.
+ *
+ * This is the part of the report a user can actually act on. Most scans come
+ * back inconclusive because the photo limited what could be measured, not
+ * because anything is wrong with the card, and a verdict that says so without
+ * showing which measurement fell short leaves nothing to do about it.
+ */
+function renderQuality(result) {
+  const q = result.quality;
+  const readings = [
+    {
+      k: 'Sharpness',
+      v: String(q.sharpness),
+      ok: !q.tooBlurry,
+      note: 'needs ' + QUALITY_THRESHOLDS.sharpness + '+',
+    },
+    {
+      k: 'Glare',
+      v: (q.glareFraction * 100).toFixed(1) + '%',
+      ok: !q.hasGlare,
+      note: 'under ' + (QUALITY_THRESHOLDS.glareFraction * 100) + '%',
+    },
+    {
+      k: 'Card width',
+      v: String(Math.round(result.cardWidthPx)) + 'px',
+      ok: result.cardWidthPx >= RESOLUTION_TIERS.print,
+      note: RESOLUTION_TIERS.print + '+ for print check',
+    },
+  ];
+
+  const box = $('quality-figures');
+  box.innerHTML = '';
+  for (const r of readings) {
+    const div = document.createElement('div');
+    div.className = 'figure';
+    const k = document.createElement('div');
+    k.className = 'k';
+    k.textContent = r.k;
+    const v = document.createElement('div');
+    v.className = 'v';
+    v.style.color = r.ok ? 'var(--good)' : 'var(--warn)';
+    v.textContent = r.v;
+    const n = document.createElement('div');
+    n.className = 'k';
+    n.style.cssText = 'letter-spacing:0;text-transform:none;margin-top:3px';
+    n.textContent = r.note;
+    div.appendChild(k); div.appendChild(v); div.appendChild(n);
+    box.appendChild(div);
+  }
+
+  const failing = readings.filter((r) => !r.ok);
+  $('quality-intro').textContent = failing.length === 0
+    ? 'The photo cleared every capture threshold, so nothing below was limited by the image itself.'
+    : 'These readings decide which checks are allowed to run at all. ' +
+      failing.map((r) => r.k.toLowerCase()).join(' and ') +
+      (failing.length === 1 ? ' fell short' : ' fell short') + ' on this photo.';
+
+  const advice = $('quality-advice');
+  advice.innerHTML = '';
+  const tips = q.warnings.slice();
+  if (result.cardWidthPx < RESOLUTION_TIERS.print) {
+    tips.push(
+      'The card covered about ' + Math.round(result.cardWidthPx) + ' pixels across its short edge. ' +
+      'The halftone check needs ' + RESOLUTION_TIERS.print + ', which in practice means filling ' +
+      'the frame with the card. It is the only check here that can actively support a card, so ' +
+      'it is worth another photo taken closer in.'
+    );
+  }
+  if (result.halfTurned) {
+    tips.push('The card was upside down or on its side in the photo; it has been turned the right way up here.');
+  }
+  if (result.capture && result.capture.retries > 0) {
+    tips.push(
+      'The viewfinder discarded ' + result.capture.retries +
+      (result.capture.retries === 1 ? ' earlier frame' : ' earlier frames') +
+      ' for being too soft before accepting this one.'
+    );
+  }
+  for (const t of tips) {
+    const li = document.createElement('li');
+    li.textContent = t;
+    advice.appendChild(li);
+  }
+}
+
+function renderSingle(result) {
+  LAST_RESULT = result;
+
+  // Offer the manual frame only where it can help: on a photo, where the quad
+  // came from detection and might be wrong. A live capture has already been
+  // gated on framing, and a frame the user placed themselves needs no offer.
+  const canReframe = !!(ALIGN.source && ALIGN.autoFramed);
+  $('sec-reframe').hidden = !canReframe;
+  if (canReframe) {
+    $('reframe-note').textContent = confidentPick(result.candidates)
+      ? 'The card\'s edges were found automatically.'
+      : 'The card\'s edges were found automatically — if the match below looks wrong, the frame ' +
+        'is the usual reason.';
+  }
+  drawRectified($('rectified'), result.rectified);
+  renderReport(result.report);
+  renderQuality(result);
+
+  const candidates = result.candidates;
+  const top = candidates[0];
+  const confident = confidentPick(candidates) && !result.foreign;
+
+  $('id-intro').textContent = result.foreign
+    ? 'The artwork matches ' + result.foreign.name + ', but the rest of the card does not — see ' +
+      'the note below before trusting any price here.'
+    : confident
+      ? 'Closest matches in the offline corpus. Tap the right one to see its prices — the top ' +
+        'result is a best guess, not a certainty.'
+      : 'No confident match. Photo lighting and holo glare move these scores a lot, so check the ' +
+        'list, and search if the card is not there.';
+
+  const list = $('candidates');
+  list.innerHTML = '';
+  candidates.forEach((entry, i) => {
+    const btn = candidateButton(entry, selectCard);
+    list.appendChild(btn);
+    if (i === 0 && confident) selectCard(entry.card, btn);
+  });
+
+  if (!confident) {
+    $('sec-price').hidden = true;
+    $('sec-history').hidden = true;
+    $('sec-centering').hidden = true;
+  }
+
+  renderVariantNotes(result);
+}
+
+/**
+ * What was recognised about the card OBJECT, as opposed to which card it is.
+ *
+ * Both findings here change what a price means, which is why they sit above
+ * the prices rather than in the footnotes: a graded copy and a raw copy of the
+ * same card are different products at different money, and an English price is
+ * simply the wrong number for a Japanese printing.
+ */
+function renderVariantNotes(result) {
+  const sec = $('sec-variant');
+  const box = $('variant-notes');
+  box.innerHTML = '';
+  const notes = [];
+
+  if (!result.slab && result.sleeved) {
+    notes.push({
+      tone: 'warn',
+      title: 'The card is in a sleeve or toploader',
+      body:
+        'A second, card-shaped edge sits inside the outline this photo found, which means the ' +
+        'outer edge belongs to something the card is in rather than to the card. That matters: ' +
+        'a toploader measures about 5% off a bare card\'s proportions, close enough to be read ' +
+        'as a trimmed card if nothing noticed the plastic. The proportions and print checks ' +
+        'stand down instead, and the card inside has been cropped out for identification.',
+    });
+  }
+
+  if (result.slab) {
+    notes.push({
+      tone: 'warn',
+      title: 'This looks like a graded slab',
+      body:
+        'The outline measured matches a grading holder rather than a bare card. Two things ' +
+        'follow. The proportions check stands down, because a holder hides the card\'s own ' +
+        'edges — so a graded card is never accused of being mis-cut here. And the prices below, ' +
+        'if any, are for the RAW card: a graded copy is a different product and sells for a ' +
+        'different amount, often several times more at the top grades. This page cannot read ' +
+        'the grade off the label, and the price sources it uses carry no graded listings at ' +
+        'all, so it will not guess at a graded value.',
+    });
+  }
+
+  if (result.foreign) {
+    notes.push({
+      tone: 'warn',
+      title: 'Not the English printing',
+      body:
+        'The artwork matches ' + result.foreign.name + ' closely (' +
+        Math.round(result.foreign.art * 100) + '%) while the card as a whole does not (' +
+        Math.round(result.foreign.full * 100) + '%). Artwork is shared across regions; frames, ' +
+        'text and typography are not. That points to a Japanese or other-language release, or a ' +
+        'reprint from a set outside the ones baked into this page. Prices are deliberately not ' +
+        'shown: every figure here is an English-market asking price, and quoting it for another ' +
+        'region would be the wrong number rather than an approximate one.',
+    });
+  }
+
+  sec.hidden = notes.length === 0;
+  for (const n of notes) {
+    const div = document.createElement('div');
+    div.style.cssText = 'margin-top:12px';
+    const h = document.createElement('div');
+    h.className = 'sig-name';
+    h.style.color = 'var(--' + n.tone + ')';
+    h.textContent = n.title;
+    const p = document.createElement('p');
+    p.className = 'note';
+    p.style.margin = '5px 0 0';
+    p.textContent = n.body;
+    div.appendChild(h);
+    div.appendChild(p);
+    box.appendChild(div);
+  }
+}
+
+function collapseCapture() {
+  // After a scan the results are the page, and a card-sized target sitting
+  // above them is just distance to scroll. The live viewfinder is the
+  // exception: it stays, because it is still scanning.
+  if (CAM.running) return;
+  $('capture-target').hidden = true;
+  $('btn-library').hidden = true;
+  $('btn-bulk').hidden = true;
+  $('btn-reset').hidden = false;
+}
+
+async function scan(file) {
+  $('sec-error').hidden = true;
+  $('results').hidden = true;
+  $('sec-bulk').hidden = true;
+  $('sec-progress').hidden = false;
+
+  try {
+    const result = await analyzePhoto(file, renderSteps);
+    renderSingle(result);
+
+    $('sec-progress').hidden = true;
+    collapseCapture();
+    $('results').hidden = false;
+    $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    $('sec-progress').hidden = true;
+    $('sec-error').hidden = false;
+    $('error-text').textContent = (err && err.message) || String(err);
+  }
+}
+
+/* ===================================================================
+   Pile scan: many photos, ranked by what they are worth.
+
+   The ordering rule matters more than it looks. A card that could not be
+   priced sorts last rather than as zero — "we could not value this" and
+   "this is worthless" are different statements, and collapsing them would
+   bury the one card in the pile worth picking out.
+   =================================================================== */
+
+async function runBulk(files) {
+  $('sec-error').hidden = true;
+  $('results').hidden = true;
+  $('sec-bulk').hidden = true;
+  $('sec-progress').hidden = false;
+
+  const rows = [];
+
+  try {
+    for (let i = 0; i < files.length; i++) {
+      renderBulkProgress(i, files.length);
+      await yieldToPaint();
+
+      let result = null;
+      try {
+        result = await analyzePhoto(files[i]);
+      } catch {
+        // One unreadable photo must not lose the rest of the pile.
+      }
+
+      const top = result && result.candidates[0];
+      const card = result && confidentPick(result.candidates) ? top.card : null;
+      rows.push({
+        file: files[i].name,
+        card,
+        match: top ? top.score : 0,
+        value: card ? bestValue(card) : null,
+      });
+    }
+
+    rows.sort((a, b) => {
+      if (a.value === null && b.value === null) return b.match - a.match;
+      if (a.value === null) return 1;
+      if (b.value === null) return -1;
+      return b.value.amount - a.value.amount;
+    });
+
+    renderBulk(rows);
+    $('sec-progress').hidden = true;
+    collapseCapture();
+    $('sec-bulk').hidden = false;
+    $('sec-bulk').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    $('sec-progress').hidden = true;
+    $('sec-error').hidden = false;
+    $('error-text').textContent = (err && err.message) || String(err);
+  }
+}
+
+/** Near Mint asking price where there is one, else the marketplace headline. */
+function bestValue(card) {
+  if (card.conditions) {
+    const nm = card.conditions.rows.find((r) => r.condition === 'NM');
+    if (nm) return { amount: nm.median, currency: 'USD', basis: 'NM asking, median' };
+  }
+  if (card.headline) {
+    return { amount: card.headline.amount, currency: card.headline.currency, basis: card.headline.source };
+  }
+  return null;
+}
+
+function renderBulkProgress(index, total) {
+  const ol = $('steps');
+  ol.innerHTML = '';
+  const li = document.createElement('li');
+  li.dataset.state = 'running';
+  li.innerHTML = '<span class="tick">▸</span><span></span>';
+  li.lastChild.textContent = 'Photo ' + (index + 1) + ' of ' + total;
+  ol.appendChild(li);
+}
+
+function renderBulk(rows) {
+  const priced = rows.filter((r) => r.value !== null);
+  const total = priced.reduce((sum, r) => sum + r.value.amount, 0);
+
+  $('bulk-intro').textContent =
+    rows.length + ' photos, ' + priced.length + ' identified confidently enough to price. ' +
+    (priced.length > 0
+      ? 'Ranked by Near Mint asking price — the top of this list is what to look at first.'
+      : 'None matched the offline corpus confidently, so none could be priced.');
+
+  const list = $('bulk-list');
+  list.innerHTML = '';
+
+  rows.forEach((r, i) => {
+    const li = document.createElement('li');
+    if (!r.card) li.className = 'unknown';
+
+    const rank = document.createElement('span');
+    rank.className = 'rank';
+    rank.textContent = String(i + 1);
+    li.appendChild(rank);
+
+    if (r.card) {
+      const img = document.createElement('img');
+      img.src = 'data:image/webp;base64,' + r.card.thumb;
+      img.alt = '';
+      li.appendChild(img);
+    }
+
+    const who = document.createElement('div');
+    who.className = 'who';
+    const nm = document.createElement('div');
+    nm.className = 'nm';
+    nm.textContent = r.card ? r.card.name : 'Not identified';
+    const mt = document.createElement('div');
+    mt.className = 'mt';
+    mt.textContent = r.card
+      ? r.card.setName + ' · ' + r.card.number + '/' + r.card.printedTotal
+      : r.file + ' · best guess ' + Math.round(r.match * 100) + '%';
+    who.appendChild(nm);
+    who.appendChild(mt);
+    li.appendChild(who);
+
+    const val = document.createElement('div');
+    val.className = 'val';
+    if (r.value) {
+      val.innerHTML = '<span></span><small></small>';
+      val.firstChild.textContent = money(r.value.amount, r.value.currency);
+      val.lastChild.textContent = r.value.basis;
+    } else {
+      val.textContent = '—';
+    }
+    li.appendChild(val);
+
+    list.appendChild(li);
+  });
+
+  $('bulk-foot').textContent = priced.length > 0
+    ? 'Identified cards total ' + money(total, 'USD') + ' at Near Mint asking prices. Real cards ' +
+      'are rarely Near Mint and asking prices are not sale prices, so treat this as an upper ' +
+      'bound for triage rather than a valuation. Tap Scan another card to look at one properly.'
+    : 'Photograph each card straight on and filling the frame; the pile scan uses the same ' +
+      'matching as a single scan and is just as sensitive to framing.';
+}
+
+/* ===================================================================
+   Live viewfinder with an alignment frame and automatic capture.
+
+   The frame is not decoration. Framing is the single biggest lever on
+   whether any of the checks downstream can run at all: the halftone check
+   needs about 1400 pixels across the card, which on a tablet only happens
+   when the card genuinely fills the frame. Asking the user to fill a
+   card-shaped guide is how that gets met.
+
+   The guide is drawn at the video's own aspect ratio with object-fit
+   contain, so what you see is exactly what is captured — no hidden crop
+   between the preview and the frame that gets analysed.
+   =================================================================== */
+
+const CAM = {
+  stream: null,
+  track: null,
+  timer: null,
+  running: false,
+  guide: null,
+  prevLuma: null,
+  sharpPeak: 0,
+  goodFrames: 0,
+  window: [],
+  focusRing: [],
+  stillRing: [],
+  stillSince: 0,
+  wasStill: false,
+  last: null,
+  framesSeen: 0,
+  retries: 0,
+  autoDisabled: false,
+  armed: true,
+  clearFrames: 0,
+  lastCaptureFingerprint: null,
+  preflight: 'maybe',
+  lastState: '',
+  firing: false,
+};
+
+/** Working width for the live loop. Small enough to stay smooth at 8fps. */
+const SCOUT_W = 320;
+
+/** Locked frames needed inside the window before it fires. */
+const STABLE_FRAMES = 4;
+
+/** How many recent frames that count is taken over. */
+const LOCK_WINDOW = 6;
+
+/** Frames the loop must have seen at all before a plateau means anything. */
+const MIN_FRAMES_BEFORE_LOCK = 8;
+
+/**
+ * Stillness is a vote over a window rather than a run, and the window is wide
+ * enough that a hand which drifts and corrects still counts as still. A
+ * narrower window flapped between "moving" and "settled" on a card held
+ * perfectly normally, and the focus gate below it could never be reached.
+ */
+const STILL_WINDOW = 10;
+const STILL_MOVING = 5;
+const STILL_BEFORE_FOCUS = 6;
+
+/** How many focus readings the plateau test looks back over. */
+const FOCUS_RING = 15;
+
+/**
+ * Live-loop thresholds.
+ *
+ * Sharpness is judged RELATIVE to the best this session has seen rather than
+ * against a fixed number: Laplacian variance scales with resolution and with
+ * how much detail the subject happens to carry, so a fixed floor either fires
+ * on a soft frame of a busy card or never fires on a clean frame of a plain
+ * one. Watching it rise and plateau is how you detect autofocus converging
+ * when the platform will not tell you.
+ */
+const LIVE = {
+  fillMin: 0.72,        // of the guide's area — filling the guide is what buys resolution
+  fillMax: 1.20,
+  offsetMax: 0.08,      // centre drift, as a fraction of guide width
+  aspectTol: 0.08,      // foreshortening on an un-rectified quad eats the 3% nominal budget
+  motionMax: 0.012,     // fraction of pixels that changed by more than MOTION_DELTA
+  motionExit: 0.025,    // hysteresis, so a borderline hand does not flicker the state
+  sharpRatio: 0.90,     // of the recent peak
+  // Spread across recent focus readings. A hand holding a card produces about
+  // ten percent of natural variation between frames; a lens actually hunting
+  // swings several times that, so this separates the two without demanding a
+  // stillness no one can hold.
+  sharpSpread: 0.16,
+  lumMin: 60,
+  lumMax: 205,
+};
+
+/** Per-pixel luma change that counts as movement, after mean-levelling. */
+const MOTION_DELTA = 16;
+
+/** Working width for the motion plane. Deliberately coarse — see scoutFrame. */
+const MOTION_W = 128;
+
+/** Box-average a luma plane down, subtracting the frame mean as it goes. */
+function downsampleLuma(luma, w, h, outW, mean) {
+  const outH = Math.max(1, Math.round((h / w) * outW));
+  const out = new Float32Array(outW * outH);
+  for (let oy = 0; oy < outH; oy++) {
+    const y0 = Math.floor((oy * h) / outH);
+    const y1 = Math.max(y0 + 1, Math.floor(((oy + 1) * h) / outH));
+    for (let ox = 0; ox < outW; ox++) {
+      const x0 = Math.floor((ox * w) / outW);
+      const x1 = Math.max(x0 + 1, Math.floor(((ox + 1) * w) / outW));
+      let sum = 0, n = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) { sum += luma[y * w + x]; n++; }
+      }
+      out[oy * outW + ox] = sum / n - mean;
+    }
+  }
+  return out;
+}
+
+/**
+ * Bands that must be readable for the rest of the pipeline to mean anything,
+ * as fractions of the rectified card's height. Glare in the art window is not
+ * disqualifying — that is where holo foil legitimately lives, and it costs
+ * identification nothing.
+ */
+const CRITICAL_BANDS = [
+  { y0: 0.03, y1: 0.13 },   // name and HP
+  { y0: 0.62, y1: 0.86 },   // attacks and rules text
+  { y0: 0.90, y1: 0.98 },   // set symbol and collector number
+];
+
+/** Live rectification size for the glare and focus passes. */
+const LIVE_RECT_W = 256;
+const LIVE_RECT_H = Math.round(LIVE_RECT_W / CARD_ASPECT);
+const TILE_X = 8, TILE_Y = 11;
+
+const HINTS = {
+  searching: ['Line the card up inside the frame', ''],
+  far: ['Move closer — fill the frame', 'warn'],
+  near: ['Move back a little', 'warn'],
+  bright: ['Too bright — move away from the lamp', 'warn'],
+  centre: ['Centre the card in the frame', 'warn'],
+  skew: ['Hold the card flat and square on', 'warn'],
+  dark: ['More light — it is too dark to read', 'warn'],
+  glare: ['Tilt the card — move the shine off the text', 'warn'],
+  moving: ['Hold still', 'ready'],
+  focusing: ['Focusing…', 'ready'],
+  locked: ['Hold it — capturing', 'locked'],
+  scanned: ['Read it — show me the next card', 'locked'],
+};
+
+/** Frames the card must be absent before another read is allowed. */
+const REARM_CLEAR_FRAMES = 6;
+
+/** States that mean no card is properly in the frame. */
+const CARD_ABSENT = new Set(['searching', 'far', 'near', 'skew']);
+
+/** Below this similarity to the card just read, it is a different card. */
+const SAME_CARD_CORRELATION = 0.92;
+
+function similarity(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let ma = 0, mb = 0;
+  for (let i = 0; i < a.length; i++) { ma += a[i]; mb += b[i]; }
+  ma /= a.length; mb /= b.length;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i] - ma, y = b[i] - mb;
+    num += x * y; da += x * x; db += y * y;
+  }
+  const den = Math.sqrt(da * db);
+  return den > 0 ? num / den : 0;
+}
+
+function camSupported() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
+/**
+ * Find out whether a camera is even possible before offering one.
+ *
+ * This page is designed to run inside an iframe it does not control. If the
+ * embedder has not granted camera permission, getUserMedia rejects — and a
+ * button that always fails is worse than no button, because the user cannot
+ * tell whether they did something wrong. Where the answer is knowable up
+ * front, the interface simply leads with the photo route instead.
+ *
+ * One case stays undetectable: an iframe without allow-same-origin reports
+ * the permission as available and still throws SecurityError on the call.
+ * That is why the error branch below exists as well as this check.
+ */
+async function cameraPreflight() {
+  if (!camSupported()) return 'unsupported';
+
+  const policy = document.featurePolicy || document.permissionsPolicy;
+  try {
+    if (policy && typeof policy.allowsFeature === 'function' && !policy.allowsFeature('camera')) {
+      return 'blocked-by-policy';
+    }
+  } catch { /* not implemented here; fall through to the permission query */ }
+
+  try {
+    const status = await navigator.permissions.query({ name: 'camera' });
+    if (status.state === 'denied') return 'denied';
+  } catch { /* Firefox rejects this query name outright — treat as unknown */ }
+
+  return 'maybe';
+}
+
+/**
+ * Ask for the highest resolution the device will give.
+ *
+ * A live video track is normally far lower resolution than the still camera,
+ * and that is exactly what starves the resolution-gated checks, so the ideal
+ * is set deliberately high and whatever the platform actually grants is
+ * reported back to the user rather than assumed.
+ */
+async function openCamera() {
+  // Every constraint is `ideal`, never `exact`: ideal values are clamped to
+  // what the device can do rather than rejected, so this request structurally
+  // cannot throw OverconstrainedError. The pair is 4:3 to match the sensor —
+  // asking for a ratio the camera has no format for can silently drop the
+  // negotiation onto the smallest default preset with no error at all.
+  const attempts = [
+    {
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 4096 },
+        height: { ideal: 3072 },
+        frameRate: { ideal: 30 },
+      },
+    },
+    { audio: false, video: { facingMode: { ideal: 'environment' } } },
+    { audio: false, video: true },
+  ];
+
+  let lastErr = null;
+  for (const constraints of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      lastErr = err;
+      // A refusal is final — looser constraints only re-prompt for the same no.
+      if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError' ||
+                  err.name === 'NotFoundError')) throw err;
+    }
+  }
+  throw lastErr || new Error('No camera available');
+}
+
+function cameraFailureMessage(err) {
+  const name = (err && err.name) || '';
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return 'The camera was blocked. That is usually the page being embedded without camera ' +
+      'permission, or the permission being declined. Use the photo button instead — it opens ' +
+      'your camera app, which also takes a much higher resolution picture.';
+  }
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+    return 'No usable camera was found on this device. Use the photo button instead.';
+  }
+  if (name === 'NotReadableError') {
+    return 'The camera is already in use by another app. Close it and try again, or use the ' +
+      'photo button.';
+  }
+  return 'The live camera could not be started (' + (name || 'unknown error') + '). Use the ' +
+    'photo button instead.';
+}
+
+/** Guide rectangle in VIDEO pixel coordinates. */
+function computeGuide(vw, vh) {
+  let h = vh * 0.82;
+  let w = h * CARD_ASPECT;
+  if (w > vw * 0.92) {
+    w = vw * 0.92;
+    h = w / CARD_ASPECT;
+  }
+  return { x: (vw - w) / 2, y: (vh - h) / 2, w, h, vw, vh };
+}
+
+function drawOverlay(guide, tone) {
+  const g = guide;
+  const stroke = tone === 'locked' ? '#3fc584' : tone === 'ready' ? '#f5c518' : tone === 'warn' ? '#f0b53c' : '#6b7189';
+  const r = Math.round(g.w * 0.035);
+  const arm = Math.round(g.w * 0.16);
+  const sw = Math.max(2, Math.round(g.w * 0.008));
+
+  // Corner brackets rather than a full box: they read as an alignment target
+  // instead of a border, and they leave the card's own edges visible so the
+  // user can see when the two line up.
+  const corners = [
+    `M${g.x} ${g.y + arm} L${g.x} ${g.y + r} Q${g.x} ${g.y} ${g.x + r} ${g.y} L${g.x + arm} ${g.y}`,
+    `M${g.x + g.w - arm} ${g.y} L${g.x + g.w - r} ${g.y} Q${g.x + g.w} ${g.y} ${g.x + g.w} ${g.y + r} L${g.x + g.w} ${g.y + arm}`,
+    `M${g.x + g.w} ${g.y + g.h - arm} L${g.x + g.w} ${g.y + g.h - r} Q${g.x + g.w} ${g.y + g.h} ${g.x + g.w - r} ${g.y + g.h} L${g.x + g.w - arm} ${g.y + g.h}`,
+    `M${g.x + arm} ${g.y + g.h} L${g.x + r} ${g.y + g.h} Q${g.x} ${g.y + g.h} ${g.x} ${g.y + g.h - r} L${g.x} ${g.y + g.h - arm}`,
+  ];
+
+  $('overlay').setAttribute('viewBox', `0 0 ${g.vw} ${g.vh}`);
+  $('overlay').innerHTML =
+    '<defs><mask id="cut">' +
+      `<rect width="${g.vw}" height="${g.vh}" fill="#fff"/>` +
+      `<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="${r}" fill="#000"/>` +
+    '</mask></defs>' +
+    `<rect width="${g.vw}" height="${g.vh}" fill="rgba(8,9,13,0.55)" mask="url(#cut)"/>` +
+    `<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="${r}" fill="none" ` +
+      `stroke="${stroke}" stroke-opacity="0.35" stroke-width="${sw}"/>` +
+    corners.map((d) => `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${sw * 2}" stroke-linecap="round"/>`).join('');
+}
+
+function setHint(state) {
+  const [text, tone] = HINTS[state] || HINTS.searching;
+  const el = $('cam-hint');
+  el.textContent = text;
+  if (tone) el.dataset.tone = tone; else delete el.dataset.tone;
+
+  // The first hint is shown before the video has reported its dimensions, so
+  // there is no guide to draw on yet. Leaving lastState unset means the first
+  // tick that does have one redraws rather than skipping as a repeat.
+  if (state !== CAM.lastState && CAM.guide) {
+    drawOverlay(CAM.guide, tone || '');
+    CAM.lastState = state;
+  }
+}
+
+/** Luma plane plus the frame-level measurements the state machine gates on. */
+function scoutFrame(video, scout) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const w = SCOUT_W;
+  const h = Math.max(1, Math.round((vh / vw) * w));
+  scout.canvas.width = w;
+  scout.canvas.height = h;
+  scout.ctx.drawImage(video, 0, 0, w, h);
+  const img = scout.ctx.getImageData(0, 0, w, h);
+
+  const k = w / vw;
+  const g = CAM.guide;
+  const gx = Math.max(0, Math.round(g.x * k));
+  const gy = Math.max(0, Math.round(g.y * k));
+  const gw = Math.min(w - gx, Math.round(g.w * k));
+  const gh = Math.min(h - gy, Math.round(g.h * k));
+
+  const luma = new Float32Array(w * h);
+  let sum = 0;
+  for (let i = 0, p = 0; i < luma.length; i++, p += 4) {
+    luma[i] = 0.299 * img.data[p] + 0.587 * img.data[p + 1] + 0.114 * img.data[p + 2];
+    sum += luma[i];
+  }
+  const mean = sum / luma.length;
+
+  // Motion is measured on a much coarser plane, and AFTER levelling each frame
+  // to its own mean.
+  //
+  // The coarseness is not an optimisation. At the detection working size a
+  // single pixel of hand tremor lands as a large change along every printed
+  // edge on the card — measured, an intentional one-pixel jitter moved 5% of
+  // pixels, five times the stillness threshold, so the trigger could never
+  // fire. Averaging down to 128px first makes the measure track whether the
+  // CARD moved rather than whether its edges resampled.
+  //
+  // The mean-levelling handles the other direction: an auto-exposure or
+  // auto-white-balance ramp shifts every pixel at once and would otherwise
+  // read as movement, so the trigger would wait for a stillness that cannot
+  // arrive until the camera settles — which is precisely when it is settling.
+  const coarse = downsampleLuma(luma, w, h, MOTION_W, mean);
+
+  // What counts as movement scales with how much contrast the scene carries.
+  //
+  // A fixed threshold makes stillness a property of the CARD rather than of
+  // the hand: measured, an identical one-pixel tremor cleared the gate on a
+  // muted card and failed it continuously on a bright high-contrast one,
+  // because a sub-pixel shift moves a strong edge much further in luma than a
+  // weak one. The scanner would then read one card and sit in "hold still"
+  // forever on the next. Scaling by the frame's own spread makes it mean
+  // "moved relative to what is there to move".
+  let spread = 0;
+  for (let i = 0; i < coarse.length; i++) spread += coarse[i] * coarse[i];
+  spread = Math.sqrt(spread / coarse.length);
+  const delta = Math.max(MOTION_DELTA, 0.35 * spread);
+
+  let motion = Infinity;
+  if (CAM.prevLuma && CAM.prevLuma.length === coarse.length) {
+    let changed = 0;
+    for (let i = 0; i < coarse.length; i++) {
+      if (Math.abs(coarse[i] - CAM.prevLuma[i]) > delta) changed++;
+    }
+    motion = changed / coarse.length;
+  }
+  CAM.prevLuma = coarse;
+
+  return { img, w, h, k, guide: { gx, gy, gw, gh }, motion, frameMean: mean };
+}
+
+/**
+ * Focus and glare, measured on the card itself rather than on the frame.
+ *
+ * Both have to be read from a rectified card or they measure the wrong thing.
+ * Focus taken over the whole guide is dominated by foil sparkle in the art
+ * window, which scores as razor sharp while the text underneath is mush — so
+ * it is read from the name band and the border instead. Glare is not
+ * "brightness": a white-bordered vintage card and a gold Trainer Gallery card
+ * are bright and perfectly readable. Glare is bright AND locally
+ * information-free, which is what the flatness term below tests.
+ */
+function inspectCard(scout, corners) {
+  const rect = rectifyCard(scout.img, corners, LIVE_RECT_W, LIVE_RECT_H);
+  const d = rect.data;
+  const W = LIVE_RECT_W, H = LIVE_RECT_H;
+
+  const lum = new Float32Array(W * H);
+  for (let i = 0, p = 0; i < lum.length; i++, p += 4) {
+    lum[i] = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+  }
+
+  // --- focus: the name band, where the printing is finest and flattest ---
+  const y0 = Math.round(0.03 * H), y1 = Math.round(0.13 * H);
+  let s = 0, ss = 0, n = 0, is = 0, iss = 0;
+  for (let y = y0 + 1; y < y1 - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x;
+      const r = -4 * lum[i] + lum[i - 1] + lum[i + 1] + lum[i - W] + lum[i + W];
+      s += r; ss += r * r; n++;
+      is += lum[i]; iss += lum[i] * lum[i];
+    }
+  }
+  const lapVar = n > 0 ? ss / n - (s / n) ** 2 : 0;
+  const intensityStd = n > 0 ? Math.sqrt(Math.max(0, iss / n - (is / n) ** 2)) : 1;
+  // Normalising by the band's own contrast keeps the figure comparable between
+  // a dark card and a pale one.
+  const focus = lapVar / Math.max(8, intensityStd);
+
+  // --- glare: flat, blown tiles, weighted by where they land ---
+  const tw = Math.floor(W / TILE_X), th = Math.floor(H / TILE_Y);
+  const flat = new Float32Array(TILE_X * TILE_Y);
+  const clip = new Float32Array(TILE_X * TILE_Y);
+  const dead = new Uint8Array(TILE_X * TILE_Y);
+
+  for (let ty = 0; ty < TILE_Y; ty++) {
+    for (let tx = 0; tx < TILE_X; tx++) {
+      let grad = 0, cl = 0, ls = 0, lss = 0, m = 0;
+      for (let y = ty * th + 1; y < (ty + 1) * th - 1; y++) {
+        for (let x = tx * tw + 1; x < (tx + 1) * tw - 1; x++) {
+          const i = y * W + x;
+          grad += Math.abs(lum[i + 1] - lum[i - 1]) + Math.abs(lum[i + W] - lum[i - W]);
+          const p = i * 4;
+          if (Math.min(d[p], d[p + 1], d[p + 2]) >= 250) cl++;
+          ls += lum[i]; lss += lum[i] * lum[i];
+          m++;
+        }
+      }
+      const t = ty * TILE_X + tx;
+      flat[t] = m > 0 ? grad / m : 0;
+      clip[t] = m > 0 ? cl / m : 0;
+      const mu = m > 0 ? ls / m : 0;
+      const sd = m > 0 ? Math.sqrt(Math.max(0, lss / m - mu * mu)) : 0;
+      // A tile that is both very bright and almost featureless is blown,
+      // whatever its hue — this branch is what catches the saturated rainbow
+      // diffraction that a plain low-saturation test misses entirely.
+      dead[t] = mu > 240 && sd < 6 ? 1 : 0;
+    }
+  }
+
+  const sortedFlat = Array.from(flat).sort((a, b) => a - b);
+  const medianFlat = sortedFlat[sortedFlat.length >> 1] || 0;
+
+  const glareTile = new Uint8Array(TILE_X * TILE_Y);
+  for (let t = 0; t < glareTile.length; t++) {
+    glareTile[t] = flat[t] < 0.25 * medianFlat && (clip[t] > 0.02 || dead[t]) ? 1 : 0;
+  }
+
+  // Score by the largest contiguous blob and by what it covers, never by a
+  // total count: foil sparkle scatters hundreds of harmless specks, and any
+  // count threshold either rejects every holo card or waves through a blob
+  // sitting squarely on the set symbol.
+  const seen = new Uint8Array(glareTile.length);
+  let largest = 0;
+  for (let t = 0; t < glareTile.length; t++) {
+    if (!glareTile[t] || seen[t]) continue;
+    const stack = [t];
+    seen[t] = 1;
+    let size = 0;
+    while (stack.length) {
+      const c = stack.pop();
+      size++;
+      const cx = c % TILE_X, cy = (c - cx) / TILE_X;
+      const nb = [];
+      if (cx > 0) nb.push(c - 1);
+      if (cx < TILE_X - 1) nb.push(c + 1);
+      if (cy > 0) nb.push(c - TILE_X);
+      if (cy < TILE_Y - 1) nb.push(c + TILE_X);
+      for (const q of nb) if (glareTile[q] && !seen[q]) { seen[q] = 1; stack.push(q); }
+    }
+    largest = Math.max(largest, size);
+  }
+
+  let criticalTiles = 0, criticalGlare = 0;
+  for (let ty = 0; ty < TILE_Y; ty++) {
+    const bandY = (ty + 0.5) / TILE_Y;
+    if (!CRITICAL_BANDS.some((b) => bandY >= b.y0 && bandY <= b.y1)) continue;
+    for (let tx = 0; tx < TILE_X; tx++) {
+      criticalTiles++;
+      if (glareTile[ty * TILE_X + tx]) criticalGlare++;
+    }
+  }
+
+  const meanLum = lum.reduce((a, b) => a + b, 0) / lum.length;
+
+  // A coarse fingerprint of whatever is in the frame, so the loop can tell
+  // "still the same card" from "a different card".
+  const fp = new Float32Array(TILE_X * TILE_Y);
+  for (let ty = 0; ty < TILE_Y; ty++) {
+    for (let tx = 0; tx < TILE_X; tx++) {
+      let sum = 0, n = 0;
+      for (let y = ty * th; y < (ty + 1) * th; y += 2) {
+        for (let x = tx * tw; x < (tx + 1) * tw; x += 2) { sum += lum[y * W + x]; n++; }
+      }
+      fp[ty * TILE_X + tx] = n ? sum / n : 0;
+    }
+  }
+
+  return {
+    focus,
+    meanLum,
+    fingerprint: fp,
+    glareLargest: largest / glareTile.length,
+    glareCritical: criticalTiles > 0 ? criticalGlare / criticalTiles : 0,
+  };
+}
+
+/**
+ * Decide what the user should do, or that it is time to fire.
+ *
+ * Gates are ANDed and short-circuit in order, so the coaching message is
+ * always about the ONE thing most worth fixing rather than a list.
+ */
+function assessFrame(f) {
+  const det = detectCard(f.img);
+  CAM.last = null;
+
+  if (det.method !== 'contour' || det.confidence < 0.4) return 'searching';
+
+  const xs = det.corners.map((c) => c.x);
+  const ys = det.corners.map((c) => c.y);
+  const qw = Math.max.apply(null, xs) - Math.min.apply(null, xs);
+  const qh = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+  const cx = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2;
+  const cy = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
+
+  const g = f.guide;
+  const fill = (qw * qh) / (g.gw * g.gh);
+  const offset = Math.hypot(cx - (g.gx + g.gw / 2), cy - (g.gy + g.gh / 2)) / g.gw;
+  const aspectErr = Math.abs(det.measuredAspect - CARD_ASPECT) / CARD_ASPECT;
+
+  if (fill < LIVE.fillMin) return 'far';
+  if (fill > LIVE.fillMax) return 'near';
+  if (offset > LIVE.offsetMax) return 'centre';
+  if (aspectErr > LIVE.aspectTol) return 'skew';
+
+  // Stillness is counted over a window, not as an unbroken run.
+  //
+  // Traced on a feed with a deliberate one-pixel oscillation — which is what a
+  // hand holding a tablet actually does — motion sat at 0.4% but spiked past
+  // the threshold every third or fourth frame as the sub-pixel phase came
+  // round. A consecutive-run counter reset to zero on every one of those, so
+  // it never survived long enough for the focus gate to be evaluated at all
+  // and the trigger could not fire on a perfectly good shot.
+  const still = f.motion <= (CAM.wasStill ? LIVE.motionExit : LIVE.motionMax);
+  CAM.wasStill = still;
+  CAM.stillRing.push(still);
+  if (CAM.stillRing.length > STILL_WINDOW) CAM.stillRing.shift();
+  const stillCount = CAM.stillRing.reduce((n, ok) => n + (ok ? 1 : 0), 0);
+  CAM.stillSince = stillCount;
+
+  if (stillCount < STILL_MOVING) return 'moving';
+
+  const card = inspectCard(f, det.corners);
+  CAM.last = card;
+
+  if (card.meanLum < LIVE.lumMin) return 'dark';
+  if (card.meanLum > LIVE.lumMax) return 'bright';
+
+  // Glare is judged by the biggest contiguous patch and by whether it lands on
+  // the bands that have to stay readable — not by how much of the card is lit.
+  if (card.glareLargest > 0.06 || card.glareCritical > 0.22) return 'glare';
+
+  // Contrast-detect autofocus takes a few hundred milliseconds to converge
+  // after the scene stops moving, and sampling the rising edge fires soft. The
+  // plateau only means anything once the frame has been still for a moment.
+  if (CAM.stillSince < STILL_BEFORE_FOCUS) return 'focusing';
+
+  CAM.focusRing.push(card.focus);
+  if (CAM.focusRing.length > FOCUS_RING) CAM.focusRing.shift();
+  const peak = Math.max.apply(null, CAM.focusRing);
+  const recent = CAM.focusRing.slice(-4);
+  const spread = recent.length >= 4
+    ? (Math.max.apply(null, recent) - Math.min.apply(null, recent)) / Math.max(1e-6, peak)
+    : 1;
+
+  if (CAM.framesSeen < MIN_FRAMES_BEFORE_LOCK) return 'focusing';
+  if (card.focus < peak * LIVE.sharpRatio || spread > LIVE.sharpSpread) return 'focusing';
+
+  return 'locked';
+}
+
+function tick() {
+  if (!CAM.running || CAM.firing) return;
+  const video = $('video');
+  if (!video.videoWidth) return;
+
+  if (!CAM.guide || CAM.guide.vw !== video.videoWidth || CAM.guide.vh !== video.videoHeight) {
+    CAM.guide = computeGuide(video.videoWidth, video.videoHeight);
+    $('viewfinder').style.aspectRatio = video.videoWidth + ' / ' + video.videoHeight;
+    CAM.lastState = '';
+    CAM.prevLuma = null;
+  }
+
+  let state;
+  try {
+    const f = scoutFrame(video, CAM.scout);
+    CAM.framesSeen++;
+    state = assessFrame(f);
+    if (CAM.debug) {
+      $('readout').hidden = false;
+      const c = CAM.last;
+      $('readout').textContent =
+        'state ' + state +
+        '\nmotion ' + (f.motion === Infinity ? '—' : (f.motion * 100).toFixed(2) + '%') +
+        ' still ' + CAM.stillSince +
+        (c ? '\nfocus ' + c.focus.toFixed(1) + ' / peak ' +
+             (CAM.focusRing.length ? Math.max.apply(null, CAM.focusRing).toFixed(1) : '—') +
+             '\nglare blob ' + (c.glareLargest * 100).toFixed(0) + '% crit ' +
+             (c.glareCritical * 100).toFixed(0) + '%  lum ' + c.meanLum.toFixed(0)
+           : '\n(card not inspected)') +
+        '\nstable ' + CAM.goodFrames;
+    }
+  } catch {
+    state = 'searching';
+  }
+
+  // A sliding window rather than a run of consecutive frames. Hands shake, and
+  // a single sample crossing the motion threshold should not reset the count
+  // to zero — on a deliberately near-still feed that alone was enough to stop
+  // it ever firing. Motion blur is caught properly after capture anyway, by
+  // the calibrated sharpness check.
+  CAM.window.push(state === 'locked');
+  if (CAM.window.length > LOCK_WINDOW) CAM.window.shift();
+  CAM.goodFrames = CAM.window.reduce((n, ok) => n + (ok ? 1 : 0), 0);
+
+  if (!CAM.armed) {
+    // Re-arm on the card having LEFT, or on it having CHANGED.
+    //
+    // Absence alone is not enough. Reading a card takes a second or two, and
+    // in a stack the next card is often already in place by the time the
+    // report appears — so waiting for an empty frame that never comes means
+    // the scanner reads the first card and then nothing. Comparing what is in
+    // frame now against what was just read covers that: the same card held
+    // still stays quiet, a different one is read immediately.
+    //
+    // An empty desk also does not read as 'searching': the detector finds the
+    // whole uniform surface as one region, which fills the frame and reads as
+    // 'near'. Hence the set rather than a single state.
+    const changed = CAM.last && CAM.lastCaptureFingerprint &&
+      similarity(CAM.last.fingerprint, CAM.lastCaptureFingerprint) < SAME_CARD_CORRELATION;
+
+    CAM.clearFrames = CARD_ABSENT.has(state) ? CAM.clearFrames + 1 : 0;
+
+    if (CAM.clearFrames >= REARM_CLEAR_FRAMES || changed) {
+      CAM.armed = true;
+      CAM.clearFrames = 0;
+      // The focus plateau describes a SUBJECT, not a lens. How much edge
+      // energy the name band carries depends on the card — a busy holo scores
+      // far higher than a plain common — so a peak learned from one card is a
+      // bar the next one may never clear. Carrying it across cards made the
+      // scanner lock onto the first card of a stack and then sit in
+      // "focusing…" forever on every card after it. It resets here, when the
+      // subject changes, rather than on every capture, so a card held still
+      // does not churn.
+      CAM.focusRing = [];
+      CAM.lastState = '';
+    } else {
+      setHint('scanned');
+      return;
+    }
+  }
+
+  if (!CAM.autoDisabled) setHint(state);
+
+  if (state === 'locked' && CAM.goodFrames >= STABLE_FRAMES && !CAM.autoDisabled && CAM.armed) {
+    fireCapture('auto');
+  }
+}
+
+/** Grab the current preview frame at the video track's own resolution. */
+function grabFullFrame() {
+  const video = $('video');
+  const c = document.createElement('canvas');
+  c.width = video.videoWidth;
+  c.height = video.videoHeight;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, 0, 0);
+  return ctx.getImageData(0, 0, c.width, c.height);
+}
+
+const CAN_TAKE_PHOTO =
+  typeof ImageCapture !== 'undefined' && ImageCapture.prototype &&
+  'takePhoto' in ImageCapture.prototype;
+
+/**
+ * Ask the platform for a real photo rather than a video frame.
+ *
+ * This is the live path's only route to print-check resolution. A preview
+ * track tops out well below the sensor, but takePhoto goes through the actual
+ * photo pipeline and can return the full frame — the difference between the
+ * halftone check running and abstaining.
+ *
+ * Two traps are load-bearing. Calling it with no arguments makes the size
+ * selection pick the SMALLEST available photo format, as does overshooting, so
+ * a satisfiable pair must be passed. And the pair must be in landscape order:
+ * getSettings transposes in portrait while format matching happens in sensor
+ * space, so passing the portrait pair matches nothing and quietly drops to the
+ * smallest size again.
+ */
+async function takeStill(track) {
+  if (!CAN_TAKE_PHOTO || !track) return null;
+  try {
+    const ic = new ImageCapture(track);
+    const s = track.getSettings ? track.getSettings() : {};
+    const opts = {};
+    if (s.width && s.height) {
+      opts.imageWidth = Math.max(s.width, s.height);
+      opts.imageHeight = Math.min(s.width, s.height);
+    }
+    const blob = await ic.takePhoto(opts);
+    const bmp = await createImageBitmap(blob);
+    const c = document.createElement('canvas');
+    c.width = bmp.width;
+    c.height = bmp.height;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0);
+    bmp.close();
+    return ctx.getImageData(0, 0, c.width, c.height);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pick the best of the candidate frames by re-measuring each.
+ *
+ * The live gates are a TRIGGER, never a source of geometry: takePhoto can
+ * switch the capture format and change the field of view, so the quad the
+ * preview agreed on need not describe the still at all. Every candidate is
+ * re-detected from scratch and judged on how many pixels the card actually
+ * occupies, which is the figure the resolution-gated checks depend on.
+ */
+function chooseCapture(candidates) {
+  let best = null;
+  for (const source of candidates) {
+    if (!source) continue;
+    let width = 0;
+    try {
+      const det = detectCard(source);
+      const [tl, tr, br, bl] = det.corners;
+      width = det.method === 'contour'
+        ? (Math.hypot(tr.x - tl.x, tr.y - tl.y) + Math.hypot(br.x - bl.x, br.y - bl.y)) / 2
+        : 0;
+    } catch { width = 0; }
+    if (!best || width > best.width) best = { source, width };
+  }
+  return best ? best.source : candidates.find(Boolean) || null;
+}
+
+/**
+ * Capture, then judge the capture by the threshold that was actually
+ * calibrated, and put a soft one back.
+ *
+ * The live loop's sharpness test is relative — it watches the figure climb and
+ * plateau to infer that autofocus has converged — and that is exactly the wrong
+ * tool for a scene which is uniformly soft, because a blurred frame is at the
+ * plateau too. Measured on a feed blurred throughout, the live gate let it
+ * through and the rectified card came back at sharpness 1 against a threshold
+ * of 30.
+ *
+ * So the live gate is only a cheap pre-filter. The decision is made after
+ * rectification, against the 30 measured on real cards at 1500px, and an
+ * automatic capture that fails it is discarded and the viewfinder resumed.
+ * A manual capture is always honoured — the user can see the card, and being
+ * refused by your own shutter button is worse than a report that says the
+ * photo was soft.
+ */
+const MAX_AUTO_RETRIES = 4;
+
+async function fireCapture(how) {
+  if (CAM.firing) return;
+  CAM.firing = true;
+  setHint('locked');
+
+  // Pause the loop but keep the stream alive: a rejected capture goes straight
+  // back to the viewfinder, and tearing the camera down to rebuild it would
+  // cost a second and re-trigger autofocus.
+  CAM.running = false;
+
+  let source = null;
+  const trackW = $('video').videoWidth;
+  try {
+    const preview = grabFullFrame();
+    // takePhoto mutes the track while the photo pipeline runs, so the preview
+    // frame is taken first and kept as the guaranteed candidate.
+    const still = await takeStill(CAM.track);
+    source = chooseCapture([still, preview]);
+  } catch {
+    source = null;
+  }
+
+  if (!source) {
+    CAM.running = true;
+    CAM.firing = false;
+    return;
+  }
+
+  let result;
+  try {
+    result = await analyzeSource(source);
+  } catch (err) {
+    CAM.running = true;
+    CAM.firing = false;
+    return;
+  }
+
+  if (how === 'auto' && result.quality.tooBlurry) {
+    CAM.retries++;
+    CAM.goodFrames = 0;
+    CAM.window = [];
+    CAM.focusRing = [];
+    CAM.stillRing = [];
+    CAM.stillSince = 0;          // re-learn the plateau rather than trust the old one
+    CAM.lastState = '';
+    CAM.running = true;
+    CAM.firing = false;
+
+    // A feed that stays soft through several attempts is not a timing problem
+    // — it is a dirty lens, a minimum focus distance, or too little light.
+    // Capturing anyway would bury that behind an inconclusive verdict, so
+    // auto-capture stands down and says what is wrong, leaving the shutter.
+    if (CAM.retries >= MAX_AUTO_RETRIES) {
+      CAM.autoDisabled = true;
+      $('cam-note').textContent =
+        'Every automatic attempt came back too soft to analyse. That is usually the lens being ' +
+        'closer than it can focus, a smeared lens, or too little light — try backing off a few ' +
+        'centimetres, wiping the lens, and adding light. Automatic capture has stopped; the ' +
+        'shutter below still works if you want to capture anyway.';
+    }
+
+    const el = $('cam-hint');
+    el.textContent = CAM.autoDisabled ? 'Cannot focus — see below' : 'That came out soft — hold steadier';
+    el.dataset.tone = 'warn';
+    return;
+  }
+
+  result.capture = { how, trackWidth: trackW, retries: CAM.retries };
+
+  $('sec-error').hidden = true;
+  $('sec-bulk').hidden = true;
+
+  try {
+    renderSingle(result);
+    $('sec-progress').hidden = true;
+    $('results').hidden = false;
+  } catch (err) {
+    $('sec-progress').hidden = true;
+    $('sec-error').hidden = false;
+    $('error-text').textContent = (err && err.message) || String(err);
+  }
+
+  // The camera stays on and keeps scanning. A scanner you have to restart
+  // between cards is a camera with extra steps — take the card away, put the
+  // next one in the frame, and it reads that one too.
+  //
+  // Re-arming needs the card to LEAVE first, not just a timer. Holding one
+  // card steady in the frame otherwise re-reads the same card every couple of
+  // seconds, which looks like a fault and buries the result you were reading.
+  CAM.retries = 0;
+  CAM.goodFrames = 0;
+  CAM.window = [];
+  CAM.stillRing = [];
+  // The focus history survives a capture on purpose. The lens has not moved
+  // and the working distance has not changed, so the plateau it learned still
+  // describes this camera — throwing it away costs half a second of relearning
+  // on every card, which is the difference between reading a stack and
+  // missing every second one.
+  CAM.armed = false;
+  CAM.clearFrames = 0;
+  CAM.lastCaptureFingerprint = CAM.last ? CAM.last.fingerprint : null;
+  CAM.lastState = '';
+  CAM.running = true;
+  CAM.firing = false;
+  setHint('scanned');
+}
+
+function stopCamera() {
+  CAM.running = false;
+  if (CAM.timer) { clearInterval(CAM.timer); CAM.timer = null; }
+  if (CAM.stream) { CAM.stream.getTracks().forEach((t) => t.stop()); CAM.stream = null; }
+  CAM.track = null;
+  CAM.prevLuma = null;
+  CAM.sharpPeak = 0;
+  CAM.goodFrames = 0;
+  CAM.window = [];
+  CAM.focusRing = [];
+  CAM.stillRing = [];
+  CAM.stillSince = 0;
+  CAM.wasStill = false;
+  CAM.framesSeen = 0;
+  CAM.retries = 0;
+  CAM.autoDisabled = false;
+  CAM.armed = true;
+  CAM.clearFrames = 0;
+  CAM.lastCaptureFingerprint = null;
+  CAM.lastState = '';
+  CAM.guide = null;
+  $('sec-camera').hidden = true;
+  $('sec-capture').hidden = false;
+}
+
+async function startCamera() {
+  if (!camSupported()) {
+    CAM.lastError = 'no camera API in this browser';
+    return false;
+  }
+
+  let stream;
+  CAM.lastError = null;
+  try {
+    stream = await openCamera();
+  } catch (err) {
+    CAM.lastError = (err && err.name) || 'unknown error';
+    $('sec-camera').hidden = true;
+    $('sec-capture').hidden = false;
+    return false;
+  }
+
+  CAM.stream = stream;
+  CAM.track = stream.getVideoTracks()[0] || null;
+
+  const video = $('video');
+  video.srcObject = stream;
+  video.setAttribute('playsinline', '');
+  video.muted = true;
+  try { await video.play(); } catch { /* autoplay attribute covers it */ }
+
+  CAM.scout = CAM.scout || (() => {
+    const canvas = document.createElement('canvas');
+    return { canvas, ctx: canvas.getContext('2d', { willReadFrequently: true }) };
+  })();
+
+  $('sec-camera').hidden = false;
+  $('sec-capture').hidden = true;
+  $('results').hidden = true;
+  $('sec-bulk').hidden = true;
+  setHint('searching');
+
+  // Torch genuinely helps on a matte card and genuinely hurts on a holo one,
+  // so it is offered rather than applied, and only where it exists.
+  const caps = CAM.track && CAM.track.getCapabilities ? CAM.track.getCapabilities() : {};
+  $('btn-torch').hidden = !(caps && 'torch' in caps);
+
+  // Report what the platform actually granted. A live track is usually far
+  // below the still camera, and the halftone check needs about 1400 pixels
+  // across the card — so if this track cannot reach that, say so now rather
+  // than letting every scan come back with that check abstaining.
+  const settings = CAM.track && CAM.track.getSettings ? CAM.track.getSettings() : {};
+  // Derive the figure from the same guide the user will fill, not from the
+  // frame's short edge — the guide is height-limited on a tall frame, so the
+  // two differ by a third and quoting the wrong one misleads about which
+  // checks are reachable.
+  const probe = computeGuide(settings.width || 1, settings.height || 1);
+  const cardPx = Math.round(probe.w);
+  $('cam-note').textContent =
+    'Live feed ' + (settings.width || '?') + '×' + (settings.height || '?') + '. Filling the frame ' +
+    'puts about ' + cardPx + ' pixels across the card' +
+    (cardPx >= RESOLUTION_TIERS.print
+      ? ', enough for every check including the print pattern.'
+      : ', short of the ' + RESOLUTION_TIERS.print + ' the print-pattern check needs. For that one ' +
+        'check, use the photo button instead — your camera app shoots at full sensor resolution.');
+
+  CAM.running = true;
+  CAM.firing = false;
+  CAM.armed = true;
+  CAM.clearFrames = 0;
+  CAM.timer = setInterval(tick, 120);
+  return true;
+}
+
+/* ===================================================================
+   The aligner: tell the page where the card is.
+
+   This exists because automatic edge detection is the weakest link in the
+   whole pipeline. It works on a card lying alone on a plain contrasting
+   surface and degrades badly on everything else — a hand holding the card,
+   a patterned table, a binder page, a second card in shot, a glossy holo
+   under a lamp. When it picks the wrong quadrilateral, every downstream
+   step is measuring the wrong rectangle, and the identification that comes
+   back is not a near miss but nonsense.
+
+   Dragging four corners takes a moment and removes that entire failure
+   class. Detection still runs and still pre-positions the frame, so a clean
+   photo needs no adjustment — but the user always has the last word.
+   =================================================================== */
+
+const ALIGN = {
+  img: null,        // the decoded photo
+  source: null,     // its ImageData, at working resolution
+  canvas: null,
+  ctx: null,
+  scale: 1,         // canvas pixels per source pixel
+  corners: null,    // in SOURCE coordinates, ordered TL TR BR BL
+  detected: null,   // what detection proposed, for the reset button
+  dragging: -1,
+  moved: false,
+};
+
+/** Touch targets need to be far bigger than the dot that represents them. */
+const HANDLE_HIT = 30;
+const HANDLE_R = 11;
+
+function defaultCorners(w, h) {
+  let ch = h * 0.78;
+  let cw = ch * CARD_ASPECT;
+  if (cw > w * 0.9) { cw = w * 0.9; ch = cw / CARD_ASPECT; }
+  const x = (w - cw) / 2;
+  const y = (h - ch) / 2;
+  return [
+    { x, y },
+    { x: x + cw, y },
+    { x: x + cw, y: y + ch },
+    { x, y: y + ch },
+  ];
+}
+
+/** Size the canvas to the photo. Needed by the aligner and by a later
+ *  "adjust the frame", which can be reached without the aligner ever opening. */
+function prepareAlignCanvas() {
+  const canvas = $('align-canvas');
+  const maxW = 1000;
+  ALIGN.scale = Math.min(1, maxW / ALIGN.source.width);
+  canvas.width = Math.round(ALIGN.source.width * ALIGN.scale);
+  canvas.height = Math.round(ALIGN.source.height * ALIGN.scale);
+  ALIGN.canvas = canvas;
+  ALIGN.ctx = canvas.getContext('2d');
+}
+
+function drawAligner() {
+  const { ctx, canvas, corners, scale } = ALIGN;
+  const W = canvas.width, H = canvas.height;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(ALIGN.img, 0, 0, W, H);
+
+  const pts = corners.map((c) => ({ x: c.x * scale, y: c.y * scale }));
+
+  // Dim everything outside the frame so the card is unmistakably the subject.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, W, H);
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(8,9,13,0.62)';
+  ctx.fill('evenodd');
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.strokeStyle = '#f5c518';
+  ctx.lineWidth = Math.max(2, W * 0.005);
+  ctx.stroke();
+
+  // Thirds inside the frame, which is the fastest way to see a skew.
+  ctx.strokeStyle = 'rgba(245,197,24,0.28)';
+  ctx.lineWidth = 1;
+  for (let t = 1; t <= 2; t++) {
+    const f = t / 3;
+    const a = { x: pts[0].x + (pts[1].x - pts[0].x) * f, y: pts[0].y + (pts[1].y - pts[0].y) * f };
+    const b = { x: pts[3].x + (pts[2].x - pts[3].x) * f, y: pts[3].y + (pts[2].y - pts[3].y) * f };
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    const c = { x: pts[0].x + (pts[3].x - pts[0].x) * f, y: pts[0].y + (pts[3].y - pts[0].y) * f };
+    const d = { x: pts[1].x + (pts[2].x - pts[1].x) * f, y: pts[1].y + (pts[2].y - pts[1].y) * f };
+    ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.stroke();
+  }
+
+  const r = Math.max(HANDLE_R, W * 0.022);
+  pts.forEach((p, i) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = i === ALIGN.dragging ? '#f5c518' : 'rgba(14,16,22,0.9)';
+    ctx.fill();
+    ctx.strokeStyle = '#f5c518';
+    ctx.lineWidth = Math.max(2, W * 0.005);
+    ctx.stroke();
+  });
+}
+
+function alignerPoint(e) {
+  const rect = ALIGN.canvas.getBoundingClientRect();
+  const kx = ALIGN.canvas.width / rect.width;
+  const ky = ALIGN.canvas.height / rect.height;
+  return { x: (e.clientX - rect.left) * kx, y: (e.clientY - rect.top) * ky };
+}
+
+function onAlignDown(e) {
+  const p = alignerPoint(e);
+  const hit = Math.max(HANDLE_HIT, ALIGN.canvas.width * 0.06);
+  let best = -1, bestD = Infinity;
+  ALIGN.corners.forEach((c, i) => {
+    const d = Math.hypot(c.x * ALIGN.scale - p.x, c.y * ALIGN.scale - p.y);
+    if (d < hit && d < bestD) { best = i; bestD = d; }
+  });
+  if (best < 0) return;
+  ALIGN.dragging = best;
+  ALIGN.canvas.setPointerCapture(e.pointerId);
+  e.preventDefault();
+  drawAligner();
+}
+
+function onAlignMove(e) {
+  if (ALIGN.dragging < 0) return;
+  const p = alignerPoint(e);
+  const w = ALIGN.source.width, h = ALIGN.source.height;
+  ALIGN.corners[ALIGN.dragging] = {
+    x: Math.max(0, Math.min(w - 1, p.x / ALIGN.scale)),
+    y: Math.max(0, Math.min(h - 1, p.y / ALIGN.scale)),
+  };
+  ALIGN.moved = true;
+  e.preventDefault();
+  drawAligner();
+}
+
+function onAlignUp(e) {
+  if (ALIGN.dragging < 0) return;
+  ALIGN.dragging = -1;
+  try { ALIGN.canvas.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+  drawAligner();
+  updateAlignNote();
+}
+
+function updateAlignNote() {
+  const c = ALIGN.corners;
+  const w = (Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y) + Math.hypot(c[2].x - c[3].x, c[2].y - c[3].y)) / 2;
+  const h = (Math.hypot(c[3].x - c[0].x, c[3].y - c[0].y) + Math.hypot(c[2].x - c[1].x, c[2].y - c[1].y)) / 2;
+  const aspect = h > 0 ? w / h : 0;
+  const off = Math.abs(aspect - CARD_ASPECT) / CARD_ASPECT;
+
+  const parts = [];
+  parts.push(
+    ALIGN.detected && !ALIGN.moved
+      ? 'The card\'s edges were found automatically. Drag any corner if the frame is not sitting on them.'
+      : 'Drag the four corners onto the corners of the card.'
+  );
+  parts.push('Frame is ' + Math.round(w) + ' pixels across' +
+    (w >= RESOLUTION_TIERS.print
+      ? ' — enough for every check including the print pattern.'
+      : w >= RESOLUTION_TIERS.identify
+        ? ', which is enough to identify and price it but short of the ' + RESOLUTION_TIERS.print +
+          ' the print-pattern check needs.'
+        : ' — too few to work with. Take the photo closer in.'));
+  if (off > 0.12) {
+    parts.push('The frame is well off a card\'s proportions right now; check the corners are on the card and not on something behind it.');
+  }
+  $('align-note').textContent = parts.join(' ');
+}
+
+async function openAligner(file) {
+  $('sec-error').hidden = true;
+  $('results').hidden = true;
+  $('sec-bulk').hidden = true;
+  $('sec-progress').hidden = false;
+  renderSteps(0);
+  await yieldToPaint();
+
+  let img;
+  try {
+    img = await loadImage(file);
+  } catch (err) {
+    $('sec-progress').hidden = true;
+    $('sec-error').hidden = false;
+    $('error-text').textContent = (err && err.message) || String(err);
+    return;
+  }
+
+  const source = imageDataFromImg(img);
+  ALIGN.img = img;
+  ALIGN.source = source;
+
+  renderSteps(1);
+  await yieldToPaint();
+
+  let detection = null;
+  try {
+    detection = detectCard(source);
+  } catch { detection = null; }
+
+  const usable = detection && detection.method === 'contour' && detection.confidence >= 0.45;
+  ALIGN.detected = usable ? detection.corners.map((c) => ({ x: c.x, y: c.y })) : null;
+
+  // If the card's edges were found cleanly, do not make the user confirm them.
+  // Dragging corners is a repair tool, not a step — asking for it on every
+  // photo turns a scanner into a cropping exercise. It stays one tap away on
+  // the report for the times the detector got it wrong.
+  const holder = looksLikeSlab(detection.measuredAspect);
+  const shapeKnown =
+    Math.abs(detection.measuredAspect - CARD_ASPECT) / CARD_ASPECT <= ASPECT_TOLERANCE.suspicious ||
+    holder;
+
+  // Detection confidence blends how much of the frame is filled with how close
+  // the shape is to a CARD's proportions — so a graded holder is penalised for
+  // being holder-shaped and can never clear a card's bar, however cleanly its
+  // edges were found. The bar drops when the shape is a recognised holder,
+  // because in that case the aspect term is measuring the wrong thing.
+  if (usable && shapeKnown && detection.confidence >= (holder ? 0.32 : 0.55)) {
+    ALIGN.corners = ALIGN.detected.map((c) => ({ x: c.x, y: c.y }));
+    ALIGN.moved = false;
+    ALIGN.autoFramed = true;
+    await analyseAligned();
+    return;
+  }
+  ALIGN.autoFramed = false;
+  ALIGN.corners = ALIGN.detected
+    ? ALIGN.detected.map((c) => ({ x: c.x, y: c.y }))
+    : defaultCorners(source.width, source.height);
+  ALIGN.moved = false;
+
+  prepareAlignCanvas();
+  drawAligner();
+  updateAlignNote();
+
+  $('sec-progress').hidden = true;
+  $('sec-capture').hidden = true;
+  $('sec-align').hidden = false;
+  $('sec-align').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeAligner() {
+  $('sec-align').hidden = true;
+  $('sec-capture').hidden = false;
+  ALIGN.img = null;
+  ALIGN.source = null;
+  ALIGN.corners = null;
+}
+
+async function analyseAligned() {
+  const source = ALIGN.source;
+  const corners = ALIGN.corners.map((c) => ({ x: c.x, y: c.y }));
+  const userPlaced = ALIGN.moved || !ALIGN.detected;
+
+  $('sec-align').hidden = true;
+  $('sec-capture').hidden = true;
+  $('sec-progress').hidden = false;
+  renderSteps(2);
+  await yieldToPaint();
+
+  try {
+    const result = await analyzeSource(source, renderSteps, { corners, userPlaced });
+    renderSingle(result);
+    $('sec-progress').hidden = true;
+    collapseCapture();
+    $('results').hidden = false;
+    $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    $('sec-progress').hidden = true;
+    $('sec-error').hidden = false;
+    $('error-text').textContent = (err && err.message) || String(err);
+  }
+}
+
+/* ===================================================================
+   Wiring
+   =================================================================== */
+
+CAM.debug = new URLSearchParams(location.search).has('debug');
+
+let cameraWorked = false;
+
+/**
+ * Always ASK the camera; never predict its answer.
+ *
+ * The preflight used to decide up front that a camera was unavailable and
+ * skip straight to the photo app — so on a device where the permission query
+ * reports "denied" for an embedded page, getUserMedia was never called at all
+ * and the live guide could not appear even if it would have worked. A
+ * prediction that suppresses the attempt cannot ever be proved wrong, which
+ * is exactly the wrong shape for something that varies by browser, by
+ * embedding and by what the user tapped last time. The preflight now only
+ * chooses the wording; the tap always tries.
+ */
+$('capture-target').addEventListener('click', async () => {
+  $('capture-note').hidden = true;
+  cameraWorked = await startCamera();
+  // Deliberately no automatic fall-through to the photo app. Falling through
+  // is what made the failure invisible: the camera app opens, the live frame
+  // never appears, and nothing says why.
+  if (!cameraWorked) showCameraFallback();
+});
+
+/**
+ * Explain the failure and offer the two things that can actually help.
+ *
+ * A live guide needs the page itself to hold the camera. Embedded in another
+ * site, it only gets one if that site grants it — which this page cannot do
+ * from the inside. The same page in its own tab is not embedded, so the
+ * viewfinder works there, and that route is offered first.
+ */
+function showCameraFallback() {
+  const embedded = window.self !== window.top;
+  const note = $('capture-note');
+  const why = CAM.lastError ? ' (' + CAM.lastError + ')' : '';
+
+  note.hidden = false;
+  note.textContent = embedded
+    ? 'This panel will not give the page a camera' + why + ', so the scanner cannot open here. ' +
+      'It is not a setting on this page — a page embedded inside another only gets a camera if ' +
+      'the outer page grants one. Open this in a browser tab and the scanner runs: frame, live ' +
+      'recognition, automatic capture.'
+    : 'The camera could not start' + why + '. Allow camera access for this site and try again.';
+
+  $('cam-fallback').hidden = false;
+  $('btn-open-tab').hidden = !(embedded && /^https?:$/.test(location.protocol));
+}
+
+$('btn-open-tab').addEventListener('click', () => {
+  window.open(location.href, '_blank', 'noopener');
+});
+$('btn-use-photo').addEventListener('click', () => $('file-camera').click());
+$('btn-retry-camera').addEventListener('click', async () => {
+  $('cam-fallback').hidden = true;
+  $('capture-note').hidden = true;
+  cameraWorked = await startCamera();
+  if (!cameraWorked) showCameraFallback();
+});
+
+// The preflight now only chooses wording, never whether to try.
+(async () => {
+  CAM.preflight = await cameraPreflight();
+  if (CAM.preflight === 'unsupported') {
+    $('capture-target').querySelector('.big').textContent = 'Take a photo';
+    $('capture-target').querySelector('.sub').textContent =
+      'Then drag the frame onto the card — a guide appears on your photo.';
+    return;
+  }
+
+  // Open the camera without waiting to be asked.
+  //
+  // A browser will only hand over a camera unprompted once the user has
+  // already granted it for this site, so the first visit still needs the tap
+  // that carries the permission prompt. Every visit after that starts
+  // scanning the moment the page loads, which is the whole point: point it at
+  // a card, get the card. Failure here is silent by design — the tap target
+  // is already on screen and says what to do.
+  if (CAM.preflight === 'maybe') {
+    try {
+      cameraWorked = await startCamera();
+    } catch {
+      /* the tap target remains */
+    }
+  }
+})();
+
+$('btn-shutter').addEventListener('click', () => fireCapture('manual'));
+$('btn-cam-close').addEventListener('click', () => stopCamera());
+
+$('btn-torch').addEventListener('click', async () => {
+  if (!CAM.track) return;
+  const on = $('btn-torch').getAttribute('aria-pressed') === 'true';
+  try {
+    await CAM.track.applyConstraints({ advanced: [{ torch: !on }] });
+    $('btn-torch').setAttribute('aria-pressed', String(!on));
+    $('btn-torch').textContent = !on ? 'Light on' : 'Light';
+  } catch {
+    $('btn-torch').hidden = true;
+  }
+});
+
+$('btn-library').addEventListener('click', () => $('file-library').click());
+$('btn-bulk').addEventListener('click', () => $('file-bulk').click());
+
+for (const id of ['file-camera', 'file-library']) {
+  $(id).addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    // Clear the value so picking the same file twice still fires a change.
+    e.target.value = '';
+    if (file) openAligner(file);
+  });
+}
+
+$('btn-analyse').addEventListener('click', () => analyseAligned());
+
+$('btn-reframe').addEventListener('click', () => {
+  if (!ALIGN.source) return;
+  ALIGN.autoFramed = false;
+  $('results').hidden = true;
+  $('sec-reframe').hidden = true;
+  prepareAlignCanvas();
+  drawAligner();
+  updateAlignNote();
+  $('sec-align').hidden = false;
+  $('sec-align').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('btn-align-cancel').addEventListener('click', () => { closeAligner(); $('file-camera').click(); });
+$('btn-align-reset').addEventListener('click', () => {
+  ALIGN.corners = ALIGN.detected
+    ? ALIGN.detected.map((c) => ({ x: c.x, y: c.y }))
+    : defaultCorners(ALIGN.source.width, ALIGN.source.height);
+  ALIGN.moved = false;
+  drawAligner();
+  updateAlignNote();
+});
+
+for (const [type, fn] of [['pointerdown', onAlignDown], ['pointermove', onAlignMove],
+                          ['pointerup', onAlignUp], ['pointercancel', onAlignUp]]) {
+  $('align-canvas').addEventListener(type, fn);
+}
+
+$('file-bulk').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if (files.length === 1) scan(files[0]);
+  else if (files.length > 1) runBulk(files);
+});
+
+$('btn-reset').addEventListener('click', async () => {
+  $('results').hidden = true;
+  $('sec-bulk').hidden = true;
+  $('sec-align').hidden = true;
+  $('sec-error').hidden = true;
+  $('btn-reset').hidden = true;
+  $('capture-target').hidden = false;
+  $('btn-library').hidden = false;
+  $('btn-bulk').hidden = false;
+  $('search').value = '';
+  $('search-results').innerHTML = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Go straight back to the viewfinder when that is how the last card was
+  // captured — scanning a stack means doing this over and over, and a tap
+  // between each one is a tap too many.
+  if (cameraWorked) await startCamera();
+  else $('capture-target').focus();
+});
+
+let searchTimer = null;
+$('search').addEventListener('input', (e) => {
+  clearTimeout(searchTimer);
+  const v = e.target.value;
+  searchTimer = setTimeout(() => runSearch(v), 140);
+});
+</script>
+
+</body>
+</html>

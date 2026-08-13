@@ -38,8 +38,18 @@ layout width over HTTP rather than trusting the markup.
 
 ## Rebuilding it
 
-The file is generated, not hand-edited. The template and the corpus live
-outside the repo during development; the bake scripts that produce the corpus
-are `scripts/bake-offline.ts` (the Pokemon TCG API) and
-`scripts/bake-tcgcsv.ts` (the TCGplayer catalogue, which is where Japanese
-printings and Base Set Shadowless come from).
+The file is generated, not hand-edited. Edit `scripts/scanner-template.html`,
+which is the page with a `__CORPUS__` placeholder where the data island goes.
+
+    npm run bake            # the Pokemon TCG API      → /tmp/bake/corpus.json
+    npm run bake:catalogue  # the TCGplayer catalogue  → /tmp/bake/tcgcsv.json
+    npm run build:scanner   # template + corpora       → docs/index.html
+
+Both bakes are slow and resumable, and both write where `BAKE_OUT` points if
+you would rather they did not use `/tmp`; `build:scanner` reads from
+`BAKE_DIR`. The second bake is not optional in practice — it is the only
+source of Japanese printings and of Base Set (Shadowless), which TCGplayer
+keeps as its own group with its own product ids and so its own prices. A
+build without it is short about a quarter of the cards, and says so.
+
+Given the same two corpora the build is byte-for-byte reproducible.
