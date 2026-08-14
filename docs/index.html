@@ -377,6 +377,7 @@
   .tone-good { color: var(--good); }
   .tone-warn { color: var(--warn); }
   .tone-bad  { color: var(--bad); }
+  .tone-unknown { color: var(--info); }
 
   .figures {
     display: grid;
@@ -623,6 +624,11 @@
       <div class="hint" id="cam-hint">Starting the camera…</div>
     </div>
     <div class="row">
+      <!-- The viewfinder no longer scans again on its own, so the control that
+           starts the next card has to live HERE, under the viewfinder, where
+           the reader is already looking. The one in the capture section below
+           is in a panel that is hidden while the camera is open. -->
+      <button class="ghost primary" id="btn-scan-next" type="button" hidden>Scan another card</button>
       <button class="ghost primary" id="btn-shutter" type="button">Capture now</button>
       <button class="ghost" id="btn-torch" type="button" hidden>Light</button>
       <button class="ghost" id="btn-cam-close" type="button">Close camera</button>
@@ -2708,14 +2714,25 @@ function explainVerdict(report) {
 function renderReport(report) {
   const meta = VERDICT_META[report.verdict];
   const pill = $('verdict-pill');
-  pill.textContent = meta.label;
-  pill.className = 'pill tone-' + meta.tone;
+
+  // "Inconclusive" is a finding: it says the evidence was weighed and did not
+  // settle. When NOTHING could be weighed, saying it is not honest — and
+  // printing 0% beside it reads as a measurement of the card rather than of
+  // this build's reach. Two of the three checks are effectively unavailable on
+  // a phone: the detailed comparison needs a server, and the print screen is
+  // routinely dissolved by the noise reduction and JPEG compression every
+  // phone applies, which the check correctly declines to read anything into.
+  // So when no check ran, the panel says it was not checked and why, and
+  // leaves the figures blank rather than filling them with zeroes.
+  const nothingRan = report.ranCount === 0;
+  pill.textContent = nothingRan ? 'Not checked' : meta.label;
+  pill.className = 'pill tone-' + (nothingRan ? 'unknown' : meta.tone);
   $('verdict-blurb').textContent = explainVerdict(report);
 
   $('fig-score').textContent = report.scoreIsMeaningful ? report.score : '—';
   $('bar-score').style.width = (report.scoreIsMeaningful ? report.score : 0) + '%';
-  $('fig-conf').textContent = Math.round(report.confidence * 100) + '%';
-  $('bar-conf').style.width = Math.round(report.confidence * 100) + '%';
+  $('fig-conf').textContent = nothingRan ? '—' : Math.round(report.confidence * 100) + '%';
+  $('bar-conf').style.width = (nothingRan ? 0 : Math.round(report.confidence * 100)) + '%';
   $('fig-ran').innerHTML = report.ranCount + ' <small>of ' + report.totalCount + '</small>';
 
   const ul = $('signals');
@@ -3827,13 +3844,19 @@ function renderVariantNotes(result) {
 
 function collapseCapture() {
   // After a scan the results are the page, and a card-sized target sitting
-  // above them is just distance to scroll. The live viewfinder is the
-  // exception: it stays, because it is still scanning.
+  // above them is just distance to scroll.
+  //
+  // The live viewfinder is the exception and stays up, because the next card
+  // is scanned through it. What it must NOT do is take the reader's own
+  // "scan another" control away with it: the viewfinder no longer re-arms
+  // itself, so that button is now the only thing that starts the next card,
+  // and hiding it while the camera was open left no way to scan a second one
+  // at all.
+  $('btn-reset').hidden = false;
   if (CAM.running) return;
   $('capture-target').hidden = true;
   $('btn-library').hidden = true;
   $('btn-bulk').hidden = true;
-  $('btn-reset').hidden = false;
 }
 
 async function scan(file) {
@@ -4060,6 +4083,10 @@ const CAM = {
   cardHeld: 0,
   heldRing: [],
   lastFill: 0,
+  lastLiveScore: 0,
+  lastFrame: null,
+  cardCheckAt: -999,
+  cardCheckResult: false,
   preflight: 'maybe',
   lastState: '',
   firing: false,
@@ -4147,6 +4174,17 @@ const PATIENCE_MIN_FILL = 0.35;
  * more use than a verdict built on nothing.
  */
 const PATIENCE_SHARPNESS_FLOOR = 0.7;
+
+/**
+ * How well the live preview must read as a known card before the scanner will
+ * photograph it. Well below the bar identification reports against — the live
+ * frame is small, soft and unrectified by comparison — but far above what a
+ * book or a hand scores, which is the distinction being drawn.
+ */
+const LIVE_MATCH_MIN = 0.55;
+
+/** Ticks between live corpus reads. About an eighth of a second at 8fps. */
+const CARD_CHECK_EVERY = 8;
 
 /** How many focus readings the plateau test looks back over. */
 const FOCUS_RING = 15;
@@ -4275,7 +4313,7 @@ const HINTS = {
   moving: ['Hold still', 'ready'],
   focusing: ['Focusing…', 'ready'],
   locked: ['Hold it — capturing', 'locked'],
-  scanned: ['Read it — show me the next card', 'locked'],
+  scanned: ['Read — tap Scan another card for the next one', 'locked'],
 };
 
 /** Frames the card must be absent before another read is allowed. */
@@ -4699,6 +4737,13 @@ function assessFrame(f) {
     Math.abs(det.measuredAspect - CARD_ASPECT) / CARD_ASPECT <= 0.30 &&
     boxContainment(CAM.lastBox, guideBox) >= 0.6;
 
+  // Hold the frame and the quad, not a flattened card. Reading the card is
+  // rate-limited and mostly does not happen on a given tick, so flattening it
+  // here would be work thrown away; and taking it from CAM.last instead would
+  // put the whole check back behind the stillness gate, which is the thing
+  // that stopped this scanner firing in the first place.
+  CAM.lastFrame = CAM.cardSeen ? { img: f.img, corners: det.corners } : null;
+
   if (det.confidence < 0.4) return 'searching';
 
   // Stillness is measured here rather than below the framing gates, because it
@@ -4863,48 +4908,23 @@ function tick() {
   CAM.goodFrames = CAM.window.reduce((n, ok) => n + (ok ? 1 : 0), 0);
 
   if (!CAM.armed) {
-    // Re-arm on the card having LEFT, or on it having CHANGED.
+    // One card per press, by request.
     //
-    // Absence alone is not enough. Reading a card takes a second or two, and
-    // in a stack the next card is often already in place by the time the
-    // report appears — so waiting for an empty frame that never comes means
-    // the scanner reads the first card and then nothing. Comparing what is in
-    // frame now against what was just read covers that: the same card held
-    // still stays quiet, a different one is read immediately.
-    //
-    // An empty desk also does not read as 'searching': the detector finds the
-    // whole uniform surface as one region, which fills the frame and reads as
-    // 'near'. Hence the set rather than a single state.
-    const changed = CAM.last && CAM.lastCaptureFingerprint &&
-      similarity(CAM.last.fingerprint, CAM.lastCaptureFingerprint) < SAME_CARD_CORRELATION;
-
-    CAM.clearFrames = CARD_ABSENT.has(state) ? CAM.clearFrames + 1 : 0;
-
-    if (CAM.clearFrames >= REARM_CLEAR_FRAMES || changed) {
-      CAM.armed = true;
-      CAM.clearFrames = 0;
-      // The focus plateau describes a SUBJECT, not a lens. How much edge
-      // energy the name band carries depends on the card — a busy holo scores
-      // far higher than a plain common — so a peak learned from one card is a
-      // bar the next one may never clear. Carrying it across cards made the
-      // scanner lock onto the first card of a stack and then sit in
-      // "focusing…" forever on every card after it. It resets here, when the
-      // subject changes, rather than on every capture, so a card held still
-      // does not churn.
-      CAM.focusRing = [];
-      CAM.heldRing = [];
-      CAM.cardHeld = 0;
-      CAM.lastState = '';
-    } else {
-      setHint('scanned');
-      return;
-    }
+    // This used to re-arm by itself the moment the card left the frame or a
+    // different one arrived, so a stack could be worked through without
+    // touching anything. That is a nice property for a stack and the wrong
+    // default for everyone else: a report you are still reading gets replaced
+    // by the next thing that drifts under the lens, including your own hand.
+    // "Scan another card" is already the control that starts the next one, and
+    // now it is the only thing that does.
+    setHint('scanned');
+    return;
   }
 
   if (!CAM.autoDisabled) setHint(state);
 
   if (state === 'locked' && CAM.goodFrames >= STABLE_FRAMES && !CAM.autoDisabled && CAM.armed) {
-    fireCapture('auto');
+    if (looksLikeACard()) fireCapture('auto');
     return;
   }
 
@@ -4922,7 +4942,60 @@ function tick() {
   // when the photo was not good enough. So the gates decide when to fire
   // EAGERLY, and this decides when to stop waiting.
   if (CAM.cardHeld >= PATIENCE_TICKS && !CAM.autoDisabled && CAM.armed) {
-    fireCapture('patience');
+    if (looksLikeACard()) fireCapture('patience');
+  }
+}
+
+/**
+ * Is the rectangle in the frame actually a Pokemon card?
+ *
+ * Everything above this asks whether something CARD-SHAPED is being held
+ * where the frame points, which a book, a phone, a beer mat and the back of
+ * another card all satisfy. That was tolerable while the shutter was the only
+ * way to fire; a trigger that goes off by itself has to be sure of its subject
+ * or it fills the report with pictures of the desk.
+ *
+ * The corpus is already here and the live loop already flattens the card, so
+ * the honest test is the direct one: read it, and only fire if what comes back
+ * resembles a real card well enough to be worth photographing properly. The
+ * bar is deliberately below what identification needs — this decides whether
+ * to take the photo, not what the card is, and the full-resolution capture
+ * gets the final say.
+ *
+ * Rate-limited, because it is the one expensive thing in the loop: it only
+ * runs when everything else already wants to fire.
+ */
+function looksLikeACard() {
+  const frame = CAM.lastFrame;
+  if (!frame) return false;
+
+  // Reuse a recent answer rather than reading the corpus on every frame. When
+  // the check says no it is asked again on the next tick and the one after,
+  // and a full corpus read at that rate is the one thing here that could cost
+  // the loop its frame rate. The subject does not change in an eighth of a
+  // second, so neither does the answer.
+  if (CAM.framesSeen - CAM.cardCheckAt < CARD_CHECK_EVERY) return CAM.cardCheckResult;
+  CAM.cardCheckAt = CAM.framesSeen;
+
+  try {
+    const rect = rectifyCard(frame.img, frame.corners, LIVE_RECT_W, LIVE_RECT_H);
+    const best = matchCard(describeRectified(rect), 1);
+    const score = best && best[0] ? best[0].score : 0;
+    CAM.lastLiveScore = score;
+
+    // Try it the other way up before giving up: a card held upside down is
+    // still a card, and refusing to photograph it would be a strange way to
+    // find that out.
+    if (score >= LIVE_MATCH_MIN) { CAM.cardCheckResult = true; return true; }
+    const flipped = matchCard(describeRectified(rotate180(rect)), 1);
+    const flippedScore = flipped && flipped[0] ? flipped[0].score : 0;
+    CAM.lastLiveScore = Math.max(score, flippedScore);
+    CAM.cardCheckResult = flippedScore >= LIVE_MATCH_MIN;
+    return CAM.cardCheckResult;
+  } catch {
+    // If the check itself fails, do not let it become a reason never to fire.
+    CAM.cardCheckResult = true;
+    return true;
   }
 }
 
@@ -5146,19 +5219,20 @@ async function fireCapture(how) {
     renderSingle(result);
     $('sec-progress').hidden = true;
     $('results').hidden = false;
+    collapseCapture();
+    $('btn-scan-next').hidden = false;
+    $('btn-shutter').hidden = true;
   } catch (err) {
     $('sec-progress').hidden = true;
     $('sec-error').hidden = false;
     $('error-text').textContent = (err && err.message) || String(err);
   }
 
-  // The camera stays on and keeps scanning. A scanner you have to restart
-  // between cards is a camera with extra steps — take the card away, put the
-  // next one in the frame, and it reads that one too.
-  //
-  // Re-arming needs the card to LEAVE first, not just a timer. Holding one
-  // card steady in the frame otherwise re-reads the same card every couple of
-  // seconds, which looks like a fault and buries the result you were reading.
+  // The camera stays on, but it does not scan again on its own. Reading card
+  // after card untouched is the right behaviour for a stack and the wrong one
+  // for a person reading the report they just asked for: whatever drifts under
+  // the lens next — the next card, a hand, the desk — replaces it. "Scan
+  // another card" starts the next one, and it is now the only thing that does.
   CAM.retries = 0;
   CAM.goodFrames = 0;
   CAM.window = [];
@@ -5721,6 +5795,32 @@ $('file-bulk').addEventListener('change', (e) => {
   e.target.value = '';
   if (files.length === 1) scan(files[0]);
   else if (files.length > 1) runBulk(files);
+});
+
+/**
+ * Start the next card without tearing the camera down.
+ *
+ * Re-opening the stream would cost a second and send autofocus hunting again,
+ * for no reason: the camera never stopped, it was only told not to read
+ * anything else until asked.
+ */
+$('btn-scan-next').addEventListener('click', () => {
+  $('btn-scan-next').hidden = true;
+  $('btn-shutter').hidden = false;
+  $('results').hidden = true;
+  $('sec-error').hidden = true;
+  CAM.armed = true;
+  CAM.goodFrames = 0;
+  CAM.window = [];
+  CAM.focusRing = [];
+  CAM.heldRing = [];
+  CAM.cardHeld = 0;
+  CAM.cardCheckAt = -999;
+  CAM.retries = 0;
+  CAM.autoDisabled = false;
+  CAM.lastState = '';
+  CAM.running = true;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 $('btn-reset').addEventListener('click', async () => {
