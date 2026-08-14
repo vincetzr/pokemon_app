@@ -607,10 +607,10 @@
     <div class="mark"><b>⚡</b> Pokémon card scanner</div>
     <h1>Photograph a card. Get a real reading.</h1>
     <p class="standfirst">
-      The authenticity checks run on your photo, on this device. The prices are real figures
-      captured from live TCGplayer listings, frozen into the page — this sandbox blocks network
-      access, so nothing here is invented to fill the gap. Pick several photos at once and it
-      ranks the pile by what each card is worth.
+      Everything here runs on your device. The prices are real figures captured from live
+      TCGplayer listings and frozen into the file — this page makes no network requests at all,
+      so nothing is invented to fill a gap. Point it at a card and it recognises the card by
+      itself; hand it a pile of photos and it ranks them by what each one is worth.
     </p>
   </header>
 
@@ -824,9 +824,10 @@
     </p>
     <p>
       <b>What is frozen.</b> Prices and history were captured from live sources on
-      11 August 2026 and cannot refresh here, because the sandbox blocks network access. The
-      AI vision check and the live price lookup need a network and therefore abstain.
-      Prices are asking prices from listings, not completed sales.
+      11 August 2026 and cannot refresh, because this is a single self-contained file that makes
+      no requests — that is what lets it work with no server and no account, and it is also why
+      the figures age. The AI vision check needs a server holding an API key, so it cannot run
+      here on any photo. Prices are asking prices from listings, not completed sales.
     </p>
     <p>
       This is not an appraisal and not a certificate. A photograph cannot prove a card is
@@ -3099,6 +3100,21 @@ function confidentPick(candidates) {
 }
 
 /**
+ * Enough to NAME the card, which is a weaker claim than knowing its printing.
+ *
+ * The two questions come apart, and conflating them is expensive in both
+ * directions. The score says whether this artwork is in the corpus at all; the
+ * gap to the runner-up says which printing it is. A pile scan that refuses to
+ * name a 96% Charizard because Base and Base Set (Shadowless) sit within a
+ * whisker of each other has thrown away the answer to the question it was
+ * asked, in order to protect the answer to one it was not.
+ */
+function namePick(candidates) {
+  const top = candidates && candidates[0];
+  return !!top && top.score >= CONFIDENT_MATCH;
+}
+
+/**
  * The whole pipeline for one photo, with no DOM in it.
  *
  * Kept free of rendering so the pile scan can run it over a stack of photos
@@ -3563,12 +3579,17 @@ async function runBulk(files) {
       }
 
       const top = result && result.candidates[0];
-      const card = result && confidentPick(result.candidates) ? top.card : null;
+      const card = result && namePick(result.candidates) ? top.card : null;
       rows.push({
         file: files[i].name,
         card,
         match: top ? top.score : 0,
         value: card ? bestValue(card) : null,
+        // Named, but the runner-up is close enough that the printing — and so
+        // the price — is a guess. Said on the row rather than folded into the
+        // total silently.
+        printingUnsure: !!card && !confidentPick(result.candidates),
+        alternative: result && result.candidates[1] ? result.candidates[1].card : null,
       });
     }
 
@@ -3617,11 +3638,17 @@ function renderBulk(rows) {
   const priced = rows.filter((r) => r.value !== null);
   const total = priced.reduce((sum, r) => sum + r.value.amount, 0);
 
+  const unsure = rows.filter((r) => r.printingUnsure).length;
   $('bulk-intro').textContent =
-    rows.length + ' photos, ' + priced.length + ' identified confidently enough to price. ' +
+    rows.length + ' photos, ' + priced.length + ' matched to a card in this build. ' +
     (priced.length > 0
-      ? 'Ranked by Near Mint asking price — the top of this list is what to look at first.'
-      : 'None matched the offline corpus confidently, so none could be priced.');
+      ? 'Ranked by Near Mint asking price — the top of this list is what to look at first. ' +
+        (unsure > 0
+          ? unsure + ' of them matched an artwork that exists in more than one printing, and ' +
+            'those printings are far apart in price, so treat those figures as the roughest ' +
+            'of the lot and open the card to settle it.'
+          : '')
+      : 'None matched a card in this build, so none could be priced.');
 
   const list = $('bulk-list');
   list.innerHTML = '';
@@ -3650,8 +3677,15 @@ function renderBulk(rows) {
     const mt = document.createElement('div');
     mt.className = 'mt';
     mt.textContent = r.card
-      ? r.card.setName + ' · ' + r.card.number + '/' + r.card.printedTotal
+      ? r.card.setName + ' · ' + r.card.number + '/' + r.card.printedTotal +
+        (r.printingUnsure
+          ? '  ·  printing uncertain' +
+            (r.alternative && r.alternative.setName !== r.card.setName
+              ? ', could be ' + r.alternative.setName
+              : '')
+          : '')
       : r.file + ' · best guess ' + Math.round(r.match * 100) + '%';
+    if (r.printingUnsure) mt.style.color = 'var(--warn)';
     who.appendChild(nm);
     who.appendChild(mt);
     li.appendChild(who);
