@@ -2595,12 +2595,27 @@ function rotate180(img) {
  * orientation is also the one shown back to the user, so the flattened card in
  * the report is the right way up.
  */
+/**
+ * How much better the half-turned reading must score before it is believed.
+ * Matching scores for a card and its inversion sit within a point or two of
+ * each other whenever the artwork is roughly symmetrical, which is often.
+ */
+const HALF_TURN_MARGIN = 0.03;
+
 function identify(rect, limit) {
   const upright = matchCard(describeRectified(rect), limit);
   const flipped = rotate180(rect);
   const inverted = matchCard(describeRectified(flipped), limit);
 
-  return inverted[0].score > upright[0].score
+  // Turning the picture over needs a MARGIN, not a hair.
+  //
+  // People photograph cards the right way up. Two readings of the same card
+  // that differ by a point are not evidence that it was upside down, they are
+  // noise — and acting on that noise hands the user a report with their card
+  // inverted in it, which reads as the tool being broken whatever the name
+  // underneath says. So upright is the default and the flip has to beat it by
+  // enough to mean something.
+  return inverted[0].score > upright[0].score + HALF_TURN_MARGIN
     ? { candidates: inverted, image: flipped, halfTurned: true }
     : { candidates: upright, image: rect, halfTurned: false };
 }
@@ -4043,6 +4058,7 @@ const CAM = {
   lastBox: null,
   cardSeen: false,
   cardHeld: 0,
+  heldRing: [],
   lastFill: 0,
   preflight: 'maybe',
   lastState: '',
@@ -4109,7 +4125,10 @@ const STILL_BEFORE_FOCUS = 4;
  * gate which never closes costs the user three seconds rather than the whole
  * feature.
  */
-const PATIENCE_TICKS = 24;
+const PATIENCE_TICKS = 20;
+
+/** Window the above is counted over, so an odd dropped frame does not restart it. */
+const PATIENCE_WINDOW = 26;
 
 /**
  * How much of the guide the card must cover before patience will fire.
@@ -4655,7 +4674,7 @@ function assessFrame(f) {
   });
   CAM.last = null;
 
-  if (det.method !== 'contour' || det.confidence < 0.4) return 'searching';
+  if (det.method !== 'contour') return 'searching';
 
   const xs = det.corners.map((c) => c.x);
   const ys = det.corners.map((c) => c.y);
@@ -4671,9 +4690,16 @@ function assessFrame(f) {
 
   // Is this plausibly a card the user is showing us, whatever the framing
   // gates go on to say about how well they are showing it?
+  // Is a card plausibly being shown, whatever the framing gates go on to say
+  // about how well? Judged on shape and position only. Confidence is not used:
+  // it is dominated by how much of the WHOLE frame the card covers, so a card
+  // held at arm's length scores low on it for being far away rather than for
+  // being doubtful, and the patient trigger below would then never see it.
   CAM.cardSeen =
     Math.abs(det.measuredAspect - CARD_ASPECT) / CARD_ASPECT <= 0.30 &&
     boxContainment(CAM.lastBox, guideBox) >= 0.6;
+
+  if (det.confidence < 0.4) return 'searching';
 
   // Stillness is measured here rather than below the framing gates, because it
   // describes the HAND and not the framing. Measured below them, a frame that
@@ -4814,11 +4840,23 @@ function tick() {
   // it ever firing. Motion blur is caught properly after capture anyway, by
   // the calibrated sharpness check.
   // A card is "held" when one has actually been found where the frame is
-  // pointing and the hand is steady — never merely because something is in
-  // shot, or an empty desk would eventually photograph itself.
-  const held = CAM.cardSeen && CAM.stillSince >= STILL_MOVING &&
-    CAM.lastFill >= PATIENCE_MIN_FILL;
-  CAM.cardHeld = held ? CAM.cardHeld + 1 : 0;
+  // pointing, and is big enough to be worth photographing — never merely
+  // because something is in shot, or an empty desk would photograph itself.
+  //
+  // Stillness is deliberately NOT required. It was, and it should not have
+  // been: a person holding a tablet over a card is not still, and telling them
+  // to be is asking for something they cannot give. Every other gate here is
+  // about whether the photo will be usable, and that question is answered
+  // properly after the capture, where blur is measured on the flattened card
+  // against a threshold calibrated on real ones.
+  //
+  // Counted over a window rather than as an unbroken run, for the same reason
+  // every other counter here is: detection wobbles for a frame now and then,
+  // and a consecutive counter starts again from nothing each time it does.
+  const held = CAM.cardSeen && CAM.lastFill >= PATIENCE_MIN_FILL;
+  CAM.heldRing.push(held);
+  if (CAM.heldRing.length > PATIENCE_WINDOW) CAM.heldRing.shift();
+  CAM.cardHeld = CAM.heldRing.reduce((n, ok) => n + (ok ? 1 : 0), 0);
 
   CAM.window.push(state === 'locked');
   if (CAM.window.length > LOCK_WINDOW) CAM.window.shift();
@@ -4854,6 +4892,8 @@ function tick() {
       // subject changes, rather than on every capture, so a card held still
       // does not churn.
       CAM.focusRing = [];
+      CAM.heldRing = [];
+      CAM.cardHeld = 0;
       CAM.lastState = '';
     } else {
       setHint('scanned');
