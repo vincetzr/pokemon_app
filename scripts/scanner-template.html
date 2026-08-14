@@ -1138,6 +1138,19 @@ function otsu(values) {
   return (best / (BINS - 1)) * max;
 }
 
+/**
+ * Largest connected region in a mask, summarised as it is walked.
+ *
+ * The summary — size, bounding box, and the extreme point along each diagonal —
+ * is everything the caller needs, and accumulating it during the flood fill
+ * rather than afterwards is what keeps this affordable. Collecting the pixels
+ * into an array of points first allocated one object per pixel, which on a
+ * card filling a 480px working frame is well over a hundred thousand objects
+ * per call; the live loop now proposes several regions per frame and calls
+ * this for each, so that cost arrived three times over. Measured on the live
+ * loop, the array-of-points version put a frame at 104ms against a 125ms
+ * budget at 8fps.
+ */
 function largestComponent(mask, w, h) {
   const seen = new Uint8Array(w * h);
   let best = null;
@@ -1148,19 +1161,38 @@ function largestComponent(mask, w, h) {
     stack.length = 0;
     stack.push(start);
     seen[start] = 1;
-    const points = [];
+
+    let size = 0;
+    let minSum = Infinity, maxSum = -Infinity, minDiff = Infinity, maxDiff = -Infinity;
+    let tl = 0, tr = 0, br = 0, bl = 0;
+    let x0 = w, x1 = -1, y0 = h, y1 = -1;
 
     while (stack.length > 0) {
       const idx = stack.pop();
       const x = idx % w;
       const y = (idx - x) / w;
-      points.push({ x, y });
+      size++;
+
+      const sum = x + y, diff = x - y;
+      if (sum < minSum) { minSum = sum; tl = idx; }
+      if (sum > maxSum) { maxSum = sum; br = idx; }
+      if (diff > maxDiff) { maxDiff = diff; tr = idx; }
+      if (diff < minDiff) { minDiff = diff; bl = idx; }
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+
       if (x > 0 && mask[idx - 1] === 1 && seen[idx - 1] === 0) { seen[idx - 1] = 1; stack.push(idx - 1); }
       if (x < w - 1 && mask[idx + 1] === 1 && seen[idx + 1] === 0) { seen[idx + 1] = 1; stack.push(idx + 1); }
       if (y > 0 && mask[idx - w] === 1 && seen[idx - w] === 0) { seen[idx - w] = 1; stack.push(idx - w); }
       if (y < h - 1 && mask[idx + w] === 1 && seen[idx + w] === 0) { seen[idx + w] = 1; stack.push(idx + w); }
     }
-    if (!best || points.length > best.size) best = { size: points.length, points };
+
+    if (!best || size > best.size) {
+      const pt = (i) => ({ x: i % w, y: (i - (i % w)) / w });
+      best = { size, corners: [pt(tl), pt(tr), pt(br), pt(bl)], x0, x1, y0, y1 };
+    }
   }
   return best;
 }
@@ -1175,56 +1207,29 @@ function quadAspect(c) {
   return height === 0 ? 0 : width / height;
 }
 
-function detectCard(source) {
-  const WORK = 480;
-  const scale = WORK / source.width;
-  const w = WORK;
-  const h = Math.max(1, Math.round(source.height * scale));
-  const small = boxResize(source, w, h);
+/** Grow a rectangle by a fraction of its own size, clipped to the frame. */
+function expandRect(r, frac, maxW, maxH) {
+  const dx = r.w * frac, dy = r.h * frac;
+  const x = Math.max(0, r.x - dx), y = Math.max(0, r.y - dy);
+  return {
+    x, y,
+    w: Math.min(maxW, r.x + r.w + dx) - x,
+    h: Math.min(maxH, r.y + r.h + dy) - y,
+  };
+}
 
-  // Cards are usually brighter and more saturated than the surface under them;
-  // combining both beats either alone under warm indoor light.
-  const score = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    const r = small[i * 3], g = small[i * 3 + 1], b = small[i * 3 + 2];
-    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-    const sat = mx === 0 ? 0 : (mx - mn) / mx;
-    score[i] = lum * 0.6 + sat * 255 * 0.4;
-  }
-
-  const threshold = otsu(score);
-  const mask = new Uint8Array(w * h);
-  for (let i = 0; i < score.length; i++) mask[i] = score[i] > threshold ? 1 : 0;
-
-  const component = largestComponent(mask, w, h);
-  if (!component || component.size < w * h * 0.06) {
-    return {
-      corners: [
-        { x: 0, y: 0 },
-        { x: source.width, y: 0 },
-        { x: source.width, y: source.height },
-        { x: 0, y: source.height },
-      ],
-      confidence: 0.15,
-      method: 'full-frame',
-      measuredAspect: source.width / source.height,
-    };
-  }
-
-  let tl = component.points[0], br = tl, tr = tl, bl = tl;
-  let minSum = Infinity, maxSum = -Infinity, minDiff = Infinity, maxDiff = -Infinity;
-  for (const pt of component.points) {
-    const sum = pt.x + pt.y, diff = pt.x - pt.y;
-    if (sum < minSum) { minSum = sum; tl = pt; }
-    if (sum > maxSum) { maxSum = sum; br = pt; }
-    if (diff > maxDiff) { maxDiff = diff; tr = pt; }
-    if (diff < minDiff) { minDiff = diff; bl = pt; }
-  }
-
-  const sx = source.width / w, sy = source.height / h;
-  let corners = [tl, tr, br, bl].map((p) => ({ x: p.x * sx, y: p.y * sy }));
-
+/**
+ * Turn one thresholded region into a candidate quadrilateral.
+ *
+ * Corners are the extreme points along each diagonal, which is exact for a
+ * rectangle at any rotation and degrades gracefully for a quad carrying
+ * perspective. Solidity — the share of the bounding box the region actually
+ * fills — comes back with it, because that number is what separates a card
+ * from the surface AROUND a card.
+ */
+function quadFromComponent(component, w, h, sx, sy) {
+  const { x0, x1, y0, y1 } = component;
+  let corners = component.corners.map((p) => ({ x: p.x * sx, y: p.y * sy }));
   let measuredAspect = quadAspect(corners);
 
   // A card photographed on its side measures the RECIPROCAL of a card's aspect,
@@ -1239,13 +1244,246 @@ function detectCard(source) {
     measuredAspect = quadAspect(corners);
   }
 
-  const fill = component.size / (w * h);
-  const aspectError = Math.abs(measuredAspect - CARD_ASPECT) / CARD_ASPECT;
+  const boxArea = Math.max(1, (x1 - x0 + 1) * (y1 - y0 + 1));
+  return {
+    corners,
+    measuredAspect,
+    size: component.size,
+    solidity: Math.min(1, component.size / boxArea),
+    box: { x: x0 * sx, y: y0 * sy, w: (x1 - x0 + 1) * sx, h: (y1 - y0 + 1) * sy },
+  };
+}
+
+/**
+ * Model the surface the card is lying on, from the margin around the guide.
+ *
+ * The band between the guide and the search region is the one part of the
+ * frame a user aiming at the guide is NOT showing a card, which makes it a
+ * free sample of the desk. Its median is robust to whatever else strays in —
+ * a finger, the corner of the next card, a cable — because those are a
+ * minority of a band that runs the whole way round.
+ *
+ * The tolerance comes from the band's own spread rather than a constant. A
+ * plain desk photographed under even light varies by a couple of levels and
+ * wants a tight tolerance; wood grain under a lamp varies by dozens and would
+ * otherwise report itself as card everywhere.
+ */
+function surfaceModel(small, w, h, roi, expected, scale) {
+  const x0 = roi ? roi.x0 : 0, y0 = roi ? roi.y0 : 0;
+  const x1 = roi ? roi.x1 : w, y1 = roi ? roi.y1 : h;
+  const ex0 = Math.max(x0, Math.floor(expected.x * scale));
+  const ey0 = Math.max(y0, Math.floor(expected.y * scale));
+  const ex1 = Math.min(x1, Math.ceil((expected.x + expected.w) * scale));
+  const ey1 = Math.min(y1, Math.ceil((expected.y + expected.h) * scale));
+
+  const rs = [], gs = [], bs = [];
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      if (x >= ex0 && x < ex1 && y >= ey0 && y < ey1) continue;   // inside the guide
+      const i = (y * w + x) * 3;
+      rs.push(small[i]); gs.push(small[i + 1]); bs.push(small[i + 2]);
+    }
+  }
+  // Too thin a band is not a sample, it is a guess. Say so by declining.
+  if (rs.length < 400) return null;
+
+  const mid = (a) => { a.sort((p, q) => p - q); return a[a.length >> 1]; };
+  const mr = mid(rs), mg = mid(gs), mb = mid(bs);
+
+  const distance = (i) => {
+    const p = i * 3;
+    const dr = small[p] - mr, dg = small[p + 1] - mg, db = small[p + 2] - mb;
+    return Math.sqrt(dr * dr + dg * dg + db * db);
+  };
+
+  // Spread of the band itself, at the 90th percentile so a few strays in the
+  // sample widen the tolerance a little rather than setting it.
+  const spread = [];
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      if (x >= ex0 && x < ex1 && y >= ey0 && y < ey1) continue;
+      spread.push(distance(y * w + x));
+    }
+  }
+  spread.sort((a, b) => a - b);
+  const p90 = spread[Math.min(spread.length - 1, Math.floor(spread.length * 0.9))];
+
+  return { distance, tolerance: Math.max(24, p90 * 1.6) };
+}
+
+/**
+ * How much of `a` lies inside `b`.
+ *
+ * Containment rather than overlap, deliberately. Overlap also rewards a
+ * candidate for being BIG, which makes a region spilling across the whole
+ * search area outscore a small card sitting neatly in the middle of the frame —
+ * measured, that is exactly what happened to a card held too far away: the
+ * detector preferred the surface and the scanner told the user to move back
+ * from a card that was already too small. Whether the card fills the frame is
+ * the gates' business and they say so in their own words; all this needs to
+ * know is whether the thing it found is what the frame is pointing at.
+ */
+function boxContainment(a, b) {
+  const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const area = a.w * a.h;
+  return area > 0 ? (ix * iy) / area : 0;
+}
+
+/**
+ * Find the card.
+ *
+ * Two assumptions used to be baked in here, and both were wrong in ways that
+ * broke the live path rather than merely degrading it.
+ *
+ * The first was that the card is the BRIGHT side of the threshold. It is on a
+ * dark desk. On a white table it is the dark side, and Otsu then hands back
+ * the TABLE as the foreground — measured on a card centred in the guide on a
+ * light surface, the detector returned the desk with confidence 0.91 and a
+ * quadrilateral covering 155% of the guide. Auto-capture reads that as "too
+ * close" and can never fire however the user moves; the shutter, which asks no
+ * questions, rectifies the desk instead of the card and lands somewhere
+ * arbitrary — sideways whenever the wrong region happens to measure landscape,
+ * since the reciprocal-aspect branch above then rotates it. One assumption,
+ * both symptoms.
+ *
+ * Trying both polarities does not fix it, which is worth recording because it
+ * is the obvious thing to try. On a white desk a Base Set card's yellow border
+ * scores ABOVE the desk while the desk scores above the card's artwork, so the
+ * border and the desk land on the same side of any single threshold and flood
+ * into one region — measured, that merged region was 77% solid and looked more
+ * card-like than the card. No global level separates them, because at the
+ * card's edge there is no level difference to find.
+ *
+ * What does separate them is that the desk is all ONE colour and the card is
+ * not. So where the caller can say where it is looking — the live loop always
+ * can, because the user is aligning to the guide — the surface is modelled from
+ * the margin just outside that box, which is the one place a card being aimed
+ * at is not, and anything unlike the surface is a candidate. A level threshold
+ * is still proposed alongside it, and they compete: solidity, proportions and
+ * agreement with the guide decide, so a bad surface model loses rather than
+ * replacing one wrong answer with another.
+ *
+ * `opts.roi` is a region in SOURCE coordinates to search within. It is a hard
+ * restriction, not a hint: outside the viewfinder's own frame there is nothing
+ * the user is asking about, and a bright window at the edge of the frame is
+ * exactly the thing that used to win.
+ */
+function detectCard(source, opts) {
+  const options = opts || {};
+  // Never UPSCALE to the working size. The live loop hands this a 320px scout
+  // frame, and stretching it to 480 costs 2.25x the pixels to examine detail
+  // that is not in the image — pure cost, on the one path with a frame budget.
+  const WORK = 480;
+  const scale = Math.min(1, WORK / source.width);
+  const w = Math.max(1, Math.round(source.width * scale));
+  const h = Math.max(1, Math.round(source.height * scale));
+  const small = boxResize(source, w, h);
+
+  // Luminance and saturation combined beat either alone under warm indoor
+  // light. Which SIDE of the threshold the card falls on is decided below.
+  const score = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const r = small[i * 3], g = small[i * 3 + 1], b = small[i * 3 + 2];
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    const sat = mx === 0 ? 0 : (mx - mn) / mx;
+    score[i] = lum * 0.6 + sat * 255 * 0.4;
+  }
+
+  let roi = null;
+  if (options.roi) {
+    const r = options.roi;
+    const x0 = Math.max(0, Math.floor(r.x * scale));
+    const y0 = Math.max(0, Math.floor(r.y * scale));
+    const x1 = Math.min(w, Math.ceil((r.x + r.w) * scale));
+    const y1 = Math.min(h, Math.ceil((r.y + r.h) * scale));
+    if (x1 - x0 >= 16 && y1 - y0 >= 16) roi = { x0, y0, x1, y1 };
+  }
+
+  // Threshold from the search region's own pixels. A frame that is half desk
+  // and half window splits at the window otherwise, and the card — the only
+  // thing anyone is pointing at — ends up on whichever side is left over.
+  let pool = score;
+  if (roi) {
+    pool = new Float32Array((roi.x1 - roi.x0) * (roi.y1 - roi.y0));
+    let n = 0;
+    for (let y = roi.y0; y < roi.y1; y++) {
+      for (let x = roi.x0; x < roi.x1; x++) pool[n++] = score[y * w + x];
+    }
+  }
+  const threshold = otsu(pool);
+
+  const searchArea = roi ? (roi.x1 - roi.x0) * (roi.y1 - roi.y0) : w * h;
+  const expected = options.expect || null;
+
+  // Every proposal answers "which pixels are the card" a different way. They
+  // are alternatives, not stages, and they compete on the ranking below.
+  const surface = expected ? surfaceModel(small, w, h, roi, expected, scale) : null;
+  const proposals = [
+    (i) => score[i] > threshold,
+    (i) => score[i] <= threshold,
+  ];
+  if (surface) proposals.push((i) => surface.distance(i) > surface.tolerance);
+
+  let best = null;
+  for (const isCard of proposals) {
+    // Confining the WRITE rather than each proposal makes the region a single
+    // enforced rule instead of one every proposal has to remember.
+    const mask = new Uint8Array(w * h);
+    if (roi) {
+      for (let y = roi.y0; y < roi.y1; y++) {
+        const row = y * w;
+        for (let x = roi.x0; x < roi.x1; x++) if (isCard(row + x)) mask[row + x] = 1;
+      }
+    } else {
+      for (let i = 0; i < mask.length; i++) if (isCard(i)) mask[i] = 1;
+    }
+
+    const component = largestComponent(mask, w, h);
+    if (!component || component.size < searchArea * 0.06) continue;
+
+    const cand = quadFromComponent(component, w, h, source.width / w, source.height / h);
+    const aspectError = Math.abs(cand.measuredAspect - CARD_ASPECT) / CARD_ASPECT;
+    const agreement = expected ? boxContainment(cand.box, expected) : 0;
+
+    // Solidity carries the most weight because it is the one term that is
+    // about what a card IS rather than where it happens to be, and it is what
+    // rejects the surface-with-a-hole-in-it that used to win.
+    cand.rank = expected
+      ? 0.40 * cand.solidity + 0.25 * clamp01(1 - aspectError / 0.25) + 0.35 * agreement
+      : 0.60 * cand.solidity + 0.40 * clamp01(1 - aspectError / 0.25);
+
+    if (!best || cand.rank > best.rank) best = cand;
+  }
+
+  if (!best) {
+    return {
+      corners: [
+        { x: 0, y: 0 },
+        { x: source.width, y: 0 },
+        { x: source.width, y: source.height },
+        { x: 0, y: source.height },
+      ],
+      confidence: 0.15,
+      method: 'full-frame',
+      measuredAspect: source.width / source.height,
+    };
+  }
+
+  const fill = best.size / (w * h);
+  const aspectError = Math.abs(best.measuredAspect - CARD_ASPECT) / CARD_ASPECT;
   const confidence = clamp01(
     0.5 * clamp01((fill - 0.06) / 0.5) + 0.5 * clamp01(1 - aspectError / 0.25)
   );
 
-  return { corners, confidence, method: 'contour', measuredAspect };
+  return {
+    corners: best.corners,
+    confidence,
+    method: 'contour',
+    measuredAspect: best.measuredAspect,
+    solidity: best.solidity,
+  };
 }
 
 /* --- homography ---------------------------------------------------- */
@@ -3155,7 +3393,42 @@ async function analyzeSource(source, onStep, opts) {
       measuredAspect: h > 0 ? w / h : 0,
     };
   } else {
-    detection = detectCard(source);
+    // A live capture says where it was aiming. Detecting without that is what
+    // let the shutter rectify a desk instead of the card the user had framed.
+    detection = detectCard(source, options.roi ? { roi: options.roi, expect: options.expect } : undefined);
+
+    // When the aim is known, the frame the user lined the card up in is the
+    // floor on how wrong this can go.
+    //
+    // Detection can still fail — a bright object touching the card's edge
+    // merges with it and no region-based method separates them. What must not
+    // happen is the failure being invisible: the old path handed whatever it
+    // found to the homography, which stretched it to card proportions and
+    // rotated it if it happened to measure landscape, so a bad detection came
+    // back as a confidently-presented picture of the wrong thing. Falling back
+    // to the frame means the capture always shows what the viewfinder showed.
+    // It is marked 'guide' because it is the user's rectangle and not a
+    // measurement of the card, which is what makes the proportions check stand
+    // down rather than grade the frame.
+    if (options.expect) {
+      const xs = detection.corners.map((p) => p.x), ys = detection.corners.map((p) => p.y);
+      const bx = Math.min.apply(null, xs), by = Math.min.apply(null, ys);
+      const box = { x: bx, y: by, w: Math.max.apply(null, xs) - bx, h: Math.max.apply(null, ys) - by };
+      if (detection.method !== 'contour' || boxContainment(box, options.expect) < GUIDE_FALLBACK_CONTAINMENT) {
+        const e = options.expect;
+        detection = {
+          corners: [
+            { x: e.x, y: e.y },
+            { x: e.x + e.w, y: e.y },
+            { x: e.x + e.w, y: e.y + e.h },
+            { x: e.x, y: e.y + e.h },
+          ],
+          confidence: 0.45,
+          method: 'guide',
+          measuredAspect: e.h > 0 ? e.w / e.h : 0,
+        };
+      }
+    }
   }
 
   step(2);
@@ -3755,6 +4028,35 @@ const CAM = {
 /** Working width for the live loop. Small enough to stay smooth at 8fps. */
 const SCOUT_W = 320;
 
+/**
+ * How far outside the guide the detector may look, as a fraction of the guide.
+ *
+ * Some slack is needed or a card held a little proud of the frame gets its own
+ * edge clipped and measures the wrong proportions. Too much and the surface
+ * comes back into scope, which is the thing being fixed. At 0.12 the search
+ * box is a quarter larger than the guide in each direction, which still leaves
+ * 'near' reachable — a card genuinely too close overflows it — and that state
+ * is what re-arms the loop between cards.
+ */
+const GUIDE_ROI_MARGIN = 0.12;
+
+/**
+ * The same slack for a capture, which needs more of it.
+ *
+ * takePhoto can hand back a different field of view from the preview, so the
+ * guide recomputed against the still describes a slightly different piece of
+ * the world than the one the user aligned to. A wider margin absorbs that
+ * while still excluding the frame edges, where the window and the desk live.
+ */
+const CAPTURE_ROI_MARGIN = 0.28;
+
+/**
+ * How much of a detection must lie inside the guide for it to be preferred
+ * over the guide itself. A card the user has framed is entirely inside it; a
+ * detection that has spread onto the surrounding surface is not.
+ */
+const GUIDE_FALLBACK_CONTAINMENT = 0.8;
+
 /** Locked frames needed inside the window before it fires. */
 const STABLE_FRAMES = 4;
 
@@ -3772,10 +4074,54 @@ const MIN_FRAMES_BEFORE_LOCK = 8;
  */
 const STILL_WINDOW = 10;
 const STILL_MOVING = 5;
-const STILL_BEFORE_FOCUS = 6;
+const STILL_BEFORE_FOCUS = 4;
 
 /** How many focus readings the plateau test looks back over. */
 const FOCUS_RING = 15;
+
+/**
+ * Readings needed before the plateau test means anything.
+ *
+ * Five, because that is what the median and the quartiles of the recent window
+ * are computed from — asking for more does not make the statistic better, it
+ * just delays it. It was briefly eight, and that alone lost a whole obligation:
+ * a feed that settles part way through gives about a dozen usable ticks before
+ * the subject changes again, and spending eight of them waiting to be allowed
+ * to look left too few to accumulate a lock.
+ */
+const FOCUS_MIN_SAMPLES = 5;
+
+/** Median of a short array, leaving the caller's order alone. */
+function median(values) {
+  if (!values.length) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  return s[s.length >> 1];
+}
+
+/** Nearest-rank percentile, for the same short arrays. */
+function percentile(values, p) {
+  if (!values.length) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(s.length * p))];
+}
+
+/**
+ * The best reading the subject has SUSTAINED, as opposed to the best it has
+ * ever touched: the highest rolling median of three.
+ *
+ * A single frame reading high is noise — on a steady feed the series ran a
+ * median of 36.6 with occasional 44.7s — and letting noise define the bar is
+ * what made the old plateau test unsatisfiable. Three consecutive frames
+ * holding a level is a level the lens can actually deliver.
+ */
+function sustainedBest(ring) {
+  if (ring.length < 3) return ring.length ? Math.max.apply(null, ring) : 0;
+  let best = 0;
+  for (let i = 2; i < ring.length; i++) {
+    best = Math.max(best, median([ring[i - 2], ring[i - 1], ring[i]]));
+  }
+  return best;
+}
 
 /**
  * Live-loop thresholds.
@@ -3794,12 +4140,10 @@ const LIVE = {
   aspectTol: 0.08,      // foreshortening on an un-rectified quad eats the 3% nominal budget
   motionMax: 0.012,     // fraction of pixels that changed by more than MOTION_DELTA
   motionExit: 0.025,    // hysteresis, so a borderline hand does not flicker the state
-  sharpRatio: 0.90,     // of the recent peak
-  // Spread across recent focus readings. A hand holding a card produces about
-  // ten percent of natural variation between frames; a lens actually hunting
-  // swings several times that, so this separates the two without demanding a
-  // stillness no one can hold.
-  sharpSpread: 0.16,
+  // How the focus plateau is judged. Every one of these compares TYPICAL
+  // readings rather than extremes — see the gate itself for why that matters.
+  sharpLevel: 0.80,     // recent level, against the best SUSTAINED reading
+  sharpSpread: 0.25,    // interquartile spread of recent readings, over their level
   lumMin: 60,
   lumMax: 205,
 };
@@ -4246,7 +4590,15 @@ function inspectCard(scout, corners) {
  * always about the ONE thing most worth fixing rather than a list.
  */
 function assessFrame(f) {
-  const det = detectCard(f.img);
+  // The guide is not decoration: the user is holding a card inside it, which
+  // makes it the strongest prior available and it costs nothing to use. Search
+  // there rather than over a frame that also contains a desk, a lamp and a lap.
+  const g = f.guide;
+  const guideBox = { x: g.gx, y: g.gy, w: g.gw, h: g.gh };
+  const det = detectCard(f.img, {
+    roi: expandRect(guideBox, GUIDE_ROI_MARGIN, f.w, f.h),
+    expect: guideBox,
+  });
   CAM.last = null;
 
   if (det.method !== 'contour' || det.confidence < 0.4) return 'searching';
@@ -4258,7 +4610,6 @@ function assessFrame(f) {
   const cx = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2;
   const cy = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
 
-  const g = f.guide;
   const fill = (qw * qh) / (g.gw * g.gh);
   const offset = Math.hypot(cx - (g.gx + g.gw / 2), cy - (g.gy + g.gh / 2)) / g.gw;
   const aspectErr = Math.abs(det.measuredAspect - CARD_ASPECT) / CARD_ASPECT;
@@ -4300,16 +4651,47 @@ function assessFrame(f) {
   // plateau only means anything once the frame has been still for a moment.
   if (CAM.stillSince < STILL_BEFORE_FOCUS) return 'focusing';
 
+  // Convergence is read from TYPICAL readings, never from extremes.
+  //
+  // This gate used to ask the current frame to land within 90% of the best of
+  // the last fifteen. That is an order statistic dressed up as a measurement,
+  // and what it actually demands depends entirely on how noisy the reading is.
+  // Measured over 140 ticks of a steady feed, edge energy on the rectified card
+  // ran median 36.1 with a p25-p75 of 35.9-36.6 — and a maximum of 44.6. One
+  // outlier like that sets the bar at 40.1 for the next fifteen frames, which
+  // no ordinary frame reaches, and by the time it ages out another has arrived.
+  // Counted over the same series the old rule was satisfiable on 0% of frames
+  // on one surface and 5% on another; the trigger needs four in a window of six.
+  // That is the whole of "it never takes the picture by itself" — nothing to do
+  // with the lens, and nothing the user could hold still enough to fix.
+  //
+  // So: the recent LEVEL is compared against the best SUSTAINED reading rather
+  // than the best single one, and spread is measured between quartiles rather
+  // than between extremes. Both changes say the same thing — one frame is not
+  // evidence, in either direction.
+  //
+  // A third term was tried and removed, which is worth recording so it is not
+  // added back. Requiring the figure to have stopped climbing looks like the
+  // right way to catch a lens still hunting, and it works on a feed that
+  // settles once. But it compares the recent level against the level five
+  // frames earlier, so it stays triggered through every CHANGE of subject —
+  // and swapping cards is what this scanner does all day. Measured on the
+  // settling feed it never fired at all, at any tolerance from 6% to 25%.
+  // What actually protects against a hunting lens is the spread term, and
+  // behind it the sharpness check after rectification, which is calibrated
+  // against real cards and is the one entitled to make the decision.
   CAM.focusRing.push(card.focus);
   if (CAM.focusRing.length > FOCUS_RING) CAM.focusRing.shift();
-  const peak = Math.max.apply(null, CAM.focusRing);
-  const recent = CAM.focusRing.slice(-4);
-  const spread = recent.length >= 4
-    ? (Math.max.apply(null, recent) - Math.min.apply(null, recent)) / Math.max(1e-6, peak)
-    : 1;
 
   if (CAM.framesSeen < MIN_FRAMES_BEFORE_LOCK) return 'focusing';
-  if (card.focus < peak * LIVE.sharpRatio || spread > LIVE.sharpSpread) return 'focusing';
+  if (CAM.focusRing.length < FOCUS_MIN_SAMPLES) return 'focusing';
+
+  const recent = CAM.focusRing.slice(-5);
+  const level = median(recent);
+  const iqr = percentile(recent, 0.75) - percentile(recent, 0.25);
+
+  if (level < sustainedBest(CAM.focusRing) * LIVE.sharpLevel) return 'focusing';
+  if (iqr / Math.max(1e-6, level) > LIVE.sharpSpread) return 'focusing';
 
   return 'locked';
 }
@@ -4465,13 +4847,27 @@ async function takeStill(track) {
  * re-detected from scratch and judged on how many pixels the card actually
  * occupies, which is the figure the resolution-gated checks depend on.
  */
+/**
+ * Where the card should be in a still, derived from the guide the user was
+ * aligning to. The guide is a fixed fraction of the frame, so it re-derives
+ * correctly whatever resolution the photo pipeline hands back.
+ */
+function captureRegion(source) {
+  const g = computeGuide(source.width, source.height);
+  return {
+    expect: { x: g.x, y: g.y, w: g.w, h: g.h },
+    roi: expandRect({ x: g.x, y: g.y, w: g.w, h: g.h }, CAPTURE_ROI_MARGIN, source.width, source.height),
+  };
+}
+
 function chooseCapture(candidates) {
   let best = null;
   for (const source of candidates) {
     if (!source) continue;
     let width = 0;
     try {
-      const det = detectCard(source);
+      const region = captureRegion(source);
+      const det = detectCard(source, region);
       const [tl, tr, br, bl] = det.corners;
       width = det.method === 'contour'
         ? (Math.hypot(tr.x - tl.x, tr.y - tl.y) + Math.hypot(br.x - bl.x, br.y - bl.y)) / 2
@@ -4532,7 +4928,7 @@ async function fireCapture(how) {
 
   let result;
   try {
-    result = await analyzeSource(source);
+    result = await analyzeSource(source, undefined, captureRegion(source));
   } catch (err) {
     CAM.running = true;
     CAM.firing = false;
