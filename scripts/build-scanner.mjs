@@ -185,6 +185,11 @@ const bakedAt = new Date(corpus.bakedAt).toLocaleDateString('en-GB', {
   day: 'numeric', month: 'long', year: 'numeric',
 });
 
+// The page states what it can never recognise, so the list has to come from the
+// corpus rather than from a sentence someone remembered to update.
+const setNames = [...new Set(corpus.cards.map((c) => c.setName))];
+const setList = setNames.join(' · ');
+
 // Where a served copy of this page lives. The page needs this baked in for one
 // case only: when it is embedded in another page, which refuses it a camera and
 // leaves it unable to work out its own address. Override with SCANNER_URL.
@@ -195,7 +200,8 @@ const out = template
   .replace('__CORPUS__', () => json)
   .replace(/__CARDCOUNT__/g, String(corpus.cards.length))
   .replace(/__BAKEDATE__/g, bakedAt)
-  .replace(/__SCANNERURL__/g, servedAt);
+  .replace(/__SCANNERURL__/g, servedAt)
+  .replace(/__SETLIST__/g, setList);
 
 if (out.includes('__CORPUS__')) throw new Error('corpus placeholder not replaced');
 if (out.includes('__SCANNERURL__')) throw new Error('scanner URL placeholder not replaced');
@@ -208,7 +214,7 @@ if (!/<meta name="viewport"/.test(out)) throw new Error('template lost its viewp
 
 writeFileSync(OUT, out);
 
-const sets = [...new Set(corpus.cards.map((c) => c.setName))];
+const sets = setNames;
 const withPrices = corpus.cards.filter((c) => c.conditions && c.conditions.rows.length > 0).length;
 const japanese = corpus.cards.filter((c) => c.language === 'Japanese').length;
 

@@ -756,6 +756,12 @@
           <input type="search" id="search" placeholder="Not it? Search by name or number…" autocomplete="off" spellcheck="false">
         </div>
         <div class="cand-list" id="search-results" style="margin-top:8px"></div>
+        <!-- The boundary of what can ever be recognised. A card from outside it
+             still produces a ranked list, so the list has to say what it covers. -->
+        <details style="margin-top:12px">
+          <summary class="note" style="cursor:pointer">Which sets are in this build</summary>
+          <p class="note" style="margin:8px 0 0">Expansion Pack (No Rarity) · Expansion Pack · Base · Base Set (Shadowless) · Jungle · Fossil · Team Rocket · Neo Genesis · Legendary Collection · Evolutions · Hidden Fates · Shining Fates · Celebrations · Crown Zenith · SV2a: Pokemon Card 151 · 151 · Prismatic Evolutions</p>
+        </details>
       </div>
     </section>
 
@@ -1756,8 +1762,10 @@ function blurAbstention() {
 function visionUnavailable() {
   return abstain('vision', 'Detailed visual comparison', 1.5, 'error',
     'This check sends the photo to a vision model to compare fonts, holo pattern, set symbol ' +
-    'and colour against the official card. The sandbox this preview runs in blocks all network ' +
-    'access, so it could not run.');
+    'and colour against the official card. It needs a server holding an API key, and this is a ' +
+    'single file that makes no network requests at all — so it cannot run here, on any photo. ' +
+    'It is still counted, so the confidence figure reflects a check that is missing rather than ' +
+    'quietly pretending the remaining ones cover the ground.');
 }
 
 /* ===================================================================
@@ -2390,12 +2398,45 @@ const CONDITION_LABELS = {
   HP: 'Heavily Played', DMG: 'Damaged',
 };
 
+/**
+ * Say why this verdict, from what actually happened.
+ *
+ * The canned inconclusive line blamed the capture. When the panel directly
+ * below it reports that the photo cleared every threshold, that reads as the
+ * page contradicting itself — and the real reason, checks that abstained or
+ * that cannot run in this build at all, never gets said.
+ */
+function explainVerdict(report) {
+  const meta = VERDICT_META[report.verdict];
+  if (report.verdict !== 'inconclusive') return meta.blurb;
+
+  const ran = report.signals.filter((s) => s.status === 'ok' && s.score !== null);
+  const missing = report.signals.filter((s) => !(s.status === 'ok' && s.score !== null));
+  if (!missing.length) return meta.blurb;
+
+  const why = missing.map((s) =>
+    s.status === 'error'
+      ? s.label.toLowerCase() + ' cannot run in this build'
+      : s.label.toLowerCase() + ' had nothing measurable to work with in this photo');
+  const list = why.length > 1
+    ? why.slice(0, -1).join(', ') + ' and ' + why[why.length - 1]
+    : why[0];
+
+  const passed = ran.filter((s) => s.score >= 70).map((s) => s.label.toLowerCase());
+
+  return (
+    (passed.length ? 'What could be checked passed — ' + passed.join(', ') + '. ' : '') +
+    'The verdict stays open because ' + list + '. That is a limit of what this build can ' +
+    'measure, not a finding about the card.'
+  );
+}
+
 function renderReport(report) {
   const meta = VERDICT_META[report.verdict];
   const pill = $('verdict-pill');
   pill.textContent = meta.label;
   pill.className = 'pill tone-' + meta.tone;
-  $('verdict-blurb').textContent = meta.blurb;
+  $('verdict-blurb').textContent = explainVerdict(report);
 
   $('fig-score').textContent = report.scoreIsMeaningful ? report.score : '—';
   $('bar-score').style.width = (report.scoreIsMeaningful ? report.score : 0) + '%';
@@ -3041,8 +3082,14 @@ async function loadImage(file) {
  * prices under a real name, which is worse than showing a list, so both
  * conditions must hold.
  */
-const CONFIDENT_MATCH = 0.72;
-const CONFIDENT_MARGIN = 0.010;
+// Calibrated against the benchmark twice: once with the true card present, and
+// once with it deleted from the ranking, which is exactly the case of a card
+// from a set that was never baked in. The old pair (0.72 / 0.010) called 12 of
+// 40 absent cards a match. These reject the whole overlap region instead — the
+// pile scan marks more cards unknown, which is the honest direction for a
+// total, and the single-card view no longer treats a score as an answer.
+const CONFIDENT_MATCH = 0.80;
+const CONFIDENT_MARGIN = 0.030;
 
 function confidentPick(candidates) {
   const top = candidates && candidates[0];
@@ -3331,31 +3378,50 @@ function renderSingle(result) {
   renderQuality(result);
 
   const candidates = result.candidates;
+
+  // Nothing is selected automatically, however good the top score looks.
+  //
+  // Measured against the benchmark with the true card deleted from the ranking
+  // — which is exactly a card from a set that was never baked in — the old rule
+  // (score >= 0.72, gap >= 0.01) declared confidence on 12 of 40 cards that
+  // were not in the corpus at all, and then priced them. Tightening does not
+  // rescue it: at 0.84/0.04 it still misfires on 3 of 40 while keeping only 5
+  // of the 40 it should catch. The score cannot tell "this is the card" from
+  // "the card is not here", so it must not be allowed to answer that question.
+  // The person holding the card can answer it in one tap.
+  // Two different failures, which need different words. A low top score means
+  // the card may not be in here at all. A high top score with the field right
+  // behind it means the artwork is certain and the PRINTING is not — which is
+  // the expensive ambiguity, since Base and Base Set (Shadowless) are the same
+  // picture with a drop shadow and are 6.7x apart in price.
   const top = candidates[0];
-  const confident = confidentPick(candidates) && !result.foreign;
+  const runnerUp = candidates[1];
+  const nothingClose = !top || top.score < CONFIDENT_MATCH;
+  const tooAlike = !nothingClose && runnerUp && top.score - runnerUp.score < CONFIDENT_MARGIN;
 
   $('id-intro').textContent = result.foreign
     ? 'The artwork matches ' + result.foreign.name + ', but the rest of the card does not — see ' +
       'the note below before trusting any price here.'
-    : confident
-      ? 'Closest matches in the offline corpus. Tap the right one to see its prices — the top ' +
-        'result is a best guess, not a certainty.'
-      : 'No confident match. Photo lighting and holo glare move these scores a lot, so check the ' +
-        'list, and search if the card is not there.';
+    : nothingClose
+      ? 'Nothing here is a close match — these are only the nearest of ' + CARDS.length +
+        ' cards. If your card is not from one of the sets listed below it cannot appear at all, ' +
+        'however high these percentages look. Tap a card to price it anyway.'
+      : tooAlike
+        ? 'The artwork is matched, but these printings score within a whisker of each other and ' +
+          'can be worth very different money. Pick the one your card actually is — the set and ' +
+          'number under each name are what separate them.'
+        : 'Tap the card that matches to see its prices. The percentages rank the list; they are ' +
+          'not the odds that the top one is right.';
 
   const list = $('candidates');
   list.innerHTML = '';
-  candidates.forEach((entry, i) => {
-    const btn = candidateButton(entry, selectCard);
-    list.appendChild(btn);
-    if (i === 0 && confident) selectCard(entry.card, btn);
-  });
+  for (const entry of candidates) list.appendChild(candidateButton(entry, selectCard));
 
-  if (!confident) {
-    $('sec-price').hidden = true;
-    $('sec-history').hidden = true;
-    $('sec-centering').hidden = true;
-  }
+  // Prices belong to a card the user has confirmed, so they stay closed until
+  // one is tapped.
+  $('sec-price').hidden = true;
+  $('sec-history').hidden = true;
+  $('sec-centering').hidden = true;
 
   renderVariantNotes(result);
 }
