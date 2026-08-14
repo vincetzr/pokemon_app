@@ -1261,6 +1261,15 @@ function quadFromComponent(component, w, h, sx, sy) {
 }
 
 /**
+ * How the surface model weighs colour against brightness. Chromaticity is
+ * scaled up because its natural range is small; luminance is kept but held
+ * well below parity, so a shadow — which changes only brightness — no longer
+ * reads as strongly as a card does.
+ */
+const CHROMA_GAIN = 3.0;
+const LUMA_GAIN = 0.35;
+
+/**
  * Model the surface the card is lying on, from the margin around the guide.
  *
  * The band between the guide and the search region is the one part of the
@@ -1296,10 +1305,37 @@ function surfaceModel(small, w, h, roi, expected, scale) {
   const mid = (a) => { a.sort((p, q) => p - q); return a[a.length >> 1]; };
   const mr = mid(rs), mg = mid(gs), mb = mid(bs);
 
+  /**
+   * Distance from the surface, weighted towards COLOUR rather than brightness.
+   *
+   * A shadow is the surface with the light taken off it: same cloth, same hue,
+   * lower luminance. Measured in plain RGB it therefore reads as "not the
+   * surface" exactly like a card does, and the card's region grows to swallow
+   * the shadow it casts. That is not a small error — with a tablet held over a
+   * card the shadow falls to one side, so the region grows on two edges only
+   * and the quadrilateral comes out a parallelogram. Measured, the bottom two
+   * corners were dragged 50px down and right of the card's real ones, and the
+   * flattened card in the report was visibly sheared.
+   *
+   * Comparing where the colour sits rather than how bright it is separates
+   * them: a shadow holds its chromaticity, a card does not share the desk's.
+   * Luminance still counts for something, because a white card on a white desk
+   * differs in little else, but it no longer dominates.
+   */
+  const chroma = (r, g, b) => {
+    const sum = r + g + b;
+    return sum > 0 ? [r / sum, g / sum] : [1 / 3, 1 / 3];
+  };
+  const [mcr, mcg] = chroma(mr, mg, mb);
+  const mlum = 0.299 * mr + 0.587 * mg + 0.114 * mb;
+
   const distance = (i) => {
     const p = i * 3;
-    const dr = small[p] - mr, dg = small[p + 1] - mg, db = small[p + 2] - mb;
-    return Math.sqrt(dr * dr + dg * dg + db * db);
+    const r = small[p], g = small[p + 1], b = small[p + 2];
+    const [cr, cg] = chroma(r, g, b);
+    const dc = Math.hypot(cr - mcr, cg - mcg) * 255 * CHROMA_GAIN;
+    const dl = Math.abs(0.299 * r + 0.587 * g + 0.114 * b - mlum) * LUMA_GAIN;
+    return Math.hypot(dc, dl);
   };
 
   // Spread of the band itself, at the 90th percentile so a few strays in the
@@ -5053,6 +5089,13 @@ function looksLikeACard() {
   CAM.cardCheckAt = CAM.framesSeen;
 
   try {
+    // A quad with no area is not a card, and asking the homography about it
+    // only produces an exception to swallow.
+    const [tl, tr, br, bl] = frame.corners;
+    const w = (Math.hypot(tr.x - tl.x, tr.y - tl.y) + Math.hypot(br.x - bl.x, br.y - bl.y)) / 2;
+    const h = (Math.hypot(bl.x - tl.x, bl.y - tl.y) + Math.hypot(br.x - tr.x, br.y - tr.y)) / 2;
+    if (!(w > 8 && h > 8)) return false;
+
     const rect = rectifyCard(frame.img, frame.corners, LIVE_RECT_W, LIVE_RECT_H);
     const best = matchCard(describeRectified(rect), 1);
     const score = best && best[0] ? best[0].score : 0;
@@ -5068,9 +5111,16 @@ function looksLikeACard() {
     CAM.cardCheckResult = flippedScore >= LIVE_MATCH_MIN;
     return CAM.cardCheckResult;
   } catch {
-    // If the check itself fails, do not let it become a reason never to fire.
-    CAM.cardCheckResult = true;
-    return true;
+    // A check that cannot run has not said yes.
+    //
+    // This returned true, reasoning that a broken check should not become a
+    // reason never to fire. That is the wrong way round for a gate whose whole
+    // job is to refuse: an empty frame gives the detector nothing to work
+    // with, the quad it invents can be degenerate, flattening it throws, and
+    // the answer came back "yes, photograph it" — which is a picture of a desk
+    // with no card in it. The shutter is still there for anything this refuses.
+    CAM.cardCheckResult = false;
+    return false;
   }
 }
 
