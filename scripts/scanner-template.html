@@ -211,7 +211,10 @@
 
   .row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 
-  button.ghost {
+  /* Class rather than element selector: the escape hatch out of an embedding
+     frame has to be a real link, and it should not look like a lesser control
+     than the buttons beside it. */
+  .ghost {
     flex: 1 1 auto;
     min-height: 44px;
     padding: 10px 14px;
@@ -222,10 +225,15 @@
     font-family: var(--sans);
     font-size: 14px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    text-decoration: none;
   }
-  button.ghost:hover { border-color: var(--ink-600); color: var(--ink-100); }
+  .ghost:hover { border-color: var(--ink-600); color: var(--ink-100); }
 
-  button.ghost.primary {
+  .ghost.primary {
     border-color: var(--bolt-600);
     color: var(--bolt);
     background: var(--ink-900);
@@ -234,7 +242,17 @@
     letter-spacing: 0.1em;
     font-size: 13px;
   }
-  button.ghost.primary:hover { border-color: var(--bolt); color: var(--bolt); }
+  .ghost.primary:hover { border-color: var(--bolt); color: var(--bolt); }
+
+  /* The photo path is a consolation prize, not an equal choice. */
+  .ghost.quiet {
+    flex: 0 1 auto;
+    background: transparent;
+    border-color: transparent;
+    color: var(--ink-400);
+    font-size: 13px;
+  }
+  .ghost.quiet:hover { color: var(--ink-200); border-color: var(--ink-700); }
 
   input[type=file] { display: none; }
 
@@ -623,10 +641,14 @@
       <span class="sub">Hold the card inside the frame. It recognises it by itself.</span>
     </button>
     <p class="note" id="capture-note" style="margin:10px 0 0" hidden></p>
+    <!-- An anchor, not a button calling window.open: inside an embedding frame
+         location.href is the framed URL, so reopening it lands back in the same
+         frame with the same refusal. A cross-origin link is also the one
+         navigation an embedded page can reliably ask its host to perform. -->
     <div class="row" id="cam-fallback" hidden>
-      <button class="ghost primary" id="btn-open-tab" type="button">Open in a browser tab — the scanner works there</button>
+      <a class="ghost primary" id="lnk-scanner" target="_blank" rel="noopener">Open the live scanner →</a>
       <button class="ghost" id="btn-retry-camera" type="button">Try again</button>
-      <button class="ghost" id="btn-use-photo" type="button">Use a photo instead</button>
+      <button class="ghost quiet" id="btn-use-photo" type="button">Photograph it instead</button>
     </div>
     <div class="row">
       <button class="ghost" id="btn-library" type="button">Choose an existing photo</button>
@@ -4870,6 +4892,16 @@ async function analyseAligned() {
 
 CAM.debug = new URLSearchParams(location.search).has('debug');
 
+/**
+ * Where this page is served from an origin of its own.
+ *
+ * Baked in at build time rather than derived from location, because the case
+ * that needs it is exactly the case where location is wrong: inside an
+ * embedding frame, location.href is the frame's URL, so reopening it lands
+ * back in the same frame with the same refused camera.
+ */
+const SCANNER_URL = '__SCANNERURL__';
+
 let cameraWorked = false;
 
 /**
@@ -4906,21 +4938,26 @@ function showCameraFallback() {
   const note = $('capture-note');
   const why = CAM.lastError ? ' (' + CAM.lastError + ')' : '';
 
+  // Where a copy of this page is served from an origin of its own. A page that
+  // cannot get a camera where it is standing can at least say where one works,
+  // and a page cannot fix that for itself: the permission belongs to whatever
+  // is framing it.
+  const topLevelWeb = !embedded && /^https?:$/.test(location.protocol);
+
   note.hidden = false;
   note.textContent = embedded
-    ? 'This panel will not give the page a camera' + why + ', so the scanner cannot open here. ' +
-      'It is not a setting on this page — a page embedded inside another only gets a camera if ' +
-      'the outer page grants one. Open this in a browser tab and the scanner runs: frame, live ' +
-      'recognition, automatic capture.'
-    : 'The camera could not start' + why + '. Allow camera access for this site and try again.';
+    ? 'A page inside another page only gets a camera if the outer page grants one' + why +
+      ', and this one does not. Nothing on this page can change that. The link below opens the ' +
+      'same scanner served on its own — frame, live recognition, automatic capture, no button.'
+    : topLevelWeb
+      ? 'The camera could not start' + why + '. Allow camera access for this site and try again.'
+      : 'A file opened straight from disk is not always given a camera' + why + '. The link below ' +
+        'opens the same scanner served over HTTPS, where it is.';
 
   $('cam-fallback').hidden = false;
-  $('btn-open-tab').hidden = !(embedded && /^https?:$/.test(location.protocol));
+  $('lnk-scanner').href = SCANNER_URL;
+  $('lnk-scanner').hidden = topLevelWeb;
 }
-
-$('btn-open-tab').addEventListener('click', () => {
-  window.open(location.href, '_blank', 'noopener');
-});
 $('btn-use-photo').addEventListener('click', () => $('file-camera').click());
 $('btn-retry-camera').addEventListener('click', async () => {
   $('cam-fallback').hidden = true;

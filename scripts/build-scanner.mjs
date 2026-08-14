@@ -185,12 +185,20 @@ const bakedAt = new Date(corpus.bakedAt).toLocaleDateString('en-GB', {
   day: 'numeric', month: 'long', year: 'numeric',
 });
 
+// Where a served copy of this page lives. The page needs this baked in for one
+// case only: when it is embedded in another page, which refuses it a camera and
+// leaves it unable to work out its own address. Override with SCANNER_URL.
+const servedAt = process.env.SCANNER_URL
+  ?? 'https://raw.githack.com/vincetzr/pokemon_app/claude/pokemon-card-auth-pricing-rpx6ib/docs/index.html';
+
 const out = template
   .replace('__CORPUS__', () => json)
   .replace(/__CARDCOUNT__/g, String(corpus.cards.length))
-  .replace(/__BAKEDATE__/g, bakedAt);
+  .replace(/__BAKEDATE__/g, bakedAt)
+  .replace(/__SCANNERURL__/g, servedAt);
 
 if (out.includes('__CORPUS__')) throw new Error('corpus placeholder not replaced');
+if (out.includes('__SCANNERURL__')) throw new Error('scanner URL placeholder not replaced');
 
 // The page is only served, never embedded, so it must be a whole document.
 // Without a doctype a browser lays it out in quirks mode against a 980px
