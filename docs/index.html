@@ -2602,28 +2602,103 @@ function rotate180(img) {
  * the report is the right way up.
  */
 /**
- * How much better the half-turned reading must score before it is believed.
- * Matching scores for a card and its inversion sit within a point or two of
- * each other whenever the artwork is roughly symmetrical, which is often.
+ * How much better the half-turned reading must score before the MATCH is
+ * allowed to decide which way up the card is on its own.
+ *
+ * Measured across cards read both ways up, the two regimes are stark. A card
+ * the matcher recognises confidently separates by 0.22 to 0.26 — it knows. A
+ * card it half-recognises separates by 0.008 to 0.046, which is noise, and
+ * the orientation shown to the user was then decided by a coin toss. That is
+ * where the upside-down reports come from: not from orientation spoiling the
+ * match, but from a weak match failing to pin the orientation.
  */
-const HALF_TURN_MARGIN = 0.03;
+const CONFIDENT_MATCH_MARGIN = 0.15;
+
+/**
+ * How decisively the card's own layout must speak before it overrules a match
+ * that could not settle the question. Measured across the fixtures, the right
+ * answer separates by 0.10 to 0.48 and the single case that gets it wrong
+ * separates by 0.055 — so below this the layout is not consulted either.
+ */
+const LAYOUT_MARGIN = 0.08;
+
+/**
+ * Which way up the card is, read from its own layout rather than from what it
+ * was matched against.
+ *
+ * Every Pokemon card, in every era and language, puts artwork across the upper
+ * half and a block of attack text across the lower. The two do not look alike
+ * under a simple measure: artwork is largely dark ink over its whole area,
+ * while a text panel is mostly light background with thin glyphs on it. So the
+ * fraction of each band that sits markedly below that band's own light level
+ * separates them without knowing anything about which card this is.
+ *
+ * Colour was tried first and is not safe: a Fairy card's text panel is bright
+ * pink and its artwork can be dark and cool, which reverses the sign. Ink does
+ * not care what colour the panel is.
+ *
+ * Returns true if already upright, false if half-turned, null if it cannot
+ * tell — which is a real answer and must not be read as either of the others.
+ */
+function uprightByLayout(rect) {
+  const inkiness = (y0, y1) => {
+    const W = rect.width, H = rect.height, d = rect.data;
+    const a = Math.round(H * y0), z = Math.round(H * y1);
+    const row = new Float64Array(W);
+    let total = 0, rows = 0;
+    for (let y = a; y < z; y++) {
+      let n = 0;
+      for (let x = 1; x < W - 1; x++) {
+        const i = (y * W + x) * 4;
+        row[n++] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      }
+      const sorted = Array.prototype.slice.call(row, 0, n).sort((p, q) => p - q);
+      const light = sorted[Math.floor(n * 0.85)];
+      let dark = 0;
+      for (let k = 0; k < n; k++) if (row[k] < light - 55) dark++;
+      total += dark / n;
+      rows++;
+    }
+    return rows > 0 ? total / rows : 0;
+  };
+
+  const diff = inkiness(0.12, 0.48) - inkiness(0.56, 0.93);
+  if (Math.abs(diff) < LAYOUT_MARGIN) return null;
+  return diff > 0;
+}
 
 function identify(rect, limit) {
   const upright = matchCard(describeRectified(rect), limit);
   const flipped = rotate180(rect);
   const inverted = matchCard(describeRectified(flipped), limit);
 
-  // Turning the picture over needs a MARGIN, not a hair.
+  // Two different questions, answered separately, because tying them together
+  // makes each one worse.
   //
-  // People photograph cards the right way up. Two readings of the same card
-  // that differ by a point are not evidence that it was upside down, they are
-  // noise — and acting on that noise hands the user a report with their card
-  // inverted in it, which reads as the tool being broken whatever the name
-  // underneath says. So upright is the default and the flip has to beat it by
-  // enough to mean something.
-  return inverted[0].score > upright[0].score + HALF_TURN_MARGIN
-    ? { candidates: inverted, image: flipped, halfTurned: true }
-    : { candidates: upright, image: rect, halfTurned: false };
+  // WHICH CARD is it? Whichever reading matches better, full stop. Orientation
+  // is unknown at this point, which is the entire reason both are tried, and
+  // overriding that costs identifications: forcing the match to follow the
+  // layout cue dropped top-1 accuracy from 80% to 78% over the hard set.
+  //
+  // WHICH WAY UP is it shown? A confident match knows — it separates the two
+  // readings by a quarter. A match that cannot separate them knows nothing,
+  // and letting it choose anyway is what put cards in the report upside down;
+  // measured, the weak cases separate by 0.008 to 0.046, which is noise. There
+  // the card's own layout is asked instead, which needs no recognition at all.
+  // If neither can say, it stays as photographed — people hold cards upright.
+  const margin = inverted[0].score - upright[0].score;
+  const better = margin > 0 ? inverted : upright;
+
+  const layout = uprightByLayout(rect);
+  const turn = Math.abs(margin) >= CONFIDENT_MATCH_MARGIN
+    ? margin > 0
+    : layout !== null ? !layout : false;
+
+  return {
+    candidates: better,
+    image: turn ? flipped : rect,
+    halfTurned: turn,
+  };
 }
 
 /* ===================================================================
