@@ -1308,7 +1308,14 @@ function surfaceModel(small, w, h, roi, expected, scale) {
   spread.sort((a, b) => a - b);
   const p90 = spread[Math.min(spread.length - 1, Math.floor(spread.length * 0.9))];
 
-  return { distance, tolerance: Math.max(24, p90 * 1.6) };
+  // The multiplier is measured, not assumed, and it is sharper than it looks.
+  // Swept over ten scenes on plain desks and on woven cloth, 1.2 held every
+  // case at 0.73 IoU or better against the card's true outline, where 1.6 let
+  // a capture fall to 0.33 (the model returns only the vivid part of a card,
+  // because a wide tolerance counts the card's paler areas as surface) and 1.0
+  // to 0.23 (it bleeds into the surface instead). Cloth is the case that pins
+  // it down; on a plain surface the floor applies and the multiplier is moot.
+  return { distance, tolerance: Math.max(24, p90 * 1.2) };
 }
 
 /**
@@ -1417,6 +1424,19 @@ function detectCard(source, opts) {
   const searchArea = roi ? (roi.x1 - roi.x0) * (roi.y1 - roi.y0) : w * h;
   const expected = options.expect || null;
 
+  // The smallest region worth considering.
+  //
+  // Relative to the SEARCH area this was a trap: the search region is drawn
+  // generously so a card near its edge is not clipped, and a card that is
+  // simply further away then falls under the floor and is thrown out as noise.
+  // Measured on a card at 46% of the guide's width — an ordinary arm's length —
+  // the card's own region came to 3.5% of the search area and was discarded,
+  // leaving a blob covering the whole region to win by default and the capture
+  // to crop that. Where the caller says what it expects, the floor is relative
+  // to THAT.
+  const expectedArea = expected ? expected.w * expected.h * scale * scale : 0;
+  const minSize = expected ? Math.max(64, expectedArea * 0.05) : searchArea * 0.06;
+
   // Every proposal answers "which pixels are the card" a different way. They
   // are alternatives, not stages, and they compete on the ranking below.
   const surface = expected ? surfaceModel(small, w, h, roi, expected, scale) : null;
@@ -1441,7 +1461,7 @@ function detectCard(source, opts) {
     }
 
     const component = largestComponent(mask, w, h);
-    if (!component || component.size < searchArea * 0.06) continue;
+    if (!component || component.size < minSize) continue;
 
     const cand = quadFromComponent(component, w, h, source.width / w, source.height / h);
     const aspectError = Math.abs(cand.measuredAspect - CARD_ASPECT) / CARD_ASPECT;
@@ -4020,6 +4040,10 @@ const CAM = {
   armed: true,
   clearFrames: 0,
   lastCaptureFingerprint: null,
+  lastBox: null,
+  cardSeen: false,
+  cardHeld: 0,
+  lastFill: 0,
   preflight: 'maybe',
   lastState: '',
   firing: false,
@@ -4075,6 +4099,35 @@ const MIN_FRAMES_BEFORE_LOCK = 8;
 const STILL_WINDOW = 10;
 const STILL_MOVING = 5;
 const STILL_BEFORE_FOCUS = 4;
+
+/**
+ * How long a card may sit in the frame, held still, before the scanner stops
+ * waiting for perfect framing and simply takes the photo.
+ *
+ * At the loop's 8fps this is about three seconds — long enough that it never
+ * pre-empts a capture that was about to happen properly, short enough that a
+ * gate which never closes costs the user three seconds rather than the whole
+ * feature.
+ */
+const PATIENCE_TICKS = 24;
+
+/**
+ * How much of the guide the card must cover before patience will fire.
+ *
+ * Well below what the framing gate asks for — the point is to stop insisting
+ * on perfect framing — but not zero. Below this there genuinely is not enough
+ * card in the photograph to be worth taking, and saying "move closer" is the
+ * useful answer rather than a capture nobody can use.
+ */
+const PATIENCE_MIN_FILL = 0.35;
+
+/**
+ * How close to the sharpness threshold a patient capture must land to be kept
+ * rather than put back. Well under the bar is still a photograph worth
+ * reporting on; a fraction of it is a lens that cannot focus, and saying so is
+ * more use than a verdict built on nothing.
+ */
+const PATIENCE_SHARPNESS_FLOOR = 0.7;
 
 /** How many focus readings the plateau test looks back over. */
 const FOCUS_RING = 15;
@@ -4595,6 +4648,7 @@ function assessFrame(f) {
   // there rather than over a frame that also contains a desk, a lamp and a lap.
   const g = f.guide;
   const guideBox = { x: g.gx, y: g.gy, w: g.gw, h: g.gh };
+  CAM.cardSeen = false;
   const det = detectCard(f.img, {
     roi: expandRect(guideBox, GUIDE_ROI_MARGIN, f.w, f.h),
     expect: guideBox,
@@ -4610,7 +4664,37 @@ function assessFrame(f) {
   const cx = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2;
   const cy = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
 
+  // Remember where the card actually was, in this frame's own coordinates.
+  // A capture a moment later is far better served by this than by the generic
+  // guide: it is where a card WAS just seen, not where one is invited to be.
+  CAM.lastBox = { x: Math.min.apply(null, xs), y: Math.min.apply(null, ys), w: qw, h: qh, sw: f.w, sh: f.h };
+
+  // Is this plausibly a card the user is showing us, whatever the framing
+  // gates go on to say about how well they are showing it?
+  CAM.cardSeen =
+    Math.abs(det.measuredAspect - CARD_ASPECT) / CARD_ASPECT <= 0.30 &&
+    boxContainment(CAM.lastBox, guideBox) >= 0.6;
+
+  // Stillness is measured here rather than below the framing gates, because it
+  // describes the HAND and not the framing. Measured below them, a frame that
+  // never satisfies "centre the card" never learns that it is being held
+  // perfectly steady — which is exactly the frame the patience trigger exists
+  // to rescue. The gate that reports 'moving' stays where it was, so the
+  // coaching message still names the one thing most worth fixing.
+  //
+  // Counted over a window, not as an unbroken run: traced on a feed with a
+  // deliberate one-pixel oscillation — which is what a hand holding a tablet
+  // actually does — motion sat at 0.4% but spiked past the threshold every
+  // third or fourth frame as the sub-pixel phase came round, and a consecutive
+  // counter reset to zero on every one of those.
+  const still = f.motion <= (CAM.wasStill ? LIVE.motionExit : LIVE.motionMax);
+  CAM.wasStill = still;
+  CAM.stillRing.push(still);
+  if (CAM.stillRing.length > STILL_WINDOW) CAM.stillRing.shift();
+  CAM.stillSince = CAM.stillRing.reduce((n, ok) => n + (ok ? 1 : 0), 0);
+
   const fill = (qw * qh) / (g.gw * g.gh);
+  CAM.lastFill = fill;
   const offset = Math.hypot(cx - (g.gx + g.gw / 2), cy - (g.gy + g.gh / 2)) / g.gw;
   const aspectErr = Math.abs(det.measuredAspect - CARD_ASPECT) / CARD_ASPECT;
 
@@ -4627,14 +4711,7 @@ function assessFrame(f) {
   // round. A consecutive-run counter reset to zero on every one of those, so
   // it never survived long enough for the focus gate to be evaluated at all
   // and the trigger could not fire on a perfectly good shot.
-  const still = f.motion <= (CAM.wasStill ? LIVE.motionExit : LIVE.motionMax);
-  CAM.wasStill = still;
-  CAM.stillRing.push(still);
-  if (CAM.stillRing.length > STILL_WINDOW) CAM.stillRing.shift();
-  const stillCount = CAM.stillRing.reduce((n, ok) => n + (ok ? 1 : 0), 0);
-  CAM.stillSince = stillCount;
-
-  if (stillCount < STILL_MOVING) return 'moving';
+  if (CAM.stillSince < STILL_MOVING) return 'moving';
 
   const card = inspectCard(f, det.corners);
   CAM.last = card;
@@ -4736,6 +4813,13 @@ function tick() {
   // to zero — on a deliberately near-still feed that alone was enough to stop
   // it ever firing. Motion blur is caught properly after capture anyway, by
   // the calibrated sharpness check.
+  // A card is "held" when one has actually been found where the frame is
+  // pointing and the hand is steady — never merely because something is in
+  // shot, or an empty desk would eventually photograph itself.
+  const held = CAM.cardSeen && CAM.stillSince >= STILL_MOVING &&
+    CAM.lastFill >= PATIENCE_MIN_FILL;
+  CAM.cardHeld = held ? CAM.cardHeld + 1 : 0;
+
   CAM.window.push(state === 'locked');
   if (CAM.window.length > LOCK_WINDOW) CAM.window.shift();
   CAM.goodFrames = CAM.window.reduce((n, ok) => n + (ok ? 1 : 0), 0);
@@ -4781,6 +4865,24 @@ function tick() {
 
   if (state === 'locked' && CAM.goodFrames >= STABLE_FRAMES && !CAM.autoDisabled && CAM.armed) {
     fireCapture('auto');
+    return;
+  }
+
+
+  // Take the shot anyway once a card has plainly been held there long enough.
+  //
+  // Every gate above is an AND, and each is a reasonable thing to want: fill
+  // the frame, centre it, hold it square, hold it still, get it lit, let the
+  // focus settle. Seven reasonable things ANDed together on a hand-held tablet
+  // is not reasonable, and when one of them never quite closes the scanner
+  // waits for ever while telling the user to do something they are already
+  // doing. There is no version of that which is better than taking the photo:
+  // the checks after rectification are the ones calibrated against real cards,
+  // they run on this capture exactly as on any other, and they say plainly
+  // when the photo was not good enough. So the gates decide when to fire
+  // EAGERLY, and this decides when to stop waiting.
+  if (CAM.cardHeld >= PATIENCE_TICKS && !CAM.autoDisabled && CAM.armed) {
+    fireCapture('patience');
   }
 }
 
@@ -4854,10 +4956,27 @@ async function takeStill(track) {
  */
 function captureRegion(source) {
   const g = computeGuide(source.width, source.height);
-  return {
-    expect: { x: g.x, y: g.y, w: g.w, h: g.h },
-    roi: expandRect({ x: g.x, y: g.y, w: g.w, h: g.h }, CAPTURE_ROI_MARGIN, source.width, source.height),
-  };
+  let expect = { x: g.x, y: g.y, w: g.w, h: g.h };
+
+  // Prefer where the live loop just saw the card over where the guide invites
+  // one. The guide is a big generic rectangle, and the margin around it that
+  // the surface model samples then takes in a wide sweep of desk and every
+  // shadow across it. A band drawn close around the card samples the surface
+  // immediately beside it, which is the surface that actually matters.
+  //
+  // Only when the still has the preview's shape, though: a different aspect
+  // ratio means a different field of view, and the preview's coordinates would
+  // then describe a different piece of the world.
+  const lb = CAM.lastBox;
+  if (lb && lb.sw > 0 && lb.sh > 0 && lb.w > 0) {
+    const previewAspect = lb.sw / lb.sh, stillAspect = source.width / source.height;
+    if (Math.abs(previewAspect - stillAspect) / stillAspect < 0.02) {
+      const k = source.width / lb.sw;
+      expect = { x: lb.x * k, y: lb.y * k, w: lb.w * k, h: lb.h * k };
+    }
+  }
+
+  return { expect, roi: expandRect(expect, CAPTURE_ROI_MARGIN, source.width, source.height) };
 }
 
 function chooseCapture(candidates) {
@@ -4935,7 +5054,20 @@ async function fireCapture(how) {
     return;
   }
 
-  if (how === 'auto' && result.quality.tooBlurry) {
+  // A capture taken because the user has plainly been holding a card there is
+  // not thrown away for missing the sharpness bar by a little.
+  //
+  // The eager path can afford to be fussy: it fires the instant everything
+  // lines up, so discarding one frame costs a fraction of a second and it will
+  // get another. The patient path has already established that another chance
+  // is not coming — the gates have been unsatisfied for three seconds. Measured
+  // on a card turned five degrees, the capture came back correctly cropped at
+  // sharpness 29 against a threshold of 30, was discarded four times, and the
+  // scanner then stood down and told the user its lens was dirty. Marginal
+  // captures are kept and reported as soft, which the report already does
+  // properly; only a capture nowhere near the bar is put back.
+  const hopeless = result.quality.sharpness < QUALITY_THRESHOLDS.sharpness * PATIENCE_SHARPNESS_FLOOR;
+  if ((how === 'auto' || (how === 'patience' && hopeless)) && result.quality.tooBlurry) {
     CAM.retries++;
     CAM.goodFrames = 0;
     CAM.window = [];
