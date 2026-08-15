@@ -723,9 +723,14 @@
             <div class="meter"><i id="bar-score" style="width:0%"></i></div>
           </div>
           <div class="figure">
-            <div class="k">Confidence</div>
+            <div class="k">Coverage</div>
             <div class="v" id="fig-conf">—</div>
             <div class="meter"><i id="bar-conf" style="width:0%"></i></div>
+            <!-- The qualifier sits against the figure rather than two tiles
+                 away: "100%" of a shrunken scope has to name the scope in the
+                 same glance or it reads as a clean bill of health. -->
+            <div class="k" id="fig-conf-note"
+                 style="letter-spacing:0;text-transform:none;margin-top:3px"></div>
           </div>
           <div class="figure">
             <div class="k">Checks run</div>
@@ -1257,6 +1262,10 @@ function quadFromComponent(component, w, h, sx, sy) {
     size: component.size,
     solidity: Math.min(1, component.size / boxArea),
     box: { x: x0 * sx, y: y0 * sy, w: (x1 - x0 + 1) * sx, h: (y1 - y0 + 1) * sy },
+    // Kept in WORKING coordinates so a caller can ask whether this region ran
+    // into the edge of where it was allowed to look — which is what a card
+    // hanging out of shot looks like from in here.
+    bounds: { x0, x1, y0, y1 },
   };
 }
 
@@ -1539,12 +1548,42 @@ function detectCard(source, opts) {
     0.5 * clamp01((fill - 0.06) / 0.5) + 0.5 * clamp01(1 - aspectError / 0.25)
   );
 
+  // Which edges of the search region the chosen region ran into, and whether a
+  // CORNER of the quad ran into them too.
+  //
+  // Reported, not acted on. A region touching the boundary mid-edge is routine
+  // — a thumb, a shadow lobe, the next card in a stack — and none of those move
+  // the corners, which are extremes along the diagonals. A card actually
+  // hanging out of shot takes a corner to the boundary with it. Anything that
+  // ever gates on this must use the corner-corroborated count, and must be
+  // measured against a card held a few degrees off square first: the search
+  // region is only 12% wider than the guide, so a well-framed card clips it on
+  // rotation alone.
+  const edge = 1;
+  const lim = best.bounds;
+  const atEdge = (v, lo, hi) => v <= lo + edge || v >= hi - edge;
+  const touched = [
+    roi ? lim.x0 <= roi.x0 + edge : lim.x0 <= edge,
+    roi ? lim.x1 >= roi.x1 - 1 - edge : lim.x1 >= w - 1 - edge,
+    roi ? lim.y0 <= roi.y0 + edge : lim.y0 <= edge,
+    roi ? lim.y1 >= roi.y1 - 1 - edge : lim.y1 >= h - 1 - edge,
+  ].filter(Boolean).length;
+
+  const cornersAtEdge = best.corners.filter((c) => {
+    const cx = c.x * (w / source.width), cy = c.y * (h / source.height);
+    const inX = roi ? atEdge(cx, roi.x0, roi.x1 - 1) : atEdge(cx, 0, w - 1);
+    const inY = roi ? atEdge(cy, roi.y0, roi.y1 - 1) : atEdge(cy, 0, h - 1);
+    return inX || inY;
+  }).length;
+
   return {
     corners: best.corners,
     confidence,
     method: 'contour',
     measuredAspect: best.measuredAspect,
     solidity: best.solidity,
+    clippedEdges: touched,
+    clippedCorners: cornersAtEdge,
   };
 }
 
@@ -1770,6 +1809,19 @@ function buildReport(signals, contextLimitations) {
     : 0;
   const coverage = totalWeight > 0 ? ranWeight / totalWeight : 0;
 
+  // Two denominators, because there are two different questions.
+  //
+  // `coverage` — over EVERY listed check — is what the verdict is gated on. It
+  // is unchanged, and it is right: proportions alone have not covered enough
+  // ground for a verdict no matter which checks this build happens to carry.
+  //
+  // `inScopeCoverage` is what the panel SHOWS. A figure half-determined by a
+  // compile-time fact is not measuring the card and cannot be improved by a
+  // better photograph; this one can.
+  const inScope = signals.filter((s) => s.available !== false);
+  const inScopeWeight = inScope.reduce((sum, s) => sum + s.weight, 0);
+  const inScopeCoverage = inScopeWeight > 0 ? ranWeight / inScopeWeight : 0;
+
   const verdict = decideVerdict(ran.length, score, coverage);
 
   // Confidence is capped well below 1, and lower still for anything that
@@ -1784,11 +1836,23 @@ function buildReport(signals, contextLimitations) {
     .map((s) => s.summary);
 
   const limitations = UNIVERSAL_LIMITATIONS.concat(contextLimitations || []);
-  const abstained = signals.filter((s) => s.status !== 'ok');
+  // Split, because "could not run on this photo" is false of a check this build
+  // never carried, and after the panel names two denominators the old single
+  // sentence contradicts the tile beside it.
+  const abstained = signals.filter((s) => s.status !== 'ok' && s.available !== false);
+  const unavailable = signals.filter((s) => s.available === false);
   if (abstained.length > 0) {
     limitations.push(
-      abstained.length + ' of ' + signals.length + ' checks could not run on this photo (' +
+      abstained.length + ' of ' + (signals.length - unavailable.length) +
+      ' checks this build carries could not run on this photo (' +
       abstained.map((s) => s.label).join(', ') + '), so this analysis is partial.'
+    );
+  }
+  if (unavailable.length > 0) {
+    limitations.push(
+      'This build does not carry ' + unavailable.map((s) => s.label.toLowerCase()).join(', ') +
+      ' at all — it needs a server, and this is a single file. That is ground no photo taken ' +
+      'here can cover.'
     );
   }
 
@@ -1801,6 +1865,8 @@ function buildReport(signals, contextLimitations) {
     // actually is. The UI shows a dash instead.
     scoreIsMeaningful: ran.length >= MIN_EFFECTIVE_SIGNALS && coverage >= 0.35,
     confidence: Number(confidence.toFixed(2)),
+    inScopeCoverage: Number(inScopeCoverage.toFixed(4)),
+    inScopeCount: inScope.length,
     signals, concerns, limitations,
     ranCount: ran.length,
     totalCount: signals.length,
@@ -2022,9 +2088,15 @@ function printSignal(rectified, cardWidthPx) {
   // Absence of a screen is what a phone's noise reduction does to a genuine
   // card, so absence abstains rather than scoring low.
   if (median < SCREEN_PRESENT_RATIO) {
-    return abstain(ID, LABEL, PRINT_WEIGHT, 'insufficient_data',
-      'No regular print screen was resolvable in this photo. That is expected from phone noise ' +
-      'reduction and JPEG compression on a genuine card, so nothing is concluded from it.');
+    return {
+      ...abstain(ID, LABEL, PRINT_WEIGHT, 'insufficient_data',
+        'No regular print screen was resolvable in this photo. That is expected from phone noise ' +
+        'reduction and JPEG compression on a genuine card, so nothing is concluded from it.'),
+      // The status stays insufficient_data — it is the same kind of abstention
+      // the server asserts on. This only gives the summary line a phrase that
+      // does not blame a photograph the capture panel just certified as clean.
+      whyShort: 'found no print screen it could read either way',
+    };
   }
 
   const score = Math.round(70 + Math.min(1, (median - SCREEN_PRESENT_RATIO) / 0.8) * 25);
@@ -2058,15 +2130,20 @@ function blurAbstention() {
 }
 
 /** The AI vision check is part of the real app and genuinely cannot run here.
- *  It is listed rather than silently dropped, so the reported coverage matches
- *  what the app would report with the same check unavailable. */
+ *  It is LISTED rather than dropped, so the panel can say the check exists and
+ *  is absent — but it is marked unavailable, so it is not counted against the
+ *  coverage of a photo it was never going to read. Coverage measures how much
+ *  of what THIS BUILD can check actually ran. */
 function visionUnavailable() {
-  return abstain('vision', 'Detailed visual comparison', 1.5, 'error',
-    'This check sends the photo to a vision model to compare fonts, holo pattern, set symbol ' +
-    'and colour against the official card. It needs a server holding an API key, and this is a ' +
-    'single file that makes no network requests at all — so it cannot run here, on any photo. ' +
-    'It is still counted, so the confidence figure reflects a check that is missing rather than ' +
-    'quietly pretending the remaining ones cover the ground.');
+  return {
+    ...abstain('vision', 'Detailed visual comparison', 1.5, 'error',
+      'This check sends the photo to a vision model to compare fonts, holo pattern, set symbol ' +
+      'and colour against the official card. It needs a server holding an API key, and this is a ' +
+      'single file that makes no network requests at all — so it cannot run here, on any photo. ' +
+      'It is listed rather than hidden, because a build that cannot make this comparison has ' +
+      'covered much less ground than one that can, and you should know that.'),
+    available: false,
+  };
 }
 
 /* ===================================================================
@@ -2806,7 +2883,8 @@ function explainVerdict(report) {
   if (!missing.length) return meta.blurb;
 
   const why = missing.map((s) =>
-    s.status === 'error'
+    s.whyShort ? s.label.toLowerCase() + ' ' + s.whyShort
+    : s.status === 'error'
       ? s.label.toLowerCase() + ' cannot run in this build'
       : s.label.toLowerCase() + ' had nothing measurable to work with in this photo');
   const list = why.length > 1
@@ -2835,16 +2913,34 @@ function renderReport(report) {
   // phone applies, which the check correctly declines to read anything into.
   // So when no check ran, the panel says it was not checked and why, and
   // leaves the figures blank rather than filling them with zeroes.
-  const nothingRan = report.ranCount === 0;
-  pill.textContent = nothingRan ? 'Not checked' : meta.label;
-  pill.className = 'pill tone-' + (nothingRan ? 'unknown' : meta.tone);
+  // Three states, not two. "Inconclusive" is a FINDING — it says the evidence
+  // was weighed and did not settle. Neither "nothing could be checked" nor
+  // "not enough was checked to settle anything" is that, and an amber pill
+  // reports both of them as a doubt about the card.
+  const ranCount = report.ranCount;
+  const tier =
+    ranCount === 0            ? { text: 'Not checked', tone: 'unknown' } :
+    !report.scoreIsMeaningful ? { text: 'Not established', tone: 'unknown' } :
+                                { text: meta.label, tone: meta.tone };
+  pill.textContent = tier.text;
+  pill.className = 'pill tone-' + tier.tone;
   $('verdict-blurb').textContent = explainVerdict(report);
 
   $('fig-score').textContent = report.scoreIsMeaningful ? report.score : '—';
   $('bar-score').style.width = (report.scoreIsMeaningful ? report.score : 0) + '%';
-  $('fig-conf').textContent = nothingRan ? '—' : Math.round(report.confidence * 100) + '%';
-  $('bar-conf').style.width = (nothingRan ? 0 : Math.round(report.confidence * 100)) + '%';
-  $('fig-ran').innerHTML = report.ranCount + ' <small>of ' + report.totalCount + '</small>';
+
+  // Coverage, not confidence. Confidence is confidence in a VERDICT, and there
+  // usually is not one here — so the figure sat between 21% and 40% describing
+  // this build's reach while appearing to describe the card. Coverage is always
+  // defined, is always about this photo, and improves when the photo does.
+  const cov = Math.round((report.inScopeCoverage || 0) * 100);
+  $('fig-conf').textContent = ranCount === 0 ? '—' : cov + '%';
+  $('bar-conf').style.width = (ranCount === 0 ? 0 : cov) + '%';
+  $('fig-conf-note').textContent =
+    'of the ' + (report.inScopeCount || 0) + ' checks this build can run';
+  $('fig-ran').innerHTML = ranCount + ' <small>of ' +
+    (report.inScopeCount || report.totalCount) + ' here · ' +
+    report.totalCount + ' in the full app</small>';
 
   const ul = $('signals');
   ul.innerHTML = '';
@@ -4414,6 +4510,7 @@ const TILE_X = 8, TILE_Y = 11;
 
 const HINTS = {
   searching: ['Line the card up inside the frame', ''],
+  cropped: ['Fit the whole card inside the frame', 'warn'],
   far: ['Move closer — fill the frame', 'warn'],
   near: ['Move back a little', 'warn'],
   bright: ['Too bright — move away from the lamp', 'warn'],
@@ -4816,7 +4913,12 @@ function assessFrame(f) {
   // there rather than over a frame that also contains a desk, a lamp and a lap.
   const g = f.guide;
   const guideBox = { x: g.gx, y: g.gy, w: g.gw, h: g.gh };
+  // Both cleared here, not just the flag. The early return below for a frame
+  // the detector could not read never reaches the write site, so a frame that
+  // held a card used to stand indefinitely — and the capture gate reads it.
   CAM.cardSeen = false;
+  CAM.lastFrame = null;
+
   const det = detectCard(f.img, {
     roi: expandRect(guideBox, GUIDE_ROI_MARGIN, f.w, f.h),
     expect: guideBox,
@@ -4844,7 +4946,22 @@ function assessFrame(f) {
   // it is dominated by how much of the WHOLE frame the card covers, so a card
   // held at arm's length scores low on it for being far away rather than for
   // being doubtful, and the patient trigger below would then never see it.
+  // Is the WHOLE card in shot?
+  //
+  // A region that ran into the edge of the search area on two CORNERS has been
+  // cut off there; the card continues past it. One corner is not enough and
+  // neither is any number of edges: the search area is only 12% wider than the
+  // guide, so a card merely turned a few degrees touches it. Measured across
+  // the feeds, a card turned five degrees and held 150px off centre touches an
+  // edge on 100% of frames and a corner on 100% — and two corners on none of
+  // them, alongside a whole slab at none. Every genuinely cut-off subject —
+  // card off the side, off the bottom, a corner missing, a clipped slab, and
+  // an empty desk whose surface fills the whole search area — reaches two on
+  // every frame. The line is at two, and it is measured rather than chosen.
+  const wholeCard = (det.clippedCorners || 0) < 2;
+
   CAM.cardSeen =
+    wholeCard &&
     Math.abs(det.measuredAspect - CARD_ASPECT) / CARD_ASPECT <= 0.30 &&
     boxContainment(CAM.lastBox, guideBox) >= 0.6;
 
@@ -4853,9 +4970,19 @@ function assessFrame(f) {
   // here would be work thrown away; and taking it from CAM.last instead would
   // put the whole check back behind the stillness gate, which is the thing
   // that stopped this scanner firing in the first place.
-  CAM.lastFrame = CAM.cardSeen ? { img: f.img, corners: det.corners } : null;
+  CAM.lastFrame = CAM.cardSeen
+    ? { img: f.img, corners: det.corners, at: CAM.framesSeen }
+    : null;
 
   if (det.confidence < 0.4) return 'searching';
+
+  // Placed after the confidence test and before the framing gates: when part of
+  // the card is outside the frame, that IS the one thing most worth fixing, and
+  // the fill and centring figures computed below describe a shape that has been
+  // cut off rather than the card. CAM.lastBox is deliberately left set — the
+  // manual shutter aims by it, and clearing it would send that aim to the guide
+  // rectangle and crop the card's own corners off the report.
+  if (!wholeCard) return 'cropped';
 
   // Stillness is measured here rather than below the framing gates, because it
   // describes the HAND and not the framing. Measured below them, a frame that
@@ -5078,15 +5205,33 @@ function tick() {
  */
 function looksLikeACard() {
   const frame = CAM.lastFrame;
-  if (!frame) return false;
+
+  // How OLD the frame is, not merely whether one exists.
+  //
+  // Both bounds are load-bearing. The upper one keeps the gate from judging a
+  // card that has since left the frame. The lower one exists because stopping
+  // the camera zeroes framesSeen while this stamp survives, so a frame carried
+  // over from a previous session reads as a large NEGATIVE age — which any
+  // plain "too old?" test waves straight through. One tick of slack, because
+  // detection drops a frame here and there and the patient path is built to
+  // tolerate that.
+  const age = frame ? CAM.framesSeen - frame.at : Infinity;
+  if (!frame || age < 0 || age > 1) { CAM.cardCheckResult = false; return false; }
 
   // Reuse a recent answer rather than reading the corpus on every frame. When
   // the check says no it is asked again on the next tick and the one after,
   // and a full corpus read at that rate is the one thing here that could cost
   // the loop its frame rate. The subject does not change in an eighth of a
   // second, so neither does the answer.
-  if (CAM.framesSeen - CAM.cardCheckAt < CARD_CHECK_EVERY) return CAM.cardCheckResult;
+  const since = CAM.framesSeen - CAM.cardCheckAt;
+  if (since >= 0 && since < CARD_CHECK_EVERY) return CAM.cardCheckResult;
   CAM.cardCheckAt = CAM.framesSeen;
+
+  // Fail closed from here on. The budget has just been spent, so any path out
+  // of this function that forgets to record an answer would serve the previous
+  // one for another eight ticks — and the answer worth protecting against is
+  // a stale yes.
+  CAM.cardCheckResult = false;
 
   try {
     // A quad with no area is not a card, and asking the homography about it
@@ -5094,7 +5239,7 @@ function looksLikeACard() {
     const [tl, tr, br, bl] = frame.corners;
     const w = (Math.hypot(tr.x - tl.x, tr.y - tl.y) + Math.hypot(br.x - bl.x, br.y - bl.y)) / 2;
     const h = (Math.hypot(bl.x - tl.x, bl.y - tl.y) + Math.hypot(br.x - tr.x, br.y - tr.y)) / 2;
-    if (!(w > 8 && h > 8)) return false;
+    if (!(w > 8 && h > 8)) { CAM.cardCheckResult = false; return false; }
 
     const rect = rectifyCard(frame.img, frame.corners, LIVE_RECT_W, LIVE_RECT_H);
     const best = matchCard(describeRectified(rect), 1);
@@ -5396,6 +5541,18 @@ function stopCamera() {
   CAM.clearFrames = 0;
   CAM.lastCaptureFingerprint = null;
   CAM.lastState = '';
+
+  // The capture gate's own state belongs here too. Zeroing framesSeen above
+  // while leaving these behind is what let a new camera session start out
+  // holding the previous one's answer about a card that is no longer there.
+  CAM.cardCheckAt = -999;
+  CAM.cardCheckResult = false;
+  CAM.lastFrame = null;
+  CAM.cardSeen = false;
+  CAM.heldRing = [];
+  CAM.cardHeld = 0;
+  CAM.lastFill = 0;
+  CAM.lastBox = null;
   CAM.guide = null;
   $('sec-camera').hidden = true;
   $('sec-capture').hidden = false;
