@@ -608,10 +608,12 @@
     <div class="mark"><b>⚡</b> Pokémon card scanner</div>
     <h1>Photograph a card. Get a real reading.</h1>
     <p class="standfirst">
-      Everything here runs on your device. The prices are real figures captured from live
-      TCGplayer listings and frozen into the file — this page makes no network requests at all,
-      so nothing is invented to fill a gap. Point it at a card and it recognises the card by
-      itself; hand it a pile of photos and it ranks them by what each one is worth.
+      The recognition, the flattening and every measurement run on your device. The prices are
+      real figures captured from live TCGplayer listings and frozen into the file, so nothing is
+      invented to fill a gap. Point it at a card and it recognises the card by itself; hand it a
+      pile of photos and it ranks them by what each one is worth. Two things reach the network,
+      both off unless you turn them on: extra card data sitting beside this page, and the
+      detailed visual comparison, which goes to Anthropic with a key you supply.
     </p>
   </header>
 
@@ -855,13 +857,15 @@
       proportions and print-screen analysis all run in this page on the photo you supply — the
       same ported code the app runs on the server. Identification matches your photo against
       perceptual hashes of
-      2148 official card images baked into this file, trying both the upright and the
-      half-turned orientation so a card photographed sideways or upside down still matches.
+      <span id="corpus-count">2148</span> official card images baked into this file,
+      trying both the upright and the half-turned orientation so a card photographed sideways or
+      upside down still matches.
     </p>
+    <p class="note" id="corpus-extra" hidden style="margin:-6px 0 0"></p>
     <p>
       <b>What is frozen.</b> Prices and history were captured from live sources on
-      11 August 2026 and cannot refresh, because this is a single self-contained file that makes
-      no requests — that is what lets it work with no server and no account, and it is also why
+      11 August 2026 and cannot refresh, because they are baked into this file — that is what lets
+      it work with no server and no account, and it is also why
       the figures age. The AI vision check needs a server holding an API key, so it cannot run
       here on any photo. Prices are asking prices from listings, not completed sales.
     </p>
@@ -882,6 +886,70 @@
 
 const CORPUS = JSON.parse(document.getElementById('corpus-data').textContent);
 const CARDS = CORPUS.cards;
+
+/* --- more cards than fit in one file ----------------------------------- */
+
+/**
+ * The corpus baked into this page is the floor, not the ceiling.
+ *
+ * A card costs about 4.2KB baked — half of it the thumbnail — so the whole
+ * catalogue, some hundred thousand cards across 672 sets, is a couple of
+ * hundred megabytes. That does not go in a file the browser must download
+ * before anything works, and no amount of tuning changes the arithmetic.
+ *
+ * So the rest lives beside this page and is fetched after it is already
+ * running. The page is served from a directory; sibling files are free to
+ * fetch, no server and no key required.
+ *
+ * Strictly additive, and that is the whole safety design: if the shards are
+ * missing, unreachable, opened from a local file, or served by something that
+ * refuses the request, this line is where it ends and the scanner behaves
+ * exactly as it did with the baked corpus alone. Nothing waits on the network,
+ * and nothing fails because of it.
+ */
+const SHARD_INDEX = 'corpus/index.json';
+
+async function loadExtraCards() {
+  let index;
+  try {
+    const res = await fetch(new URL(SHARD_INDEX, location.href).href, { cache: 'force-cache' });
+    if (!res.ok) return;
+    index = await res.json();
+  } catch { return; }
+  if (!index || !Array.isArray(index.shards)) return;
+
+  const have = new Set(CARDS.map((c) => c.id));
+  let added = 0;
+
+  // Sequentially, and each shard merged as it lands: a scan that happens
+  // mid-load matches against everything loaded so far rather than waiting.
+  for (const name of index.shards) {
+    try {
+      const res = await fetch(new URL('corpus/' + name, location.href).href, { cache: 'force-cache' });
+      if (!res.ok) continue;
+      const chunk = await res.json();
+      for (const card of chunk.cards || []) {
+        if (have.has(card.id)) continue;
+        CARDS.push(card);
+        have.add(card.id);
+        added++;
+      }
+    } catch { /* one bad shard is not a reason to abandon the rest */ }
+  }
+
+  if (added > 0) {
+    CORPUS.extraLoaded = added;
+    const el = document.getElementById('corpus-count');
+    if (el) el.textContent = String(CARDS.length);
+    const note = document.getElementById('corpus-extra');
+    if (note) {
+      note.hidden = false;
+      const sets = index.setCount || 0;
+      note.textContent = 'Plus ' + added.toLocaleString() + ' more cards loaded alongside this page' +
+        (sets ? ', covering ' + sets + ' further set' + (sets === 1 ? '' : 's') : '') + '.';
+    }
+  }
+}
 
 /* ===================================================================
    Geometry constants — ported from src/lib/card-geometry.ts
@@ -2382,10 +2450,11 @@ function visionUnavailable() {
   return {
     ...abstain('vision', 'Detailed visual comparison', 1.5, 'error',
       'This check sends the photo to a vision model to compare fonts, holo pattern, set symbol ' +
-      'and colour against the official card. It needs a server holding an API key, and this is a ' +
-      'single file that makes no network requests at all — so it cannot run here, on any photo. ' +
-      'It is listed rather than hidden, because a build that cannot make this comparison has ' +
-      'covered much less ground than one that can, and you should know that.'),
+      'and colour against the official card. It needs a model and a key, not a server — so it ' +
+      'CAN run here, with a key you supply under "Detailed visual comparison" below. Until then ' +
+      'it is listed rather than hidden, because a build that cannot make this comparison has ' +
+      'covered much less ground than one that can, and you should know that. It is also the ' +
+      'check that makes a verdict reachable at all.'),
     available: false,
   };
 }
@@ -6442,6 +6511,11 @@ $('btn-vision-clear').addEventListener('click', () => {
 });
 
 renderVisionState();
+
+// Fire and forget. Nothing awaits this: the scanner is fully usable on the
+// baked corpus from the first frame, and any extra cards simply widen what it
+// recognises as they arrive.
+loadExtraCards();
 
 let searchTimer = null;
 $('search').addEventListener('input', (e) => {
