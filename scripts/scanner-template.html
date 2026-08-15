@@ -4289,6 +4289,7 @@ const CAM = {
   cardSeen: false,
   cardHeld: 0,
   heldRing: [],
+  clipRing: [],
   lastFill: 0,
   lastLiveScore: 0,
   lastFrame: null,
@@ -4363,6 +4364,17 @@ const PATIENCE_TICKS = 20;
 
 /** Window the above is counted over, so an odd dropped frame does not restart it. */
 const PATIENCE_WINDOW = 26;
+
+/**
+ * Frames the "part of the card is outside the frame" reading is judged over,
+ * and how many of them must agree before the scanner refuses to capture.
+ *
+ * Six of eight, so a couple of stray frames cannot block a capture while a
+ * card that is genuinely cut off — clipped on every frame, measured — is
+ * refused within a second of being shown.
+ */
+const CLIP_WINDOW = 8;
+const CLIP_TO_REFUSE = 6;
 
 /**
  * How much of the guide the card must cover before patience will fire.
@@ -4958,7 +4970,19 @@ function assessFrame(f) {
   // card off the side, off the bottom, a corner missing, a clipped slab, and
   // an empty desk whose surface fills the whole search area — reaches two on
   // every frame. The line is at two, and it is measured rather than chosen.
-  const wholeCard = (det.clippedCorners || 0) < 2;
+  // Judged over a window, like every other counter in this loop.
+  //
+  // A single frame is not evidence that the card is hanging out of shot. The
+  // detector picks up a shadow lobe or a fingertip now and then and the region
+  // reaches the boundary for one tick; vetoing on that lets one bad frame
+  // block a capture, which is the failure this scanner keeps coming back to.
+  // A card genuinely half out of the frame is clipped on EVERY frame — it was
+  // 100% across four such feeds — so requiring it to persist costs nothing
+  // there and buys immunity to a twitch here.
+  CAM.clipRing.push((det.clippedCorners || 0) >= 2);
+  if (CAM.clipRing.length > CLIP_WINDOW) CAM.clipRing.shift();
+  const clippedFrames = CAM.clipRing.reduce((n, c) => n + (c ? 1 : 0), 0);
+  const wholeCard = !(CAM.clipRing.length >= CLIP_WINDOW && clippedFrames >= CLIP_TO_REFUSE);
 
   CAM.cardSeen =
     wholeCard &&
@@ -5216,7 +5240,17 @@ function looksLikeACard() {
   // detection drops a frame here and there and the patient path is built to
   // tolerate that.
   const age = frame ? CAM.framesSeen - frame.at : Infinity;
-  if (!frame || age < 0 || age > 1) { CAM.cardCheckResult = false; return false; }
+
+  // Answer no for THIS tick, and leave the cached answer alone.
+  //
+  // Writing false here was a regression with the same shape as the bug it was
+  // meant to fix, in the other direction. Detection drops a frame now and then
+  // on any real feed; that tick has no frame to judge, which is not a finding
+  // that the subject is not a card. Recording it as one wiped the cached yes,
+  // and the rate limiter below then served that no for up to eight more ticks —
+  // so on a hand-held feed the gate spent most of its life answering no and
+  // auto-capture stopped firing at all.
+  if (!frame || age < 0 || age > 1) return false;
 
   // Reuse a recent answer rather than reading the corpus on every frame. When
   // the check says no it is asked again on the next tick and the one after,
@@ -5551,6 +5585,7 @@ function stopCamera() {
   CAM.cardSeen = false;
   CAM.heldRing = [];
   CAM.cardHeld = 0;
+  CAM.clipRing = [];
   CAM.lastFill = 0;
   CAM.lastBox = null;
   CAM.guide = null;
