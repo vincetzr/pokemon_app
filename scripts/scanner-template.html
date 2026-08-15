@@ -798,6 +798,31 @@
       </div>
     </section>
 
+    <!-- Opt-in, off by default, and the only thing on this page that ever
+         touches the network. Stated plainly rather than buried: the photo goes
+         to Anthropic and the key stays in this browser. -->
+    <section id="sec-vision">
+      <div class="eyebrow">Detailed visual comparison</div>
+      <div class="panel">
+        <p class="note" id="vision-state" style="margin:0 0 10px"></p>
+        <div class="row">
+          <input type="password" id="vision-key" placeholder="Anthropic API key (sk-ant-…)"
+                 autocomplete="off" spellcheck="false"
+                 style="flex:1 1 220px;min-width:0">
+          <button class="ghost primary" id="btn-vision-save" type="button">Enable</button>
+          <button class="ghost" id="btn-vision-clear" type="button" hidden>Remove key</button>
+        </div>
+        <p class="note" style="margin:10px 0 0">
+          This is the third check, and the only one that can notice a wrong font, a holo pattern in
+          the wrong place or a set symbol of the wrong shape. It needs a model, not a server — so
+          your own key is enough. Without it the check reports itself absent and no verdict is
+          reachable here. With it, the card image is sent to Anthropic when you scan, the key is
+          kept in this browser and nowhere else, and each scan costs a few cents against your own
+          account.
+        </p>
+      </div>
+    </section>
+
     <section id="sec-centering" hidden>
       <div class="eyebrow">Centering</div>
       <div class="panel">
@@ -2134,6 +2159,225 @@ function blurAbstention() {
  *  is absent — but it is marked unavailable, so it is not counted against the
  *  coverage of a photo it was never going to read. Coverage measures how much
  *  of what THIS BUILD can check actually ran. */
+/* --- the detailed visual comparison, when you supply a key -------------- */
+
+/**
+ * The one check that can notice what no measurement will: text a shade too
+ * heavy, a holo pattern in the wrong region, a set symbol of the wrong shape,
+ * a copyright line from the wrong era.
+ *
+ * It was described here as impossible in a single file, and that was wrong. It
+ * needs an API key, not a server — and a key can come from the person holding
+ * the card. Supply one and this page calls the model directly from the browser;
+ * supply nothing and everything below is inert and the check reports itself
+ * absent exactly as before.
+ *
+ * The key is kept in this browser's local storage and is sent to Anthropic and
+ * to nobody else. The page has no backend to send it to even if it wanted one.
+ */
+const VISION_KEY_STORE = 'pcs.anthropic.key';
+const VISION_MODEL = 'claude-opus-5';
+const VISION_MAX_EDGE = 1568;
+const VISION_WEIGHT = 1.5;
+
+function visionKey() {
+  try { return (localStorage.getItem(VISION_KEY_STORE) || '').trim(); } catch { return ''; }
+}
+
+/**
+ * Calibration, carried over verbatim in spirit from the served app: the tests
+ * below are ones that ACCUSE GENUINE CARDS, and every one of them is a mistake
+ * a careful person makes. Wrongly flagging a real card costs someone a sale
+ * they cannot argue their way back into; missing a fake leaves them where they
+ * started. The asymmetry is deliberate and must survive any edit here.
+ */
+const VISION_SYSTEM = [
+  'You inspect photographs of Pokemon Trading Card Game cards and report what you observe.',
+  'You are one input among several in a tool that helps people avoid being sold counterfeits.',
+  '',
+  'You do not deliver a verdict. Report observations and specific concerns; the system combines',
+  'your report with physical measurements to reach a conclusion.',
+  '',
+  'CALIBRATION — this matters more than sensitivity:',
+  '',
+  'Wrongly flagging a genuine card is a worse outcome than missing a counterfeit. A false',
+  'accusation can cost someone a real sale or a trade, and they have no way to argue with it.',
+  '',
+  'Genuine cards vary enormously, and none of the following is evidence of a counterfeit:',
+  '  - Off-centre cuts, miscuts and factory print lines — ordinary quality-control variation',
+  '  - Wear: edge and corner whitening, scratches, creases, sun-fading, indentations',
+  '  - Non-English printings, which differ in layout, fonts, text placement and back design',
+  '  - Print runs: 1st Edition, Shadowless, Unlimited, and the UK 4th print',
+  '  - League, Prerelease and staff stamps; World Championship cards, which state in printed',
+  '    text that they are not tournament legal',
+  '  - Genuine error cards and ink hickeys, catalogued by name and often collectible',
+  '  - Photography artifacts: holo glare, indoor colour cast, HDR tone-mapping, sleeve',
+  '    reflections, screen moire',
+  '',
+  'If the photo is too poor to inspect properly, set imageUsable to false. That is a useful',
+  'answer. Guessing from a bad photo is not.',
+  '',
+  'Every concern you raise must include the most plausible innocent explanation. If you cannot',
+  'think of one, you are probably over-reading the image.',
+  '',
+  'TESTS THAT ARE WRONG — do not apply any of these, they accuse genuine cards:',
+  '  - "The collector number is higher than the set total." Secret rares, hyper rares and gold',
+  '    cards are numbered above the total by design.',
+  '  - "There is no set symbol." English Base Set genuinely has none; its absence identifies the',
+  '    set. Promos and Basic Energy also lack them.',
+  '  - "HP is not printed in red." Red HP was 1999-2003 only. From 2007 the format is an',
+  '    "HP 60" prefix in black.',
+  '  - "The card has no drop shadow." Base Set 1st Edition and Shadowless have none.',
+  '  - "The whole card is holo." Reverse holos, Cracked Ice, SV Mirage, full arts, VMAX, VSTAR,',
+  '    ex, gold and rainbow cards are all legitimately edge-to-edge.',
+  '  - "The colours are brighter than expected." Shadowless cards genuinely read brighter.',
+  '  - "It says NOT TOURNAMENT LEGAL." World Championship cards say that in printed text.',
+  '  - "The rarity symbol is not bottom-right." It moved to bottom-LEFT in 2017.',
+  '  - Any judgement of physical size, thickness or weight. You cannot measure those from a photo.',
+].join('\n');
+
+const VISION_SCHEMA = {
+  type: 'object',
+  properties: {
+    imageUsable: { type: 'boolean', description: 'False if glare, blur, crop or angle prevent a meaningful inspection.' },
+    unusableReason: { type: 'string' },
+    observations: { type: 'array', items: { type: 'string' }, maxItems: 8,
+      description: 'Neutral descriptions of what is visible. Not judgements.' },
+    concerns: {
+      type: 'array', maxItems: 6,
+      description: 'Specific things inconsistent with a genuine card of this era. Empty if none.',
+      items: {
+        type: 'object',
+        properties: {
+          what: { type: 'string' },
+          whereOnCard: { type: 'string' },
+          severity: { type: 'string', enum: ['minor', 'moderate', 'serious'] },
+          couldBeLegitimate: { type: 'string',
+            description: 'The most plausible innocent explanation. Always fill this in.' },
+        },
+        required: ['what', 'whereOnCard', 'severity', 'couldBeLegitimate'],
+        additionalProperties: false,
+      },
+    },
+    consistencyScore: { type: 'number',
+      description: '0-100. Use the middle of the range when unsure rather than the extremes.' },
+    notes: { type: 'string' },
+  },
+  required: ['imageUsable', 'unusableReason', 'observations', 'concerns', 'consistencyScore', 'notes'],
+  additionalProperties: false,
+};
+
+/** The rectified card as a JPEG, capped where detail stops paying for itself. */
+function encodeCardForVision(rect) {
+  const scale = Math.min(1, VISION_MAX_EDGE / Math.max(rect.width, rect.height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(rect.width * scale));
+  c.height = Math.max(1, Math.round(rect.height * scale));
+  const ctx = c.getContext('2d');
+  const src = document.createElement('canvas');
+  src.width = rect.width; src.height = rect.height;
+  src.getContext('2d').putImageData(rect, 0, 0);
+  ctx.drawImage(src, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.88).split(',')[1];
+}
+
+async function visionSignal(rect, card) {
+  const key = visionKey();
+  if (!key) return visionUnavailable();
+
+  const named = card
+    ? 'The card has been identified as ' + card.name + ' — ' + card.setName +
+      (card.number ? ' ' + card.number : '') + (card.releaseDate ? ', released ' + card.releaseDate : '') + '.'
+    : 'The card could not be identified from the corpus in this build, so judge it on its own terms.';
+
+  let data;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        // Without this the API refuses a browser origin outright.
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        max_tokens: 3000,
+        system: VISION_SYSTEM,
+        output_config: { format: { type: 'json_schema', schema: VISION_SCHEMA } },
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: encodeCardForVision(rect) } },
+            { type: 'text', text: named + '\n\nInspect the card and report:\n' +
+              '  - what you observe (neutral descriptions)\n' +
+              '  - any specific concerns, each with its most plausible innocent explanation\n' +
+              '  - a consistency score from 0 to 100\n\n' +
+              'Look at print and text quality, font weight and spacing, colour rendering, the set ' +
+              'symbol and rarity mark, the collector line and copyright text, the holo pattern and ' +
+              'the region it covers, border geometry, and the card\u2019s overall finish.' },
+          ],
+        }],
+      }),
+    });
+    if (!res.ok) {
+      const detail = res.status === 401 ? 'the key was rejected'
+        : res.status === 429 ? 'the account is rate limited'
+        : 'the request failed with HTTP ' + res.status;
+      return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
+        'The visual comparison could not run: ' + detail + '. Nothing is concluded from it.');
+    }
+    const body = await res.json();
+    if (body.stop_reason === 'refusal') {
+      return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
+        'The visual comparison was declined for this image. Nothing is concluded from it.');
+    }
+    const text = (body.content || []).find((b) => b.type === 'text');
+    data = text ? JSON.parse(text.text) : null;
+  } catch (err) {
+    return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
+      'The visual comparison could not reach the model. Nothing is concluded from it.');
+  }
+  if (!data) {
+    return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
+      'The visual comparison returned nothing usable. Nothing is concluded from it.');
+  }
+
+  if (!data.imageUsable) {
+    return {
+      ...abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'insufficient_data',
+        data.unusableReason || 'The photo was not clear enough for a visual inspection.'),
+      whyShort: 'could not read this photo well enough',
+    };
+  }
+
+  const concerns = Array.isArray(data.concerns) ? data.concerns : [];
+  const serious = concerns.filter((c) => c.severity === 'serious');
+  const moderate = concerns.filter((c) => c.severity === 'moderate');
+  const score = Math.round(Math.max(0, Math.min(100, Number(data.consistencyScore) || 0)));
+  const lead = serious[0] || moderate[0];
+
+  return {
+    id: 'vision',
+    label: 'Detailed visual comparison',
+    status: 'ok',
+    score,
+    weight: VISION_WEIGHT,
+    summary: lead
+      ? lead.what + ' (' + lead.whereOnCard + '). Could also be: ' + lead.couldBeLegitimate
+      : concerns.length > 0
+        ? 'Minor observations only: ' + concerns[0].what + '.'
+        : 'Nothing visually inconsistent with a genuine card of this era.',
+    measurements: {
+      concerns: concerns.length,
+      serious: serious.length,
+      moderate: moderate.length,
+      observations: (data.observations || []).length,
+    },
+  };
+}
+
 function visionUnavailable() {
   return {
     ...abstain('vision', 'Detailed visual comparison', 1.5, 'error',
@@ -3617,12 +3861,12 @@ function namePick(candidates) {
  * Kept free of rendering so the pile scan can run it over a stack of photos
  * without the single-card view fighting it for the same elements.
  */
-async function analyzePhoto(file, onStep) {
+async function analyzePhoto(file, onStep, opts) {
   const step = onStep || (() => {});
   step(0);
   await yieldToPaint();
   const img = await loadImage(file);
-  return analyzeSource(imageDataFromImg(img), onStep);
+  return analyzeSource(imageDataFromImg(img), onStep, opts);
 }
 
 /** The pipeline from a decoded frame on, shared by the file and camera paths. */
@@ -3738,12 +3982,22 @@ async function analyzeSource(source, onStep, opts) {
           'The card is inside a holder or sleeve. Plastic scatters the fine detail this check ' +
           'reads, so nothing is concluded from it either way.')
       : quality.tooBlurry ? blurAbstention() : printSignal(rectified, cardWidthPx),
-    visionUnavailable(),
   ];
 
   step(5);
   await yieldToPaint();
   const id = identify(rectified, 5);
+
+  // Identify first, then look: naming the card lets the inspection be told what
+  // it is looking at, which is most of the difference between "this font is
+  // odd" and "this font is odd for a 2022 Japanese printing".
+  //
+  // Only this signal costs a network round trip, and only when a key has been
+  // supplied. Without one it returns the same absent-check report as before and
+  // nothing here reaches the network.
+  signals.push(options.skipVision
+    ? visionUnavailable()
+    : await visionSignal(rectified, id.candidates[0] ? id.candidates[0].card : null));
 
   const contextLimitations = [
     'Identification here matches your photo against ' + CARDS.length + ' official card images ' +
@@ -4111,7 +4365,9 @@ async function runBulk(files) {
 
       let result = null;
       try {
-        result = await analyzePhoto(files[i]);
+        // A pile scan is triage and shows no authenticity verdict, so it does
+        // not spend a paid request per photo to compute one nobody reads.
+        result = await analyzePhoto(files[i], undefined, { skipVision: true });
       } catch {
         // One unreadable photo must not lose the rest of the pile.
       }
@@ -6159,6 +6415,33 @@ $('btn-reset').addEventListener('click', async () => {
   if (cameraWorked) await startCamera();
   else $('capture-target').focus();
 });
+
+/* --- the visual-comparison key ---------------------------------------- */
+
+function renderVisionState() {
+  const has = !!visionKey();
+  $('vision-state').textContent = has
+    ? 'Enabled. The detailed visual comparison will run on the next scan, and the verdict can be reached.'
+    : 'Not enabled. Two of the three checks can run without it, which is not enough to settle a verdict.';
+  $('vision-key').value = '';
+  $('vision-key').hidden = has;
+  $('btn-vision-save').hidden = has;
+  $('btn-vision-clear').hidden = !has;
+}
+
+$('btn-vision-save').addEventListener('click', () => {
+  const v = $('vision-key').value.trim();
+  if (!v) return;
+  try { localStorage.setItem(VISION_KEY_STORE, v); } catch {}
+  renderVisionState();
+});
+
+$('btn-vision-clear').addEventListener('click', () => {
+  try { localStorage.removeItem(VISION_KEY_STORE); } catch {}
+  renderVisionState();
+});
+
+renderVisionState();
 
 let searchTimer = null;
 $('search').addEventListener('input', (e) => {
