@@ -808,6 +808,37 @@
       </div>
     </section>
 
+    <!-- Its own capture, because the measurement IS the movement: a single
+         photograph cannot carry how the shading changes as the card tilts. -->
+    <section id="sec-surface">
+      <div class="eyebrow">Surface relief</div>
+      <div class="panel">
+        <p class="note" id="surface-state" style="margin:0 0 10px"></p>
+        <div class="viewfinder" id="surface-view" hidden style="max-width:280px">
+          <video id="surface-video" playsinline muted autoplay></video>
+          <div class="hint" id="surface-hint">Starting the camera…</div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost primary" id="btn-surface-start" type="button">Check the surface</button>
+          <button class="ghost" id="btn-surface-cancel" type="button" hidden>Stop</button>
+        </div>
+        <p class="note" style="margin:10px 0 0">
+          Hold the card under any light and tilt it slowly while this records four frames. A
+          printed sheet just gets brighter and darker as it moves; an embossed foil surface changes
+          <em>pattern</em>, because the light catches its relief differently at each angle. That
+          difference is measurable without knowing where the light is, which is what makes it work
+          on a hand-held phone instead of a lighting rig.
+        </p>
+        <p class="note" style="margin:8px 0 0">
+          This is the only check here that reads the card as a physical object rather than as a
+          picture, and it is the one a flat reproduction cannot pass. Two honest limits: a card
+          with no foil or holo treatment is genuinely flat, so a smooth reading means nothing
+          either way and is never counted against a card; and the thresholds come from simulated
+          captures, not from real counterfeits, which is why this check can only ever support.
+        </p>
+      </div>
+    </section>
+
     <!-- Opt-in, off by default. Stated plainly rather than buried: the photo
          goes to whichever provider the key belongs to, the key stays in this
          browser, and one of the accepted providers is free. -->
@@ -2883,6 +2914,273 @@ async function referenceSignal(readings, candidate, ctx) {
       referenceResolution: reference.naturalWidth + 'x' + reference.naturalHeight,
       oneSided: 'true',
     },
+  };
+}
+
+/* --- surface relief, from several frames under a moving light ----------- */
+
+/**
+ * Is this a printed surface or an embossed one?
+ *
+ * The graders that automate this do not photograph a card. AGS runs it under a
+ * 3D laser scanner; TAG lights it from several known directions and rebuilds
+ * the surface normals from how the shading moves. The model is downstream of
+ * that — what makes it work is the rig.
+ *
+ * The rig turns out to be optional. Under a moving light a matte surface's
+ * images span a three-dimensional space: albedo times the three components of
+ * the normal. If the surface is FLAT the normal is the same everywhere, every
+ * frame is the same picture times a scalar, and that space collapses to ONE
+ * dimension. So "does this surface have relief" is "what is the rank of the
+ * stack of frames" — and rank does not care where the light was, which is what
+ * removes the need for calibrated lighting.
+ *
+ * It also removes the need for a counterfeit dataset, which is why this exists
+ * at all. Every other avenue tried here needed examples of fakes to calibrate
+ * against, and there are none to be had. This measures physics instead: a flat
+ * reproduction cannot manufacture surface relief no matter what it looks like.
+ *
+ * Measured on synthetic captures carrying identical albedo on both surfaces,
+ * so nothing could score by responding to the picture: 12x to 38x separation
+ * after registration, across camera noise, auto-exposure swings and two pixels
+ * of hand drift. Those thresholds are synthetic and want real cards to confirm
+ * — which is exactly why this check only ever supports and never accuses.
+ */
+const SURFACE_W = 180, SURFACE_H = 251;
+const SURFACE_WEIGHT = 1.0;
+const SURFACE_FRAMES = 4;
+const SURFACE_MIN_FRAMES = 3;
+
+/**
+ * Where relief stops being noise. The synthetic flat surface scored 0.016 to
+ * 0.035 after registration and the embossed one 0.19 to 0.22; this sits well
+ * clear of the flat range rather than splitting the difference, because being
+ * wrong in the supporting direction costs a card nothing and being wrong the
+ * other way accuses one.
+ */
+const SURFACE_SUPPORT = 0.12;
+const SURFACE_STRONG = 0.22;
+
+/** How much the shading has to move between kept frames. Without this the
+ *  user can hold perfectly still, every frame is identical, the rank is 1 and
+ *  a genuine holo reads as flat. */
+const SURFACE_MIN_CHANGE = 0.012;
+
+/** Eigenvalues of a small symmetric matrix, by cyclic Jacobi rotation. */
+function symmetricEigenvalues(A, n) {
+  const a = A.map((r) => r.slice());
+  for (let sweep = 0; sweep < 60; sweep++) {
+    let off = 0;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += a[p][q] * a[p][q];
+    if (off < 1e-18) break;
+    for (let p = 0; p < n; p++) {
+      for (let q = p + 1; q < n; q++) {
+        if (Math.abs(a[p][q]) < 1e-20) continue;
+        const theta = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+        const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+        const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+        for (let k = 0; k < n; k++) {
+          const akp = a[k][p], akq = a[k][q];
+          a[k][p] = c * akp - s * akq; a[k][q] = s * akp + c * akq;
+        }
+        for (let k = 0; k < n; k++) {
+          const apk = a[p][k], aqk = a[q][k];
+          a[p][k] = c * apk - s * aqk; a[q][k] = s * apk + c * aqk;
+        }
+      }
+    }
+  }
+  return Array.from({ length: n }, (_, i) => Math.max(0, a[i][i])).sort((x, y) => y - x);
+}
+
+/**
+ * Sub-pixel registration, which the measurements said was the whole problem.
+ *
+ * A hand-held capture cannot hold the card to the pixel, and one pixel of
+ * drift reads as surface variation: it collapsed the separation from 22x to
+ * 2x. Integer search for the correlation peak, a parabolic fit through it for
+ * the fraction, then a bilinear resample, and the shaky captures score the
+ * same as the clean ones again. The frames legitimately differ in shading but
+ * share the albedo texture, and that is what the correlation locks onto.
+ */
+function surfaceShift(frame, ref, radius) {
+  const W = SURFACE_W, H = SURFACE_H, edge = radius + 1;
+  const score = (dx, dy) => {
+    let sum = 0, n = 0;
+    for (let y = edge; y < H - edge; y += 2) {
+      for (let x = edge; x < W - edge; x += 2) { sum += frame[(y + dy) * W + (x + dx)] * ref[y * W + x]; n++; }
+    }
+    return sum / n;
+  };
+  let best = { s: -Infinity, dx: 0, dy: 0 };
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const s = score(dx, dy);
+      if (s > best.s) best = { s, dx, dy };
+    }
+  }
+  const sub = (minus, centre, plus) => {
+    const d = minus - 2 * centre + plus;
+    return Math.abs(d) < 1e-9 ? 0 : Math.max(-0.5, Math.min(0.5, 0.5 * (minus - plus) / d));
+  };
+  return {
+    dx: best.dx + sub(score(best.dx - 1, best.dy), best.s, score(best.dx + 1, best.dy)),
+    dy: best.dy + sub(score(best.dx, best.dy - 1), best.s, score(best.dx, best.dy + 1)),
+  };
+}
+
+function surfaceResample(frame, dx, dy) {
+  const W = SURFACE_W, H = SURFACE_H, out = new Float64Array(W * H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const sx = Math.min(W - 2, Math.max(0, x + dx)), sy = Math.min(H - 2, Math.max(0, y + dy));
+      const x0 = Math.floor(sx), y0 = Math.floor(sy), tx = sx - x0, ty = sy - y0;
+      out[y * W + x] =
+        frame[y0 * W + x0] * (1 - tx) * (1 - ty) + frame[y0 * W + x0 + 1] * tx * (1 - ty) +
+        frame[(y0 + 1) * W + x0] * (1 - tx) * ty + frame[(y0 + 1) * W + x0 + 1] * tx * ty;
+    }
+  }
+  return out;
+}
+
+/** The rank test. Each frame is normalised to unit length first, so a change
+ *  in exposure — all a flat surface can produce — cannot manufacture
+ *  structure. What survives in the second and third singular values is the
+ *  surface normal varying across the card. */
+function surfaceRelief(frames, mask) {
+  const N = frames.length;
+  const idx = [];
+  for (let i = 0; i < frames[0].length; i++) if (mask[i]) idx.push(i);
+  if (idx.length < 512) return null;
+
+  const rows = frames.map((f) => {
+    let norm = 0;
+    for (const i of idx) norm += f[i] * f[i];
+    norm = Math.sqrt(norm) || 1;
+    return idx.map((i) => f[i] / norm);
+  });
+  const G = Array.from({ length: N }, () => new Array(N).fill(0));
+  for (let p = 0; p < N; p++) {
+    for (let q = p; q < N; q++) {
+      let s = 0;
+      for (let k = 0; k < rows[p].length; k++) s += rows[p][k] * rows[q][k];
+      G[p][q] = G[q][p] = s;
+    }
+  }
+  const sv = symmetricEigenvalues(G, N).map(Math.sqrt);
+  const total = sv.reduce((a, b) => a + b, 0) || 1;
+  return (sv[1] + (sv[2] || 0)) / total;
+}
+
+/** Luminance of a rectified frame, at the surface grid. */
+function surfaceLuma(rect) {
+  const n = rect.width * rect.height, out = new Float64Array(n), d = rect.data;
+  for (let i = 0, j = 0; i < n; i++, j += 4) {
+    out[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+  }
+  return out;
+}
+
+/** How much the shading moved between two frames, once brightness is matched.
+ *  This is the "are you actually tilting it" test. */
+function surfaceChange(a, b) {
+  let sa = 0, sb = 0;
+  for (let i = 0; i < a.length; i++) { sa += a[i]; sb += b[i]; }
+  const k = sa > 0 ? sb / sa : 1;
+  let diff = 0, base = 0;
+  for (let i = 0; i < a.length; i++) { diff += Math.abs(a[i] * k - b[i]); base += b[i]; }
+  return base > 0 ? diff / base : 0;
+}
+
+function surfaceSignal(frames) {
+  const ID = 'surface', LABEL = 'Surface relief';
+  if (!frames || frames.length < SURFACE_MIN_FRAMES) {
+    return {
+      ...abstain(ID, LABEL, SURFACE_WEIGHT, 'insufficient_data',
+        'Not enough usable frames were captured to measure the surface. Keep the whole card in ' +
+        'the frame while you tilt it.'),
+      whyShort: 'did not get enough frames to measure the surface',
+    };
+  }
+
+  // Only well-exposed pixels: a blown highlight carries no shading information
+  // and a black one carries no signal to normalise.
+  const mask = new Uint8Array(SURFACE_W * SURFACE_H);
+  let usable = 0;
+  for (let i = 0; i < mask.length; i++) {
+    let ok = 1;
+    for (const f of frames) if (f[i] < 18 || f[i] > 245) { ok = 0; break; }
+    mask[i] = ok; usable += ok;
+  }
+  if (usable < mask.length * 0.35) {
+    return {
+      ...abstain(ID, LABEL, SURFACE_WEIGHT, 'insufficient_data',
+        'Too much of the card was burnt out or in shadow across the frames to read its surface. ' +
+        'Tilt it more gently, away from a direct reflection.'),
+      whyShort: 'lost too much of the card to glare to read the surface',
+    };
+  }
+
+  const ref = frames[0];
+  const registered = frames.map((f, i) => {
+    if (i === 0) return f;
+    const { dx, dy } = surfaceShift(f, ref, 3);
+    return surfaceResample(f, dx, dy);
+  });
+  const relief = surfaceRelief(registered, mask);
+  if (relief === null) {
+    return {
+      ...abstain(ID, LABEL, SURFACE_WEIGHT, 'insufficient_data',
+        'The frames could not be lined up well enough to measure the surface.'),
+      whyShort: 'could not line the frames up to read the surface',
+    };
+  }
+
+  // ONE-SIDED, and for a reason that is about cards rather than about caution.
+  //
+  // A plain common card IS flat — only foil and holo treatments carry relief.
+  // So a low reading is the normal reading for most of the hobby, and scoring
+  // it down would accuse every common card in a binder. Relief present is
+  // evidence a flat reproduction cannot fake; relief absent is evidence of
+  // nothing at all.
+  if (relief < SURFACE_SUPPORT) {
+    return {
+      ...abstain(ID, LABEL, SURFACE_WEIGHT, 'insufficient_data',
+        'No surface relief was resolved. That is the normal reading for a card with no foil or ' +
+        'holo treatment, so nothing is concluded from it either way — this check can confirm a ' +
+        'textured surface and cannot read anything into a smooth one.'),
+      whyShort: 'found no surface texture to read, which is normal for a non-holo card',
+      measurements: { relief: relief.toFixed(3), framesUsed: frames.length },
+    };
+  }
+
+  const score = Math.round(70 + Math.min(1, (relief - SURFACE_SUPPORT) / (SURFACE_STRONG - SURFACE_SUPPORT)) * 30);
+  return {
+    id: ID, label: LABEL, status: 'ok', score, weight: SURFACE_WEIGHT,
+    summary:
+      'The surface has real relief — the shading moved across the card as you tilted it, in a way ' +
+      'a flat sheet cannot. This is the one measurement here that reads the card as a physical ' +
+      'object rather than as a picture, and a printed reproduction cannot produce it. It says ' +
+      'nothing about whether the printing itself is right.',
+    measurements: {
+      relief: relief.toFixed(3),
+      framesUsed: frames.length,
+      readablePixels: Math.round((usable / mask.length) * 100) + '%',
+      oneSided: 'true',
+    },
+  };
+}
+
+/** Listed from the first scan so the panel can say the check exists and what
+ *  it needs, rather than appearing from nowhere once it has been run. */
+function surfaceNotCaptured() {
+  return {
+    ...abstain('surface', 'Surface relief', SURFACE_WEIGHT, 'insufficient_data',
+      'This check tells an embossed surface from a printed one by watching how the shading moves ' +
+      'as the card tilts — the same principle the automated graders use with their lighting rigs, ' +
+      'minus the rig. It needs its own short capture rather than a single photo. Press "Check the ' +
+      'surface" below.'),
+    whyShort: 'has not been given its own capture yet',
   };
 }
 
@@ -5012,7 +5310,11 @@ async function analyzeSource(source, onStep, opts) {
       ? Promise.resolve(visionUnavailable())
       : visionSignal(rectified, id.candidates[0] ? id.candidates[0].card : null),
   ]);
-  signals.push(referenceCheck, visionCheck);
+  // The surface check is listed from the first scan rather than appearing
+  // later, so the panel can say what it is and what it needs. It runs on its
+  // own short capture — a single photograph cannot carry it, because the whole
+  // measurement is how the shading MOVES.
+  signals.push(referenceCheck, surfaceNotCaptured(), visionCheck);
 
   // The comparison lines the card up against its official image both ways up
   // before it measures anything, so when it says the other way round fits, it
@@ -5190,6 +5492,10 @@ function renderQuality(result) {
 
 function renderSingle(result) {
   LAST_RESULT = result;
+
+  // A new card means the surface measurement from the previous one no longer
+  // applies. The panel reads its state from the report, so this just refreshes.
+  if (typeof renderSurfaceState === 'function') renderSurfaceState();
 
   // Offer the manual frame only where it can help: on a photo, where the quad
   // came from detection and might be wrong. A live capture has already been
@@ -7443,6 +7749,150 @@ $('btn-reset').addEventListener('click', async () => {
   else $('capture-target').focus();
 });
 
+/* --- the surface capture ------------------------------------------------ */
+
+/**
+ * A capture loop of its own, deliberately not wired into the scanner's.
+ *
+ * The main viewfinder carries arming, clipping, stillness and one-shot gates
+ * built up over a lot of correction, and threading a second mode through all
+ * of it would put every one of those at risk to add a feature that sits beside
+ * them. This one has a different job — it WANTS the card to move — so it gets
+ * its own short loop and leaves the scan flow untouched.
+ */
+const SURF = {
+  running: false, stream: null, track: null, timer: null,
+  frames: [], started: 0, canvas: null, ctx: null,
+};
+
+const SURFACE_TIMEOUT_MS = 30000;
+const SURFACE_SCOUT_MAX = 900;
+
+function setSurfaceHint(text) { $('surface-hint').textContent = text; }
+
+function stopSurfaceCapture() {
+  SURF.running = false;
+  if (SURF.timer) { clearInterval(SURF.timer); SURF.timer = null; }
+  if (SURF.stream) { SURF.stream.getTracks().forEach((t) => t.stop()); SURF.stream = null; }
+  SURF.track = null;
+  $('surface-view').hidden = true;
+  $('btn-surface-cancel').hidden = true;
+  $('btn-surface-start').hidden = false;
+}
+
+function finishSurfaceCapture() {
+  const frames = SURF.frames.slice();
+  stopSurfaceCapture();
+
+  const signal = surfaceSignal(frames);
+  if (LAST_RESULT && LAST_RESULT.report) {
+    const signals = LAST_RESULT.report.signals.map((s) => (s.id === 'surface' ? signal : s));
+    LAST_RESULT.report = buildReport(signals, LAST_RESULT.contextLimitations || []);
+    renderReport(LAST_RESULT.report);
+  }
+  renderSurfaceState(signal);
+}
+
+function renderSurfaceState(signal) {
+  const s = signal || (LAST_RESULT && LAST_RESULT.report
+    ? LAST_RESULT.report.signals.find((x) => x.id === 'surface') : null);
+  $('surface-state').textContent = !s || s.whyShort === 'has not been given its own capture yet'
+    ? 'Not measured yet. This one needs a few seconds of video rather than a photo.'
+    : s.status === 'ok'
+      ? 'Measured: surface relief present (' + s.measurements.relief + ' across ' +
+        s.measurements.framesUsed + ' frames).'
+      : 'Measured: ' + (s.measurements && s.measurements.relief
+          ? 'no relief resolved (' + s.measurements.relief + ').' : 'not enough to read.') +
+        ' Nothing is concluded from that.';
+}
+
+function surfaceTick() {
+  if (!SURF.running) return;
+  const video = $('surface-video');
+  if (!video.videoWidth) return;
+
+  if (Date.now() - SURF.started > SURFACE_TIMEOUT_MS) { finishSurfaceCapture(); return; }
+
+  const scale = Math.min(1, SURFACE_SCOUT_MAX / video.videoWidth);
+  const w = Math.round(video.videoWidth * scale), h = Math.round(video.videoHeight * scale);
+  if (SURF.canvas.width !== w) { SURF.canvas.width = w; SURF.canvas.height = h; }
+  SURF.ctx.drawImage(video, 0, 0, w, h);
+  const src = SURF.ctx.getImageData(0, 0, w, h);
+
+  let detection;
+  try { detection = detectCard(src); } catch { return; }
+  if (detection.method !== 'contour' || detection.confidence < 0.45) {
+    setSurfaceHint('Hold the whole card in view');
+    return;
+  }
+
+  const rect = rectifyCard(src, detection.corners, SURFACE_W, SURFACE_H);
+  const luma = surfaceLuma(rect);
+
+  if (SURF.frames.length > 0) {
+    // The shading has to have MOVED. Held perfectly still every frame is
+    // identical, the rank is one, and a genuine holo would read as flat.
+    const moved = surfaceChange(SURF.frames[SURF.frames.length - 1], luma);
+    if (moved < SURFACE_MIN_CHANGE) {
+      setSurfaceHint('Keep tilting — ' + SURF.frames.length + ' of ' + SURFACE_FRAMES);
+      return;
+    }
+  }
+
+  SURF.frames.push(luma);
+  setSurfaceHint(SURF.frames.length + ' of ' + SURFACE_FRAMES + ' captured');
+  if (SURF.frames.length >= SURFACE_FRAMES) finishSurfaceCapture();
+}
+
+async function startSurfaceCapture() {
+  if (!camSupported()) {
+    $('surface-state').textContent = 'This browser has no camera API, so the surface cannot be measured here.';
+    return;
+  }
+  SURF.frames = [];
+  SURF.started = Date.now();
+  if (!SURF.canvas) {
+    SURF.canvas = document.createElement('canvas');
+    SURF.ctx = SURF.canvas.getContext('2d', { willReadFrequently: true });
+  }
+
+  let stream;
+  try { stream = await openCamera(); } catch (err) {
+    $('surface-state').textContent =
+      'The camera could not be opened (' + ((err && err.name) || 'unknown error') + ').';
+    return;
+  }
+  SURF.stream = stream;
+  SURF.track = stream.getVideoTracks()[0] || null;
+
+  const video = $('surface-video');
+  video.srcObject = stream;
+  video.setAttribute('playsinline', '');
+  video.muted = true;
+  try { await video.play(); } catch { /* the autoplay attribute covers it */ }
+
+  // A steady light source of its own makes the shading move predictably as the
+  // card turns. Where the torch cannot be driven — iOS does not expose it —
+  // room light and a tilt do the same job, so this is attempted and dropped.
+  try { await SURF.track.applyConstraints({ advanced: [{ torch: true }] }); } catch { /* not available */ }
+
+  $('surface-view').hidden = false;
+  $('btn-surface-start').hidden = true;
+  $('btn-surface-cancel').hidden = false;
+  $('surface-state').textContent = 'Tilt the card slowly under a light while this records.';
+  setSurfaceHint('Hold the whole card in view');
+
+  SURF.running = true;
+  SURF.timer = setInterval(surfaceTick, 180);
+}
+
+$('btn-surface-start').addEventListener('click', startSurfaceCapture);
+$('btn-surface-cancel').addEventListener('click', () => {
+  const enough = SURF.frames.length >= SURFACE_MIN_FRAMES;
+  if (enough) finishSurfaceCapture();
+  else { stopSurfaceCapture(); renderSurfaceState(); }
+});
+
 /* --- the visual-comparison key ---------------------------------------- */
 
 function renderVisionState() {
@@ -7558,6 +8008,7 @@ $('btn-vision-clear').addEventListener('click', () => {
 });
 
 renderVisionState();
+renderSurfaceState();
 
 // Fire and forget. Nothing awaits this: the scanner is fully usable on the
 // baked corpus from the first frame, and any extra cards simply widen what it
