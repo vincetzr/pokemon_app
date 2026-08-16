@@ -717,11 +717,11 @@
             <p class="note" id="verdict-blurb" style="margin:8px 0 0"></p>
             <p class="note" id="verdict-enable" hidden style="margin:8px 0 0">
               <button class="ghost primary" id="btn-goto-vision" type="button">
-                Turn on the third check
+                Turn on the detailed inspection
               </button>
-              <span style="margin-left:8px">One check cannot settle a verdict. The detailed visual
-                comparison can run here with a key you supply, and it is what makes a verdict
-                reachable.</span>
+              <span style="margin-left:8px">Not enough could be checked here to settle it. The
+                detailed visual comparison runs in this page with a key you supply — a free Google
+                AI Studio key works — and it is the check that reads the fine print.</span>
             </p>
           </div>
         </div>
@@ -808,27 +808,39 @@
       </div>
     </section>
 
-    <!-- Opt-in, off by default, and the only thing on this page that ever
-         touches the network. Stated plainly rather than buried: the photo goes
-         to Anthropic and the key stays in this browser. -->
+    <!-- Opt-in, off by default. Stated plainly rather than buried: the photo
+         goes to whichever provider the key belongs to, the key stays in this
+         browser, and one of the accepted providers is free. -->
     <section id="sec-vision">
       <div class="eyebrow">Detailed visual comparison</div>
       <div class="panel">
         <p class="note" id="vision-state" style="margin:0 0 10px"></p>
         <div class="row">
-          <input type="password" id="vision-key" placeholder="Anthropic API key (sk-ant-…)"
+          <input type="password" id="vision-key" placeholder="Paste an API key — AIza… is free"
                  autocomplete="off" spellcheck="false"
                  style="flex:1 1 220px;min-width:0">
           <button class="ghost primary" id="btn-vision-save" type="button">Enable</button>
           <button class="ghost" id="btn-vision-clear" type="button" hidden>Remove key</button>
         </div>
         <p class="note" style="margin:10px 0 0">
-          This is the third check, and the only one that can notice a wrong font, a holo pattern in
-          the wrong place or a set symbol of the wrong shape. It needs a model, not a server — so
-          your own key is enough. Without it the check reports itself absent and no verdict is
-          reachable here. With it, the card image is sent to Anthropic when you scan, the key is
-          kept in this browser and nowhere else, and each scan costs a few cents against your own
-          account.
+          This is the fourth check, and the only one that can read the fine detail — a font a shade
+          too heavy, a set symbol of the wrong shape, a copyright line from the wrong era. The
+          other three run without it; it is what takes them from "consistent so far" to a real
+          inspection. It needs a model and a key, not a server, so a key of your own is enough.
+        </p>
+        <p class="note" style="margin:8px 0 0">
+          <b>A free key works.</b> Get one at
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>
+          — it starts <code>AIza</code> and runs this check at no cost inside Google's free tier.
+          Keys from Anthropic (<code>sk-ant-</code>, a few cents a scan), Groq (<code>gsk_</code>,
+          free tier) and OpenRouter (<code>sk-or-</code>) are accepted too; the page reads which
+          provider a key belongs to from the key itself.
+        </p>
+        <p class="note" style="margin:8px 0 0">
+          The key is kept in this browser's local storage and is sent to that provider and nowhere
+          else — this page has no backend to send it to. No key is built into the page, and none
+          ever will be: every byte of this file is public, so a key shipped inside it would be a
+          key published for anyone to spend.
         </p>
       </div>
     </section>
@@ -2892,16 +2904,125 @@ function referenceUnavailable() {
  * supply nothing and everything below is inert and the check reports itself
  * absent exactly as before.
  *
- * The key is kept in this browser's local storage and is sent to Anthropic and
- * to nobody else. The page has no backend to send it to even if it wanted one.
+ * The key is kept in this browser's local storage and is sent to the provider
+ * it belongs to and to nobody else. The page has no backend to send it to even
+ * if it wanted one — which is also why no key can ever be shipped INSIDE the
+ * page. Every byte of this file is public. A key baked in would be a key
+ * published, spendable by anyone who opened it, so the only safe arrangement is
+ * the one here: the reader's own key, held in the reader's own browser.
  */
 const VISION_KEY_STORE = 'pcs.anthropic.key';
-const VISION_MODEL = 'claude-opus-5';
 const VISION_MAX_EDGE = 1568;
 const VISION_WEIGHT = 1.5;
 
+/**
+ * Who the key belongs to, read from the key itself.
+ *
+ * More than one provider is accepted because they are not priced alike, and
+ * that difference is the whole point. Anthropic bills per token — a few cents a
+ * scan, no free allowance. Google's AI Studio publishes a free tier that
+ * includes its vision models, so a key from there runs this check at no cost
+ * within its daily limits. Both go through the same code path below: Google
+ * serves an OpenAI-shaped endpoint, so one request shape covers everything
+ * except Anthropic, which keeps its own.
+ *
+ * Detection is by key prefix rather than by asking, because the prefixes are
+ * unambiguous and one fewer question is one fewer thing to get wrong.
+ */
+const VISION_PROVIDERS = [
+  {
+    id: 'anthropic',
+    label: 'Anthropic',
+    test: (k) => /^sk-ant-/.test(k),
+    free: false,
+    cost: 'a few cents per scan against your account',
+    models: ['claude-opus-5'],
+  },
+  {
+    id: 'google',
+    label: 'Google AI Studio',
+    test: (k) => /^AIza[\w-]{20,}$/.test(k),
+    free: true,
+    cost: 'no charge inside Google’s free tier, which covers these models',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    // Newest first, and only a preference: what the key actually lists wins.
+    models: ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'],
+    discover: /^gemini-[\d.]+-flash$/,
+  },
+  {
+    id: 'groq',
+    label: 'Groq',
+    test: (k) => /^gsk_/.test(k),
+    free: true,
+    cost: 'no charge inside Groq’s free tier',
+    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+    models: ['meta-llama/llama-4-maverick-17b-128e-instruct', 'meta-llama/llama-4-scout-17b-16e-instruct'],
+    discover: /llama-4|vision|maverick|scout/i,
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    test: (k) => /^sk-or-/.test(k),
+    free: false,
+    cost: 'whatever the model you route to charges',
+    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    models: ['google/gemini-2.5-flash'],
+    discover: /gemini[\w.-]*flash/i,
+  },
+];
+
+function visionProvider(key) {
+  for (const p of VISION_PROVIDERS) if (p.test(key)) return p;
+  return null;
+}
+
 function visionKey() {
   try { return (localStorage.getItem(VISION_KEY_STORE) || '').trim(); } catch { return ''; }
+}
+
+/**
+ * The model this key will actually be asked for, discovered from the key when
+ * it is entered rather than assumed.
+ *
+ * A model identifier written into this page ages badly: providers retire them,
+ * and the failure lands on the user mid-scan as "no model available", which
+ * reads as a broken key. Every provider here serves the model list at the same
+ * path as the completions endpoint, so the list can be read with the key the
+ * moment it is pasted — which validates the key and picks a live model in one
+ * request, and reports both before the user ever scans.
+ */
+const VISION_MODEL_STORE = 'pcs.vision.model';
+const VISION_NOT_CHAT = /embedding|imagen|\btts\b|text-to-speech|whisper|guard|veo|aqa/i;
+
+function visionStoredModel() {
+  try { return (localStorage.getItem(VISION_MODEL_STORE) || '').trim(); } catch { return ''; }
+}
+
+async function visionDiscoverModel(provider, key) {
+  if (!provider.endpoint) return { model: provider.models[0] };
+  let res;
+  try {
+    res = await fetch(provider.endpoint.replace(/\/chat\/completions$/, '/models'), {
+      headers: { authorization: 'Bearer ' + key },
+    });
+  } catch {
+    return { detail: provider.label + ' could not be reached' };
+  }
+  if (!res.ok) return { detail: visionHttpDetail(res.status) };
+
+  const listed = ((await res.json()).data || []).map((m) => String(m.id || ''));
+  const bare = (id) => id.replace(/^models\//, '');
+  // The pinned preferences first, in order, so the intended model wins when it
+  // is there; then anything the provider lists that looks like a chat model
+  // this page could use, so a wholly renamed line-up still resolves.
+  for (const want of provider.models) {
+    const hit = listed.find((id) => bare(id) === want);
+    if (hit) return { model: hit };
+  }
+  const fallback = listed.find((id) => provider.discover && provider.discover.test(bare(id)) &&
+    !VISION_NOT_CHAT.test(id));
+  if (fallback) return { model: fallback };
+  return { detail: 'this key lists no model this page knows how to use' };
 }
 
 /**
@@ -3001,64 +3122,159 @@ function encodeCardForVision(rect) {
   return c.toDataURL('image/jpeg', 0.88).split(',')[1];
 }
 
+/** The brief, shared by every provider so they are asked exactly the same thing. */
+function visionBrief(named) {
+  return named + '\n\nInspect the card and report:\n' +
+    '  - what you observe (neutral descriptions)\n' +
+    '  - any specific concerns, each with its most plausible innocent explanation\n' +
+    '  - a consistency score from 0 to 100\n\n' +
+    'Look at print and text quality, font weight and spacing, colour rendering, the set ' +
+    'symbol and rarity mark, the collector line and copyright text, the holo pattern and ' +
+    'the region it covers, border geometry, and the card\u2019s overall finish.';
+}
+
+/** Turn whatever came back into the report shape, or null. Providers that
+ *  cannot be handed a schema wrap their JSON in prose or fences; this reads
+ *  through both rather than failing on punctuation. */
+function visionParse(text) {
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { /* fall through to extraction */ }
+  const open = text.indexOf('{'), close = text.lastIndexOf('}');
+  if (open < 0 || close <= open) return null;
+  try { return JSON.parse(text.slice(open, close + 1)); } catch { return null; }
+}
+
+function visionHttpDetail(status) {
+  return status === 401 || status === 403 ? 'the key was rejected'
+    : status === 429 ? 'the account has hit its rate limit — on a free tier this usually clears within a minute'
+    : 'the request failed with HTTP ' + status;
+}
+
+/** Anthropic. Its own request shape, and the only provider that can be handed
+ *  the schema directly rather than asked for JSON and checked afterwards. */
+async function askAnthropic(provider, key, rect, named) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      // Without this the API refuses a browser origin outright.
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: provider.models[0],
+      max_tokens: 3000,
+      system: VISION_SYSTEM,
+      output_config: { format: { type: 'json_schema', schema: VISION_SCHEMA } },
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: encodeCardForVision(rect) } },
+          { type: 'text', text: visionBrief(named) },
+        ],
+      }],
+    }),
+  });
+  if (!res.ok) return { detail: visionHttpDetail(res.status) };
+  const body = await res.json();
+  if (body.stop_reason === 'refusal') return { refused: true };
+  const text = (body.content || []).find((b) => b.type === 'text');
+  return { data: visionParse(text && text.text) };
+}
+
+/**
+ * Everything else, through the OpenAI chat-completions shape.
+ *
+ * Google, Groq and OpenRouter all serve it, so one request covers all three and
+ * there is no per-provider request code to get wrong. Two accommodations: the
+ * schema goes in the prompt rather than the request, because support for a
+ * response schema varies and a rejected request is worse than a described one;
+ * and the model list is walked, so a retired model identifier falls through to
+ * the next rather than reporting the key as broken.
+ */
+async function askOpenAiCompatible(provider, key, rect, named) {
+  const body = (model, strict) => JSON.stringify({
+    model,
+    max_tokens: 3000,
+    ...(strict ? { response_format: { type: 'json_object' } } : {}),
+    messages: [
+      { role: 'system', content: VISION_SYSTEM },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: visionBrief(named) +
+            '\n\nReply with JSON only, matching exactly this shape:\n' +
+            JSON.stringify(VISION_SCHEMA) },
+          { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + encodeCardForVision(rect) } },
+        ],
+      },
+    ],
+  });
+
+  // The model settled on when the key was entered leads; the pinned
+  // preferences remain as a fallback for a key stored before that step existed.
+  const stored = visionStoredModel();
+  const candidates = stored ? [stored].concat(provider.models.filter((m) => m !== stored)) : provider.models;
+
+  let lastDetail = 'no model this page knows about was available on this key';
+  for (const model of candidates) {
+    for (const strict of [true, false]) {
+      const res = await fetch(provider.endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+        body: body(model, strict),
+      });
+      if (res.ok) {
+        const out = await res.json();
+        const choice = (out.choices || [])[0];
+        if (choice && choice.finish_reason === 'content_filter') return { refused: true };
+        return { data: visionParse(choice && choice.message && choice.message.content) };
+      }
+      // 404 means this model is not on this key — try the next one. A 400 can
+      // mean the JSON-mode request was refused, so it is retried once without.
+      lastDetail = visionHttpDetail(res.status);
+      if (res.status === 401 || res.status === 403 || res.status === 429) return { detail: lastDetail };
+      if (res.status !== 400) break;
+    }
+  }
+  return { detail: lastDetail };
+}
+
 async function visionSignal(rect, card) {
   const key = visionKey();
   if (!key) return visionUnavailable();
 
+  const provider = visionProvider(key);
+  if (!provider) {
+    return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
+      'That key is not one this page recognises. It accepts an Anthropic key (sk-ant-…), a ' +
+      'Google AI Studio key (AIza…), a Groq key (gsk_…) or an OpenRouter key (sk-or-…).');
+  }
+
   const named = card
-    ? 'The card has been identified as ' + card.name + ' — ' + card.setName +
+    ? 'The card has been identified as ' + card.name + ' \u2014 ' + card.setName +
       (card.number ? ' ' + card.number : '') + (card.releaseDate ? ', released ' + card.releaseDate : '') + '.'
     : 'The card could not be identified from the corpus in this build, so judge it on its own terms.';
 
-  let data;
+  let outcome;
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        // Without this the API refuses a browser origin outright.
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: VISION_MODEL,
-        max_tokens: 3000,
-        system: VISION_SYSTEM,
-        output_config: { format: { type: 'json_schema', schema: VISION_SCHEMA } },
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: encodeCardForVision(rect) } },
-            { type: 'text', text: named + '\n\nInspect the card and report:\n' +
-              '  - what you observe (neutral descriptions)\n' +
-              '  - any specific concerns, each with its most plausible innocent explanation\n' +
-              '  - a consistency score from 0 to 100\n\n' +
-              'Look at print and text quality, font weight and spacing, colour rendering, the set ' +
-              'symbol and rarity mark, the collector line and copyright text, the holo pattern and ' +
-              'the region it covers, border geometry, and the card\u2019s overall finish.' },
-          ],
-        }],
-      }),
-    });
-    if (!res.ok) {
-      const detail = res.status === 401 ? 'the key was rejected'
-        : res.status === 429 ? 'the account is rate limited'
-        : 'the request failed with HTTP ' + res.status;
-      return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
-        'The visual comparison could not run: ' + detail + '. Nothing is concluded from it.');
-    }
-    const body = await res.json();
-    if (body.stop_reason === 'refusal') {
-      return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
-        'The visual comparison was declined for this image. Nothing is concluded from it.');
-    }
-    const text = (body.content || []).find((b) => b.type === 'text');
-    data = text ? JSON.parse(text.text) : null;
+    outcome = provider.id === 'anthropic'
+      ? await askAnthropic(provider, key, rect, named)
+      : await askOpenAiCompatible(provider, key, rect, named);
   } catch (err) {
     return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
-      'The visual comparison could not reach the model. Nothing is concluded from it.');
+      'The visual comparison could not reach ' + provider.label + '. Nothing is concluded from it.');
   }
+  if (outcome.refused) {
+    return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
+      'The visual comparison was declined for this image. Nothing is concluded from it.');
+  }
+  if (outcome.detail) {
+    return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
+      'The visual comparison could not run: ' + outcome.detail + '. Nothing is concluded from it.');
+  }
+  const data = outcome.data;
   if (!data) {
     return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
       'The visual comparison returned nothing usable. Nothing is concluded from it.');
@@ -3094,19 +3310,21 @@ async function visionSignal(rect, card) {
       serious: serious.length,
       moderate: moderate.length,
       observations: (data.observations || []).length,
+      inspectedBy: provider.label,
     },
   };
 }
 
 function visionUnavailable() {
   return {
-    ...abstain('vision', 'Detailed visual comparison', 1.5, 'error',
+    ...abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
       'This check sends the photo to a vision model to compare fonts, holo pattern, set symbol ' +
-      'and colour against the official card. It needs a model and a key, not a server — so it ' +
-      'CAN run here, with a key you supply under "Detailed visual comparison" below. Until then ' +
-      'it is listed rather than hidden, because a build that cannot make this comparison has ' +
-      'covered much less ground than one that can, and you should know that. It is also the ' +
-      'check that makes a verdict reachable at all.'),
+      'and copyright text against what a genuine card of this era should show — the fine detail ' +
+      'no measurement here can reach. It needs a model and a key, not a server, so it CAN run ' +
+      'here with a key you supply under "Detailed visual comparison" below. A free Google AI ' +
+      'Studio key runs it at no cost. Until then it is listed rather than hidden, because a ' +
+      'build that cannot make this comparison has covered less ground than one that can, and ' +
+      'you should know that.'),
     available: false,
     whyShort: 'has not been given a key to run with',
   };
@@ -7178,10 +7396,17 @@ $('btn-reset').addEventListener('click', async () => {
 /* --- the visual-comparison key ---------------------------------------- */
 
 function renderVisionState() {
-  const has = !!visionKey();
-  $('vision-state').textContent = has
-    ? 'Enabled. The detailed visual comparison will run on the next scan, and the verdict can be reached.'
-    : 'Not enabled. Two of the three checks can run without it, which is not enough to settle a verdict.';
+  const key = visionKey();
+  const provider = key ? visionProvider(key) : null;
+  const has = !!key;
+  const model = visionStoredModel();
+  $('vision-state').textContent = !has
+    ? 'Not enabled. The other three checks still run — this is the one that reads the fine print.'
+    : provider
+      ? 'Enabled with your ' + provider.label + ' key' + (model ? ', using ' + model : '') +
+        '. It runs on the next scan, at ' + provider.cost + '.'
+      : 'That key is not one this page recognises. Remove it and paste an Anthropic, Google AI ' +
+        'Studio, Groq or OpenRouter key.';
   $('vision-key').value = '';
   $('vision-key').hidden = has;
   $('btn-vision-save').hidden = has;
@@ -7196,7 +7421,35 @@ $('btn-goto-vision').addEventListener('click', () => {
 $('btn-vision-save').addEventListener('click', async () => {
   const v = $('vision-key').value.trim();
   if (!v) return;
-  try { localStorage.setItem(VISION_KEY_STORE, v); } catch {}
+
+  // Check the key before accepting it, and say what went wrong if it fails.
+  //
+  // Storing an unusable key and letting the next scan discover that is the
+  // worst version of this: the failure arrives minutes later, attached to a
+  // card, and reads as the scanner being broken rather than the key being
+  // wrong. One request at this point answers three questions at once — is the
+  // key real, does it belong to a provider this page speaks, and which model
+  // will it actually be asked for.
+  const provider = visionProvider(v);
+  if (!provider) {
+    $('vision-state').textContent =
+      'That key is not one this page recognises. It takes an Anthropic key (sk-ant-…), a Google ' +
+      'AI Studio key (AIza…, free), a Groq key (gsk_…) or an OpenRouter key (sk-or-…).';
+    return;
+  }
+  $('vision-state').textContent = 'Checking the key with ' + provider.label + '…';
+  const found = await visionDiscoverModel(provider, v);
+  if (found.detail) {
+    $('vision-state').textContent =
+      'That ' + provider.label + ' key was not accepted: ' + found.detail + '. Nothing has been ' +
+      'saved.';
+    return;
+  }
+
+  try {
+    localStorage.setItem(VISION_KEY_STORE, v);
+    localStorage.setItem(VISION_MODEL_STORE, found.model);
+  } catch {}
   renderVisionState();
 
   // Run it on the card already on screen.
@@ -7220,7 +7473,10 @@ $('btn-vision-save').addEventListener('click', async () => {
 });
 
 $('btn-vision-clear').addEventListener('click', () => {
-  try { localStorage.removeItem(VISION_KEY_STORE); } catch {}
+  try {
+    localStorage.removeItem(VISION_KEY_STORE);
+    localStorage.removeItem(VISION_MODEL_STORE);
+  } catch {}
   renderVisionState();
 });
 
