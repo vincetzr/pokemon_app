@@ -8,7 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#08090d">
-<meta name="description" content="Photograph a Pokémon card and get an authenticity reading, the printing it matches, and current condition prices — measured on the device, with no network.">
+<meta name="description" content="Photograph a Pokémon card and get an authenticity reading, the printing it matches, and current condition prices — measured in the browser, against the official card image.">
 <!-- Added to the Home Screen it opens without browser chrome, which is how the
      viewfinder gets the whole screen. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -867,15 +867,18 @@
       perceptual hashes of
       <span id="corpus-count">__CARDCOUNT__</span> official card images baked into this file,
       trying both the upright and the half-turned orientation so a card photographed sideways or
-      upside down still matches.
+      upside down still matches. Once it knows which card this is, the page fetches that one
+      card's official image — about 50KB — and compares your photo against it region by region,
+      which also settles which way up to show the card.
     </p>
     <p class="note" id="corpus-extra" hidden style="margin:-6px 0 0"></p>
     <p>
       <b>What is frozen.</b> Prices and history were captured from live sources on
       __BAKEDATE__ and cannot refresh, because they are baked into this file — that is what lets
       it work with no server and no account, and it is also why
-      the figures age. The AI vision check needs a server holding an API key, so it cannot run
-      here on any photo. Prices are asking prices from listings, not completed sales.
+      the figures age. Prices are asking prices from listings, not completed sales. The detailed
+      visual inspection needs an API key rather than a server, so it runs here only if you supply
+      one below; nothing is sent to a model until you do.
     </p>
     <p>
       This is not an appraisal and not a certificate. A photograph cannot prove a card is
@@ -2036,9 +2039,9 @@ function buildReport(signals, contextLimitations) {
   }
   if (unavailable.length > 0) {
     limitations.push(
-      'This build does not carry ' + unavailable.map((s) => s.label.toLowerCase()).join(', ') +
-      ' at all — it needs a server, and this is a single file. That is ground no photo taken ' +
-      'here can cover.'
+      'This build is not running ' + unavailable.map((s) => s.label.toLowerCase()).join(', ') +
+      ' — it needs an API key you supply, and none has been given. That is ground no photo ' +
+      'taken here can cover until it is switched on.'
     );
   }
 
@@ -2312,6 +2315,562 @@ function blurAbstention() {
     reason:
       'Fine print structure is destroyed by blur, so this check would measure the ' +
       'photo rather than the card. Retake it with the card flat and in focus.',
+  };
+}
+
+/* --- comparison against the official image, no key required ------------- */
+
+/**
+ * Put the photographed card side by side with the official image of the card
+ * it was identified as, and measure where the two disagree.
+ *
+ * This is the check that does not need a key, a server or a model. The
+ * official image is fetched for the ONE card the matcher chose — about 50KB —
+ * so nothing has to be baked in, and it runs on every scan at no cost.
+ *
+ * What it can see, and what it cannot, both follow from resolution. The best
+ * reference obtainable is 600x825 for the older sets and 400x559 for the
+ * TCGplayer-sourced ones, which is 6 to 9 pixels per millimetre. At that scale
+ * the layout, the geometry, the art crop and the colour are all legible, and
+ * the print structure that separates a GOOD counterfeit from a genuine card is
+ * not — on either side of the comparison. So this catches the crude end
+ * honestly and must never be read as clearing the other end.
+ *
+ * It runs only behind a confident identification, which sounds circular and is
+ * not. Identification matches a 16x22 rank-normalised descriptor: it answers
+ * "which artwork is this" and is deliberately blind to everything finer. This
+ * compares at 180x252 in 54 separate cells and asks a different question —
+ * given that it IS this card, does it agree with this card everywhere. A
+ * reprint proxy, an inkjet fake or a photo of a photo passes the first and
+ * fails the second.
+ */
+const REFERENCE_WEIGHT = 1.0;
+const REFERENCE_GX = 6, REFERENCE_GY = 9;
+const REFERENCE_TIMEOUT_MS = 8000;
+
+/**
+ * The grid both images are compared on, and the reason it is not finer.
+ *
+ * Finer was tried, twice, and measured. Against the hard set, going to 240x336
+ * and 360x504 moved the median genuine card from 87 down to 78 and then 64,
+ * and took the worst genuine card from 51 to 43 to 35 — through the threshold
+ * where the panel starts saying "red flags" about a real card. It bought
+ * nothing for that: a card downsampled to a fifth of its resolution and
+ * reprinted, which is what a proxy is, scored 71 against the genuine 64. The
+ * extra pixels were photographic noise on both sides, not print detail.
+ *
+ * That is a fact about the material, not about the code. The official images
+ * top out at 600x825 and 400x559, and a phone's noise reduction and JPEG have
+ * already removed the fine structure before the photo arrives. What survives
+ * on both sides is layout, geometry, art placement and colour — which is what
+ * this grid measures, and is the honest extent of what it can claim.
+ */
+const REFERENCE_W = 180, REFERENCE_H = 252;
+
+/**
+ * How well the card must be identified before it is compared against anything.
+ *
+ * Below this the comparison would be measuring the difference between two
+ * different cards and reporting it as a fault in this one, which is the single
+ * worst thing this check could do.
+ */
+const REFERENCE_MIN_MATCH = 0.62;
+
+/** Share of the 54 cells that must survive glare and shadow to score at all. */
+const REFERENCE_MIN_CELLS = 0.55;
+
+/**
+ * How closely the regions have to agree before the comparison will say so.
+ *
+ * Across the hard set a card compared with its own official image reads 0.36
+ * to 0.78 region by region, median 0.57. The floor sits just below the worst
+ * of those, and what falls under it is not called a fault — it is called
+ * inconclusive, because nothing measured here has ever shown that a low
+ * reading means a bad card rather than a bad photograph.
+ */
+const REFERENCE_SUPPORT_NCC = 0.35;
+const REFERENCE_STRONG_NCC = 0.70;
+
+/**
+ * How well the whole card must line up before anything inside it is scored.
+ *
+ * Measured over the hard set: a photo lined up against its own card reads 0.49
+ * to 0.77, and one lined up against a different card reads 0.04 to 0.19. The
+ * floor sits in the empty middle. Below it the two images are not the same
+ * picture and no per-region disagreement means anything.
+ */
+const REFERENCE_MIN_ALIGN = 0.34;
+
+/** How much better the half-turned reading must line up before it overrules
+ *  the orientation identification settled on. The gap is 0.5 when it is real;
+ *  this only stops a tie being decided by rounding. */
+const REFERENCE_TURN_MARGIN = 0.05;
+
+/**
+ * How much of the official image's detail the photo has to carry.
+ *
+ * Blur is the one difference that lowers agreement without the card being at
+ * fault, and unlike glare it is invisible cell by cell — it lowers everything
+ * a little. So it is measured directly, as the photo's gradient energy against
+ * the aligned reference's, and below this share the check says the photo was
+ * the limit rather than scoring the card down for it.
+ */
+const REFERENCE_MIN_DETAIL = 0.3;
+
+/**
+ * The photo is always sampled 4% in from its own edge.
+ *
+ * A rectified crop carries background slivers, rounded corners and, on a
+ * sleeved card, a few millimetres of plastic — all at the rim, none of it the
+ * card's printing. Dropping it costs nothing and removes the one region
+ * guaranteed to disagree for reasons that are not the card's.
+ */
+const REFERENCE_PHOTO_INSET = 0.04;
+
+function cardReferenceUrl(card) {
+  const id = String((card && card.id) || '');
+  if (id.slice(0, 4) === 'tcg-') {
+    const pid = id.slice(4);
+    return /^\d+$/.test(pid)
+      ? 'https://tcgplayer-cdn.tcgplayer.com/product/' + pid + '_400w.jpg'
+      : null;
+  }
+  const cut = id.lastIndexOf('-');
+  if (cut <= 0) return null;
+  const set = id.slice(0, cut), num = id.slice(cut + 1);
+  if (!/^[a-z0-9]+$/i.test(set) || !/^[a-z0-9]+$/i.test(num)) return null;
+  return 'https://images.pokemontcg.io/' + set + '/' + num + '_hires.png';
+}
+
+function loadReferenceImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    let settled = false;
+    const finish = (value) => { if (!settled) { settled = true; resolve(value); } };
+    const timer = setTimeout(() => finish(null), REFERENCE_TIMEOUT_MS);
+    // Without this the pixels come back tainted and cannot be read at all.
+    // Both CDNs serve Access-Control-Allow-Origin: *, so it costs nothing.
+    img.crossOrigin = 'anonymous';
+    img.onload = () => { clearTimeout(timer); finish(img.naturalWidth > 0 ? img : null); };
+    img.onerror = () => { clearTimeout(timer); finish(null); };
+    img.src = url;
+  });
+}
+
+const REF_CANVASES = {};
+function refSample(drawable, sx, sy, sw, sh, w, h) {
+  const key = w + 'x' + h;
+  let canvas = REF_CANVASES[key];
+  if (!canvas) {
+    canvas = REF_CANVASES[key] = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+  }
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(drawable, sx, sy, sw, sh, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
+}
+
+function refLuma(img) {
+  const n = img.width * img.height, out = new Float32Array(n), d = img.data;
+  for (let i = 0, j = 0; i < n; i++, j += 4) {
+    out[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+  }
+  return out;
+}
+
+/** Sobel magnitude. Gradients are what survives a colour cast, a holo sheen
+ *  and an exposure difference; flat colour is what does not. */
+function refGradient(luma, W, H) {
+  const out = new Float32Array(W * H);
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x;
+      const gx = (luma[i - W + 1] + 2 * luma[i + 1] + luma[i + W + 1]) -
+                 (luma[i - W - 1] + 2 * luma[i - 1] + luma[i + W - 1]);
+      const gy = (luma[i + W - 1] + 2 * luma[i + W] + luma[i + W + 1]) -
+                 (luma[i - W - 1] + 2 * luma[i - W] + luma[i - W + 1]);
+      out[i] = Math.hypot(gx, gy);
+    }
+  }
+  return out;
+}
+
+/** Everything but a two-pixel rim, where the Sobel kernel runs off the edge. */
+function refInterior(w, h) {
+  const out = [];
+  for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) out.push(y * w + x);
+  return out;
+}
+
+/** Normalised cross-correlation over a list of indices. Returns -1..1, and 0
+ *  when either side is flat enough that the ratio is noise. */
+function refNcc(a, b, indices) {
+  const n = indices.length;
+  if (n < 16) return 0;
+  let sa = 0, sb = 0;
+  for (let k = 0; k < n; k++) { sa += a[indices[k]]; sb += b[indices[k]]; }
+  const ma = sa / n, mb = sb / n;
+  let num = 0, da = 0, db = 0;
+  for (let k = 0; k < n; k++) {
+    const u = a[indices[k]] - ma, v = b[indices[k]] - mb;
+    num += u * v; da += u * u; db += v * v;
+  }
+  if (da < n * 4 || db < n * 4) return 0;
+  return num / Math.sqrt(da * db);
+}
+
+const REF_INTERIOR = refInterior(REFERENCE_W, REFERENCE_H);
+
+/**
+ * Where in the reference image a given crop sits.
+ *
+ * The crop is parametrised by how far in it reaches vertically; its WIDTH then
+ * follows from the card's own proportions rather than from the image's. That
+ * is not a shortcut, it is the fix for the largest error there was. The
+ * official images do not share an aspect — 600x825 for the older sets, 734x1024
+ * for some, 400x559 from TCGplayer — while the rectified photo is always
+ * exactly 63x88. Squeezing both into one grid stretched them by different
+ * amounts, and no amount of panning or zooming can undo that: on Base Set 2
+ * Victreebel the search compromised at 0.374 agreement and the card scored 48.
+ * Cropping to 63x88 on both sides takes the same card to 0.60 and 82.
+ */
+function refCrop(reference, zoom, ox, oy) {
+  const RW = reference.naturalWidth, RH = reference.naturalHeight;
+  const sh = RH * (1 - 2 * zoom);
+  const sw = Math.min(RW, sh * CARD_ASPECT);
+  return { sx: (RW - sw) / 2 + RW * ox, sy: RH * zoom + RH * oy, sw, sh };
+}
+
+/**
+ * Find the crop of the reference that lines up with the photo.
+ *
+ * The two images do not share a framing convention: the official images carry
+ * a sliver of bleed past the card edge, the rectified crop carries a sliver of
+ * background, and neither amount is fixed. Left uncorrected a 1% scale error
+ * shifts the text block by two pixels at this resolution and drags every
+ * correlation down, which would read as a fault in the card.
+ *
+ * Coarse then fine, on gradient agreement over the whole card. They are
+ * separate functions because the coarse pass is run TWICE — once per possible
+ * orientation — and only the winner is worth refining.
+ */
+function refAligner(reference, photoGradient) {
+  return (best, zoom, ox, oy) => {
+    if (zoom < 0) return best;
+    const box = refCrop(reference, zoom, ox, oy);
+    if (box.sw < 16 || box.sh < 16) return best;
+    const sample = refSample(reference, box.sx, box.sy, box.sw, box.sh, REFERENCE_W, REFERENCE_H);
+    const grad = refGradient(refLuma(sample), REFERENCE_W, REFERENCE_H);
+    const score = refNcc(photoGradient, grad, REF_INTERIOR);
+    return score > best.score ? { score, zoom, ox, oy } : best;
+  };
+}
+
+function refAlignCoarse(reference, photoGradient) {
+  const step = refAligner(reference, photoGradient);
+  let best = { score: -2, zoom: 0.04, ox: 0, oy: 0 };
+  for (let zoom = 0.01; zoom <= 0.091; zoom += 0.02) {
+    for (let ox = -0.02; ox <= 0.021; ox += 0.02) {
+      for (let oy = -0.02; oy <= 0.021; oy += 0.02) best = step(best, zoom, ox, oy);
+    }
+  }
+  return best;
+}
+
+function refAlignFine(reference, photoGradient, coarse) {
+  const step = refAligner(reference, photoGradient);
+  let best = coarse;
+  for (let dz = -0.01; dz <= 0.011; dz += 0.01) {
+    for (let ox = -0.01; ox <= 0.011; ox += 0.005) {
+      for (let oy = -0.01; oy <= 0.011; oy += 0.005) {
+        best = step(best, coarse.zoom + dz, coarse.ox + ox, coarse.oy + oy);
+      }
+    }
+  }
+  return best;
+}
+
+/** Match the photo's exposure and white balance onto the reference's, per
+ *  channel, from robust percentiles. Anything a lamp did is removed here; what
+ *  is left is the card's own colour. */
+function refColourFit(photo, ref) {
+  const n = photo.width * photo.height;
+  const gains = [], offsets = [];
+  for (let ch = 0; ch < 3; ch++) {
+    const p = new Float32Array(n), r = new Float32Array(n);
+    for (let i = 0; i < n; i++) { p[i] = photo.data[i * 4 + ch]; r[i] = ref.data[i * 4 + ch]; }
+    p.sort(); r.sort();
+    const lo = Math.floor(n * 0.2), hi = Math.floor(n * 0.8);
+    const spread = Math.max(1, p[hi] - p[lo]);
+    const gain = Math.max(0.5, Math.min(2, (r[hi] - r[lo]) / spread));
+    gains.push(gain);
+    offsets.push(r[lo] - gain * p[lo]);
+  }
+  return { gains, offsets };
+}
+
+/** Sample a rectified card into a comparison grid, dropping the rim. */
+function refSamplePhoto(canvas, w, h) {
+  const inx = canvas.width * REFERENCE_PHOTO_INSET, iny = canvas.height * REFERENCE_PHOTO_INSET;
+  return refSample(canvas, inx, iny, canvas.width - 2 * inx, canvas.height - 2 * iny, w, h);
+}
+
+function refToCanvas(rect) {
+  const c = document.createElement('canvas');
+  c.width = rect.width; c.height = rect.height;
+  c.getContext('2d').putImageData(rect, 0, 0);
+  return c;
+}
+
+async function referenceSignal(readings, candidate, ctx) {
+  const ID = 'reference', LABEL = 'Comparison with the official image';
+  const stand = (status, reason, extra) => ({
+    ...abstain(ID, LABEL, REFERENCE_WEIGHT, status, reason), ...(extra || {}),
+  });
+
+  if (!/^https?:$/.test(location.protocol)) {
+    return stand('error',
+      'This page was opened from a local file, so it cannot fetch the official card image to ' +
+      'compare against. Open it over the web and this check runs.',
+      { whyShort: 'could not fetch the official image from a local file' });
+  }
+  if (!candidate || candidate.score < REFERENCE_MIN_MATCH) {
+    return stand('insufficient_data',
+      'The card could not be identified confidently enough to know which official image to ' +
+      'compare it against. Comparing it against the wrong card would report that card\'s ' +
+      'differences as this one\'s faults, so this check stands down.',
+      { whyShort: 'had no confident match to compare against' });
+  }
+
+  const url = cardReferenceUrl(candidate.card);
+  if (!url) {
+    return stand('error',
+      'No official image is published for this card in a form this page can fetch.',
+      { whyShort: 'has no official image published for this card' });
+  }
+
+  const reference = await loadReferenceImage(url);
+  if (!reference) {
+    return stand('error',
+      'The official image for this card could not be fetched, so there was nothing to compare ' +
+      'against. Nothing is concluded from that.',
+      { whyShort: 'could not fetch the official image' });
+  }
+
+  // WHICH WAY UP, settled against the card itself.
+  //
+  // Everything below compares the photo with the official image pixel region
+  // by pixel region, and a half-turned photo disagrees with all of it — so
+  // this check cannot inherit an orientation, it has to establish one. That is
+  // no extra machinery: aligning both readings and keeping the better one is
+  // the same search run twice, and the answer it gives is better than either
+  // of the earlier ones because it is checked against the actual card rather
+  // than inferred from a match margin or from where the ink sits.
+  //
+  // Measured: Crown Zenith 150 was turned the wrong way up by the match, which
+  // dropped this comparison to 0.11 and scored a genuine card zero. Aligning
+  // both ways reads 0.11 against 0.63 — not a close call.
+  const primaryCanvas = refToCanvas(readings.image);
+  const alternateCanvas = refToCanvas(readings.alternate);
+  const coarseOf = (canvas) => {
+    const grid = refSamplePhoto(canvas, REFERENCE_W, REFERENCE_H);
+    const grad = refGradient(refLuma(grid), REFERENCE_W, REFERENCE_H);
+    return { grid, grad, fit: refAlignCoarse(reference, grad) };
+  };
+  const primaryFit = coarseOf(primaryCanvas);
+  const alternateFit = coarseOf(alternateCanvas);
+
+  const flip = alternateFit.fit.score > primaryFit.fit.score + REFERENCE_TURN_MARGIN;
+  const chosen = flip ? alternateFit : primaryFit;
+
+  const aligned = refAlignFine(reference, chosen.grad, chosen.fit);
+  if (aligned.score < REFERENCE_MIN_ALIGN) {
+    // No correspondence, so there is nothing to disagree about.
+    //
+    // This is deliberately NOT scored as a fault. A counterfeit is a copy: it
+    // carries the same layout and lines up perfectly, and it is the fine
+    // detail inside that alignment that gives it away. A photo that will not
+    // line up at all is telling you about the photo — a steep angle, a covered
+    // card, a crop that took in the desk — or about the match, and calling any
+    // of those a red flag would aim the tool's worst word at its own failures.
+    return {
+      ...stand('insufficient_data',
+        'This photo could not be brought into line with the official image of ' +
+        candidate.card.name + ', so there was nothing to compare region by region. That usually ' +
+        'means a steep angle, a partly covered card, or a crop that took in more than the card. ' +
+        'It is not a finding about the card.'),
+      orientationFlipped: flip,
+      whyShort: 'could not line this photo up with the official image',
+    };
+  }
+
+  // Aligned. Take the reference at the winning crop once more, because the
+  // search kept only the parameters and not the pixels.
+  const box = refCrop(reference, aligned.zoom, aligned.ox, aligned.oy);
+  const refImg = refSample(reference, box.sx, box.sy, box.sw, box.sh, REFERENCE_W, REFERENCE_H);
+  const refGrad = refGradient(refLuma(refImg), REFERENCE_W, REFERENCE_H);
+  const photo = chosen.grid;
+  const photoLuma = refLuma(photo);
+  const photoGrad = chosen.grad;
+
+  // How much of the reference's detail this photo actually carries. Below the
+  // floor the comparison is measuring the lens, not the card.
+  let photoEnergy = 0, refEnergy = 0;
+  for (let k = 0; k < REF_INTERIOR.length; k++) {
+    photoEnergy += photoGrad[REF_INTERIOR[k]];
+    refEnergy += refGrad[REF_INTERIOR[k]];
+  }
+  const detail = refEnergy > 0 ? photoEnergy / refEnergy : 0;
+  if (detail < REFERENCE_MIN_DETAIL) {
+    return {
+      ...stand('insufficient_data',
+        'This photo carries about ' + Math.round(detail * 100) + '% of the fine detail the ' +
+        'official image does, which is too soft to compare against it — the difference would be ' +
+        'the camera\'s, not the card\'s. Retake it with the card flat, filling the frame and in ' +
+        'focus.'),
+      orientationFlipped: flip,
+      whyShort: 'found this photo too soft to compare',
+    };
+  }
+
+  const { gains, offsets } = refColourFit(photo, refImg);
+
+  // Per cell, because a fault that matters is LOCAL. A whole-card average
+  // hides a wrong set symbol inside fifty-three cells that agree.
+  const cw = Math.floor(REFERENCE_W / REFERENCE_GX), ch = Math.floor(REFERENCE_H / REFERENCE_GY);
+  const structures = [], colours = [];
+  let usable = 0, total = 0;
+
+  for (let gy = 0; gy < REFERENCE_GY; gy++) {
+    for (let gx = 0; gx < REFERENCE_GX; gx++) {
+      total++;
+      const x0 = gx * cw, y0 = gy * ch;
+      const indices = [];
+      let glare = 0, dark = 0, count = 0, colourSum = 0;
+      for (let y = y0; y < y0 + ch; y++) {
+        if (y < 2 || y >= REFERENCE_H - 2) continue;
+        for (let x = x0; x < x0 + cw; x++) {
+          if (x < 2 || x >= REFERENCE_W - 2) continue;
+          const i = y * REFERENCE_W + x, j = i * 4;
+          count++;
+          const r = photo.data[j], g = photo.data[j + 1], b = photo.data[j + 2];
+          if (Math.min(r, g, b) > 240) { glare++; continue; }
+          if (photoLuma[i] < 18) { dark++; continue; }
+          indices.push(i);
+          const dr = Math.max(0, Math.min(255, r * gains[0] + offsets[0])) - refImg.data[j];
+          const dg = Math.max(0, Math.min(255, g * gains[1] + offsets[1])) - refImg.data[j + 1];
+          const db = Math.max(0, Math.min(255, b * gains[2] + offsets[2])) - refImg.data[j + 2];
+          colourSum += Math.sqrt(dr * dr + dg * dg + db * db) / 441.7;
+        }
+      }
+      if (count === 0) continue;
+      // A cell mostly burnt out or mostly in shadow is not reporting on the
+      // card. Glare in particular is the standing failure of holo cards under
+      // a lamp, and scoring it would accuse exactly the cards people care
+      // about most.
+      if (glare / count > 0.25 || dark / count > 0.5 || indices.length < count * 0.5) continue;
+      usable++;
+      colours.push(colourSum / indices.length);
+      const ncc = refNcc(photoGrad, refGrad, indices);
+      // Zero means one side of this cell is flat — an empty border, a solid
+      // panel. There is no structure there to agree or disagree about, so it
+      // is left out of the structure statistic rather than counted as failure.
+      if (ncc !== 0) structures.push(ncc);
+    }
+  }
+
+  if (usable < total * REFERENCE_MIN_CELLS || structures.length < 12) {
+    return {
+      ...stand('insufficient_data',
+        'Too much of the card is lost to glare or shadow to compare against the official image (' +
+        usable + ' of ' + total + ' regions were readable). Angle away from direct light and ' +
+        'retake it.'),
+      orientationFlipped: flip,
+      whyShort: 'lost too much of the card to glare to compare it',
+    };
+  }
+
+  const median = (arr) => {
+    const s = arr.slice().sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+  };
+  const structure = median(structures);
+
+  // Trimmed, and trimmed hard. A genuine reverse holo is a normal print with a
+  // foil pattern over it, and the official image is of the normal print — so a
+  // third of the card legitimately disagrees on colour. Dropping the worst
+  // 40% of cells keeps a real, card-wide colour fault visible while a foil
+  // treatment covering less than that costs nothing.
+  const sortedColour = colours.slice().sort((a, b) => a - b);
+  const keep = Math.max(1, Math.round(sortedColour.length * 0.6));
+  let colourSum = 0;
+  for (let i = 0; i < keep; i++) colourSum += sortedColour[i];
+  const colour = colourSum / keep;
+
+  // ONE-SIDED BY DESIGN, on the same principle as the print check, and for a
+  // reason that was measured rather than assumed.
+  //
+  // Weak agreement never once meant a bad card. Every control that separated
+  // cleanly here separated at the ALIGNMENT stage, which abstains: a photo
+  // aimed at the wrong card reads 0.04 to 0.19 against 0.49 to 0.77 for the
+  // right one, and never reaches this line. Past alignment, the thing that
+  // actually moves this number is the photograph — a holo sheen, an angle, a
+  // sleeve — and a deliberately degraded card, downsampled to a fifth and
+  // reprinted, scored HIGHER than the original it was made from, because the
+  // resampling smoothed away noise the genuine photo still carried.
+  //
+  // A number with no demonstrated ability to tell a fake from a bad photograph
+  // must not be allowed to say "red flags" about someone's card. So it
+  // supports, or it stands down and says why.
+  const throughPlastic = ctx.subject !== 'card';
+  if (structure < REFERENCE_SUPPORT_NCC) {
+    return {
+      ...stand('insufficient_data',
+        'This photo lines up with the official image of ' + candidate.card.name + ' but agrees ' +
+        'with it too loosely, region by region, to support the card — and glare, angle and a ' +
+        'holo finish explain that at least as well as anything about the card does, so it is ' +
+        'not counted against it either. A flatter, more evenly lit photo will settle it.'),
+      orientationFlipped: flip,
+      whyShort: 'agreed with the official image too loosely to conclude either way',
+    };
+  }
+
+  const score = Math.round(70 + Math.min(1,
+    (structure - REFERENCE_SUPPORT_NCC) / (REFERENCE_STRONG_NCC - REFERENCE_SUPPORT_NCC)) * 30);
+
+  return {
+    id: ID, label: LABEL, status: 'ok', score, weight: REFERENCE_WEIGHT,
+    orientationFlipped: flip,
+    summary:
+      'This card agrees with the official image of ' + candidate.card.name + ' across ' +
+      structures.length + ' regions' + (throughPlastic ? ', read through the holder' : '') +
+      ' — same layout, same art placement, same proportions, same colour once the lighting is ' +
+      'accounted for. What that rules out is a crude copy. It cannot rule out a good one: the ' +
+      'official image is published at ' + reference.naturalWidth + 'x' + reference.naturalHeight +
+      ', which is far too coarse to judge print quality, so this check supports a card and is ' +
+      'never allowed to accuse one.',
+    measurements: {
+      structureAgreement: structure.toFixed(3),
+      colourDeviation: colour.toFixed(3),
+      regionsCompared: structures.length,
+      regionsReadable: usable + ' of ' + total,
+      alignment: aligned.score.toFixed(3),
+      detailCarried: detail.toFixed(2),
+      referenceResolution: reference.naturalWidth + 'x' + reference.naturalHeight,
+      oneSided: 'true',
+    },
+  };
+}
+
+/** The comparison switched off deliberately — offline mode, or a test that is
+ *  measuring something else. It stays IN scope, because the build does carry
+ *  it and a photo taken now could be compared; only this run was not. */
+function referenceUnavailable() {
+  return {
+    ...abstain('reference', 'Comparison with the official image', REFERENCE_WEIGHT, 'error',
+      'The comparison against the official card image was not run for this photo.'),
+    whyShort: 'was not run for this photo',
   };
 }
 
@@ -3217,6 +3776,10 @@ function identify(rect, limit) {
   return {
     candidates: better,
     image: turn ? flipped : rect,
+    // The reading NOT chosen, kept rather than recomputed. Comparing the card
+    // against its own official image settles the orientation better than
+    // either rule above, and it needs both readings in hand to do it.
+    alternate: turn ? rect : flipped,
     halfTurned: turn,
   };
 }
@@ -3314,10 +3877,11 @@ function renderReport(report) {
   // "Inconclusive" is a finding: it says the evidence was weighed and did not
   // settle. When NOTHING could be weighed, saying it is not honest — and
   // printing 0% beside it reads as a measurement of the card rather than of
-  // this build's reach. Two of the three checks are effectively unavailable on
-  // a phone: the detailed comparison needs a server, and the print screen is
-  // routinely dissolved by the noise reduction and JPEG compression every
-  // phone applies, which the check correctly declines to read anything into.
+  // this build's reach. Two of the four checks are often unavailable on a
+  // phone: the detailed inspection needs a key the user has to supply, and the
+  // print screen is routinely dissolved by the noise reduction and JPEG
+  // compression every phone applies, which the check correctly declines to
+  // read anything into.
   // So when no check ran, the panel says it was not checked and why, and
   // leaves the figures blank rather than filling them with zeroes.
   // Three states, not two. "Inconclusive" is a FINDING — it says the evidence
@@ -4158,16 +4722,38 @@ async function analyzeSource(source, onStep, opts) {
   await yieldToPaint();
   const id = identify(rectified, 5);
 
-  // Identify first, then look: naming the card lets the inspection be told what
-  // it is looking at, which is most of the difference between "this font is
-  // odd" and "this font is odd for a 2022 Japanese printing".
+  // Identify first, then look: naming the card lets both inspections be told
+  // what they are looking at, which is most of the difference between "this
+  // font is odd" and "this font is odd for a 2022 Japanese printing" — and it
+  // is what tells the reference comparison which image to fetch at all.
   //
-  // Only this signal costs a network round trip, and only when a key has been
-  // supplied. Without one it returns the same absent-check report as before and
-  // nothing here reaches the network.
-  signals.push(options.skipVision
-    ? visionUnavailable()
-    : await visionSignal(rectified, id.candidates[0] ? id.candidates[0].card : null));
+  // These two are the only signals that touch the network, and they are run
+  // together because neither depends on the other. The comparison fetches one
+  // 50KB image and needs no key; the visual inspection needs a key and stays
+  // inert without one.
+  //
+  // The comparison is handed id.image rather than the raw rectification: that
+  // is the reading identification settled on, and comparing an upside-down
+  // card against an upright reference would disagree everywhere for a reason
+  // that has nothing to do with the card.
+  const [referenceCheck, visionCheck] = await Promise.all([
+    options.skipReference
+      ? Promise.resolve(referenceUnavailable())
+      : referenceSignal(id, id.candidates[0], { subject }),
+    options.skipVision
+      ? Promise.resolve(visionUnavailable())
+      : visionSignal(rectified, id.candidates[0] ? id.candidates[0].card : null),
+  ]);
+  signals.push(referenceCheck, visionCheck);
+
+  // The comparison lines the card up against its official image both ways up
+  // before it measures anything, so when it says the other way round fits, it
+  // has checked — which neither the match margin nor the ink-band rule can
+  // claim. That answer wins, and the report shows the card the way the
+  // comparison read it.
+  const flipped = referenceCheck.orientationFlipped === true;
+  const uprightImage = flipped ? id.alternate : id.image;
+  const halfTurned = flipped ? !id.halfTurned : id.halfTurned;
 
   const contextLimitations = [
     'Identification here matches your photo against ' + CARDS.length + ' official card images ' +
@@ -4208,8 +4794,8 @@ async function analyzeSource(source, onStep, opts) {
       tooBlurry: quality.tooBlurry,
       fill,
     },
-    rectified: id.image,
-    halfTurned: id.halfTurned,
+    rectified: uprightImage,
+    halfTurned,
     candidates: id.candidates,
     // Kept so the report can be rebuilt without re-analysing the photo — the
     // visual comparison being switched on after the fact is exactly that case.
