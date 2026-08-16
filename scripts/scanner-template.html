@@ -1380,6 +1380,7 @@ function quadFromComponent(component, w, h, sx, sy) {
   // not fitting to the answer: both readings come from the same pixels, and
   // 63x88 is what a card is. On the pale-border case this takes the match from
   // 79% to 93%; on the hard set it leaves accuracy where it was.
+  const spanX = x1 - x0 + 1, spanY = y1 - y0 + 1;
   const boxCorners = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
   const boxScaled = boxCorners.map((p) => ({ x: p.x * sx, y: p.y * sy }));
   const boxAspect = quadAspect(boxScaled);
@@ -1392,7 +1393,27 @@ function quadFromComponent(component, w, h, sx, sy) {
   // captured at all.
   const clipCorners = corners;
 
-  if (err(boxAspect) < err(measuredAspect)) {
+  // The bounding box is only the card when the card is SQUARE-ON.
+  //
+  // Turned even a few degrees, the box around a card contains two triangles of
+  // background at opposite corners, and rectifying it stretches that
+  // background into the crop. Proportions alone will not catch this: at five
+  // degrees the box measured 0.7089 against a card's 0.7159 — nearer than the
+  // quad it was competing with — and the reading that won turned a confident
+  // Charizard into a coin toss with Pinsir at 74% each. So the box is only
+  // considered when the region's own corners sit close to it, which is what
+  // being square-on means.
+  const tilt = Math.max(
+    Math.abs(component.corners[0].x - x0), Math.abs(component.corners[0].y - y0),
+    Math.abs(component.corners[1].x - x1), Math.abs(component.corners[1].y - y0),
+    Math.abs(component.corners[2].x - x1), Math.abs(component.corners[2].y - y1),
+    Math.abs(component.corners[3].x - x0), Math.abs(component.corners[3].y - y1),
+  ) / Math.max(1, Math.min(spanX, spanY));
+
+  // A square-on card also FILLS its box. A region that does not is either not
+  // a rectangle or not square-on, and its box is not the card either way.
+  const boxFill = component.size / Math.max(1, spanX * spanY);
+  if (tilt <= SQUARE_ON_TILT && boxFill >= SQUARE_ON_FILL && err(boxAspect) < err(measuredAspect)) {
     component = { ...component, corners: boxCorners };
     corners = boxScaled;
     measuredAspect = boxAspect;
@@ -1423,6 +1444,19 @@ function quadFromComponent(component, w, h, sx, sy) {
 
 
 
+
+/**
+ * How far a region's corners may sit from its bounding box and still count as
+ * square-on, as a fraction of the short side.
+ *
+ * Measured rather than chosen: a card lying flat reads 0.044-0.049 — rounded
+ * corners and a partly-detected border, not rotation — and the same card
+ * turned five degrees reads 0.117. The line sits between them.
+ */
+const SQUARE_ON_TILT = 0.08;
+
+/** How much of its own bounding box a square-on region must fill. */
+const SQUARE_ON_FILL = 0.8;
 
 const CHROMA_GAIN = 3.0;
 const LUMA_GAIN = 0.35;
