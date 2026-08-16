@@ -1,0 +1,34 @@
+{
+ "cards": 3429,
+ "setCount": 17,
+ "sets": [
+  "S10a: Dark Phantasma",
+  "S11: Lost Abyss",
+  "S12a: VSTAR Universe",
+  "SWSH: Crown Zenith",
+  "SV1a: Triplet Beat",
+  "SV02: Paldea Evolved",
+  "SV3: Ruler of the Black Flame",
+  "SV03: Obsidian Flames",
+  "SV: Scarlet & Violet 151",
+  "SV04: Paradox Rift",
+  "SV05: Temporal Forces",
+  "SV5a: Crimson Haze",
+  "SV06: Twilight Masquerade",
+  "SV: Shrouded Fable",
+  "SV07: Stellar Crown",
+  "SV08: Surging Sparks",
+  "SV: Prismatic Evolutions"
+ ],
+ "shards": [
+  "shard-000.json",
+  "shard-001.json",
+  "shard-002.json",
+  "shard-003.json",
+  "shard-004.json",
+  "shard-005.json",
+  "shard-006.json",
+  "shard-007.json",
+  "shard-008.json"
+ ]
+}

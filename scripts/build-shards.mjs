@@ -74,10 +74,23 @@ const already = new Set();
   console.log(`page already carries ${already.size} cards`);
 }
 
+/**
+ * Products that carry a collector number but are not cards.
+ *
+ * A code card is the QR slip in a booster pack. Every one of them looks like
+ * every other one, so a corpus full of them does not just waste space — they
+ * match each other at 82-83% and will outrank the real card in a photo of
+ * anything flat and pale. The bake keeps anything with a number and a rarity,
+ * which is the right rule for cards and admits these by accident.
+ */
+const NOT_A_CARD = /code card|booster pack|elite trainer|booster box|collection box|\btin\b|blister|bundle|sleeved|premium collection|build & battle/i;
+
 const extra = JSON.parse(readFileSync(SRC, 'utf8'));
 const fresh = [];
+let dropped = 0;
 for (const card of extra.cards) {
   if (already.has(card.id)) continue;
+  if (NOT_A_CARD.test(card.name)) { dropped++; continue; }
   if (!card.language) card.language = 'English';
   const m = /^(.*?)\s+(\d{1,3})\s+(\d{1,3})$/.exec(card.name);
   if (m) {
@@ -116,4 +129,5 @@ writeFileSync(join(OUT, 'index.json'), JSON.stringify({
 let bytes = 0;
 for (const s of shards) bytes += readFileSync(join(OUT, s)).length;
 console.log(`wrote ${shards.length} shards, ${fresh.length} cards, ${(bytes / 1e6).toFixed(2)}MB across ${setNames.length} sets`);
+console.log(`dropped ${dropped} catalogue entries that are not cards (code cards, sealed product)`);
 console.log(setNames.join(' · '));
