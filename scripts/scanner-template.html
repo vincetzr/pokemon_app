@@ -715,6 +715,14 @@
               <span class="pill" id="verdict-pill"></span>
             </div>
             <p class="note" id="verdict-blurb" style="margin:8px 0 0"></p>
+            <p class="note" id="verdict-enable" hidden style="margin:8px 0 0">
+              <button class="ghost primary" id="btn-goto-vision" type="button">
+                Turn on the third check
+              </button>
+              <span style="margin-left:8px">One check cannot settle a verdict. The detailed visual
+                comparison can run here with a key you supply, and it is what makes a verdict
+                reachable.</span>
+            </p>
           </div>
         </div>
 
@@ -2507,6 +2515,7 @@ function visionUnavailable() {
       'covered much less ground than one that can, and you should know that. It is also the ' +
       'check that makes a verdict reachable at all.'),
     available: false,
+    whyShort: 'has not been given a key to run with',
   };
 }
 
@@ -3297,6 +3306,13 @@ function renderReport(report) {
   // usually is not one here — so the figure sat between 21% and 40% describing
   // this build's reach while appearing to describe the card. Coverage is always
   // defined, is always about this photo, and improves when the photo does.
+  // When the only thing between this card and a verdict is a check that is
+  // switched off, say so next to the verdict rather than in a paragraph
+  // further down that a reader has no reason to open.
+  const visionOff = report.signals.some((s) => s.id === 'vision' && s.available === false);
+  const prompt = $('verdict-enable');
+  if (prompt) prompt.hidden = !(visionOff && !report.scoreIsMeaningful);
+
   const cov = Math.round((report.inScopeCoverage || 0) * 100);
   $('fig-conf').textContent = ranCount === 0 ? '—' : cov + '%';
   $('bar-conf').style.width = (ranCount === 0 ? 0 : cov) + '%';
@@ -6548,6 +6564,11 @@ function renderVisionState() {
   $('btn-vision-save').hidden = has;
   $('btn-vision-clear').hidden = !has;
 }
+
+$('btn-goto-vision').addEventListener('click', () => {
+  $('sec-vision').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('vision-key').focus();
+});
 
 $('btn-vision-save').addEventListener('click', () => {
   const v = $('vision-key').value.trim();
