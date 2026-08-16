@@ -816,7 +816,7 @@
       <div class="panel">
         <p class="note" id="vision-state" style="margin:0 0 10px"></p>
         <div class="row">
-          <input type="password" id="vision-key" placeholder="Paste an API key — AIza… is free"
+          <input type="password" id="vision-key" placeholder="API key, or http://localhost:11434"
                  autocomplete="off" spellcheck="false"
                  style="flex:1 1 220px;min-width:0">
           <button class="ghost primary" id="btn-vision-save" type="button">Enable</button>
@@ -835,6 +835,17 @@
           Keys from Anthropic (<code>sk-ant-</code>, a few cents a scan), Groq (<code>gsk_</code>,
           free tier) and OpenRouter (<code>sk-or-</code>) are accepted too; the page reads which
           provider a key belongs to from the key itself.
+        </p>
+        <p class="note" style="margin:8px 0 0">
+          <b>Or your own model, on your own machine.</b> Paste an address instead of a key —
+          <code>http://localhost:11434</code> for <a href="https://ollama.com" target="_blank"
+          rel="noopener">Ollama</a>, <code>http://localhost:1234</code> for LM Studio. No key, no
+          account, no cost, and the photo never leaves your network. Add <code>#model-name</code>
+          to pin one when the machine holds several. Two things to know: the server has to allow
+          this page as an origin (Ollama: <code>OLLAMA_ORIGINS=*</code>) and, because this page is
+          served over https, a browser will only let it reach a plain-http address on the
+          <em>same</em> machine — from a phone or tablet the server needs an https address, which
+          a Tailscale or Cloudflare tunnel provides.
         </p>
         <p class="note" style="margin:8px 0 0">
           The key is kept in this browser's local storage and is sent to that provider and nowhere
@@ -2971,8 +2982,42 @@ const VISION_PROVIDERS = [
   },
 ];
 
-function visionProvider(key) {
-  for (const p of VISION_PROVIDERS) if (p.test(key)) return p;
+/**
+ * A model you run yourself, reached by address instead of by key.
+ *
+ * Ollama and LM Studio both serve the same OpenAI-shaped endpoints this page
+ * already sends to — /v1/chat/completions and /v1/models, images as base64
+ * data URLs, authorisation accepted and ignored — so pointing at one is an
+ * address change and nothing else. Nothing is sent to anybody's servers, there
+ * is no account and no key, and the photo does not leave the network.
+ *
+ * The address may be given as the host, as the /v1 base, or as the completions
+ * URL itself; all three end up in the same place. A '#name' on the end pins a
+ * model, for a machine holding several.
+ */
+function visionLocalProvider(entry) {
+  const hash = entry.indexOf('#');
+  const pinned = hash >= 0 ? entry.slice(hash + 1).trim() : '';
+  let base = (hash >= 0 ? entry.slice(0, hash) : entry).trim().replace(/\/+$/, '');
+  base = base.replace(/\/chat\/completions$/, '').replace(/\/v1$/, '');
+  return {
+    id: 'local',
+    label: 'your own server',
+    free: true,
+    cost: 'no charge — the photo never leaves your machine',
+    endpoint: base + '/v1/chat/completions',
+    auth: false,
+    models: pinned ? [pinned] : [],
+    // Vision-capable names first. A machine usually holds several models and
+    // most of them cannot see, so picking the wrong one fails in a way that
+    // looks like the server being broken.
+    discover: /vl|vision|llava|moondream|minicpm|pixtral|internvl|gemma-?3|qwen[\w.-]*v/i,
+  };
+}
+
+function visionProvider(entry) {
+  if (/^https?:\/\//i.test(entry)) return visionLocalProvider(entry);
+  for (const p of VISION_PROVIDERS) if (p.test(entry)) return p;
   return null;
 }
 
@@ -3003,10 +3048,13 @@ async function visionDiscoverModel(provider, key) {
   let res;
   try {
     res = await fetch(provider.endpoint.replace(/\/chat\/completions$/, '/models'), {
-      headers: { authorization: 'Bearer ' + key },
+      headers: provider.auth === false ? {} : { authorization: 'Bearer ' + key },
     });
   } catch {
-    return { detail: provider.label + ' could not be reached' };
+    return { detail: provider.id === 'local'
+      ? 'that address could not be reached from this device — check the server is running and ' +
+        'reachable from here, and that it allows this page as an origin'
+      : provider.label + ' could not be reached' };
   }
   if (!res.ok) return { detail: visionHttpDetail(res.status) };
 
@@ -3222,7 +3270,8 @@ async function askOpenAiCompatible(provider, key, rect, named) {
     for (const strict of [true, false]) {
       const res = await fetch(provider.endpoint, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+        headers: Object.assign({ 'content-type': 'application/json' },
+          provider.auth === false ? {} : { authorization: 'Bearer ' + key }),
         body: body(model, strict),
       });
       if (res.ok) {
@@ -3248,8 +3297,9 @@ async function visionSignal(rect, card) {
   const provider = visionProvider(key);
   if (!provider) {
     return abstain('vision', 'Detailed visual comparison', VISION_WEIGHT, 'error',
-      'That key is not one this page recognises. It accepts an Anthropic key (sk-ant-…), a ' +
-      'Google AI Studio key (AIza…), a Groq key (gsk_…) or an OpenRouter key (sk-or-…).');
+      'That is not something this page recognises. It accepts an Anthropic key (sk-ant-…), a ' +
+      'Google AI Studio key (AIza…), a Groq key (gsk_…), an OpenRouter key (sk-or-…), or the ' +
+      'address of a model server you run yourself (http://…).');
   }
 
   const named = card
@@ -7402,11 +7452,14 @@ function renderVisionState() {
   const model = visionStoredModel();
   $('vision-state').textContent = !has
     ? 'Not enabled. The other three checks still run — this is the one that reads the fine print.'
-    : provider
-      ? 'Enabled with your ' + provider.label + ' key' + (model ? ', using ' + model : '') +
-        '. It runs on the next scan, at ' + provider.cost + '.'
-      : 'That key is not one this page recognises. Remove it and paste an Anthropic, Google AI ' +
-        'Studio, Groq or OpenRouter key.';
+    : !provider
+      ? 'That is not something this page recognises. Remove it and paste a provider key or the ' +
+        'address of your own model server.'
+      : provider.id === 'local'
+        ? 'Enabled' + (model ? ', using ' + model : '') + ' on your own server. It runs on the ' +
+          'next scan, at ' + provider.cost + '.'
+        : 'Enabled with your ' + provider.label + ' key' + (model ? ', using ' + model : '') +
+          '. It runs on the next scan, at ' + provider.cost + '.';
   $('vision-key').value = '';
   $('vision-key').hidden = has;
   $('btn-vision-save').hidden = has;
@@ -7433,16 +7486,40 @@ $('btn-vision-save').addEventListener('click', async () => {
   const provider = visionProvider(v);
   if (!provider) {
     $('vision-state').textContent =
-      'That key is not one this page recognises. It takes an Anthropic key (sk-ant-…), a Google ' +
-      'AI Studio key (AIza…, free), a Groq key (gsk_…) or an OpenRouter key (sk-or-…).';
+      'That is not something this page recognises. It takes an Anthropic key (sk-ant-…), a ' +
+      'Google AI Studio key (AIza…, free), a Groq key (gsk_…), an OpenRouter key (sk-or-…), or ' +
+      'the address of a model server you run yourself (http://…).';
     return;
   }
-  $('vision-state').textContent = 'Checking the key with ' + provider.label + '…';
+
+  // The one failure nobody could diagnose from the outside.
+  //
+  // This page is served over https, and a browser will not let an https page
+  // make a plain http request to another machine — it blocks it before it
+  // leaves, with an error that says nothing useful. The exception is the
+  // machine the page is already on, which browsers treat as trustworthy. So a
+  // model server on a laptop is reachable from that laptop and refused from a
+  // phone, and the refusal has nothing to do with the server. Say that here,
+  // where it can still be acted on, rather than letting it surface as a
+  // network error.
+  if (provider.id === 'local' && location.protocol === 'https:' &&
+      /^http:\/\//i.test(provider.endpoint) &&
+      !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/)/i.test(provider.endpoint)) {
+    $('vision-state').textContent =
+      'This page is loaded over https, and a browser will not let it call a plain http address ' +
+      'on another machine — the request is blocked before it is sent. Either open this page on ' +
+      'the machine running the model and use http://localhost:11434, or give that server an ' +
+      'https address (a Tailscale or Cloudflare tunnel does this) and paste that instead.';
+    return;
+  }
+  $('vision-state').textContent = provider.id === 'local'
+    ? 'Checking that address…' : 'Checking the key with ' + provider.label + '…';
   const found = await visionDiscoverModel(provider, v);
   if (found.detail) {
-    $('vision-state').textContent =
-      'That ' + provider.label + ' key was not accepted: ' + found.detail + '. Nothing has been ' +
-      'saved.';
+    $('vision-state').textContent = provider.id === 'local'
+      ? 'That address did not answer: ' + found.detail + '. Nothing has been saved.'
+      : 'That ' + provider.label + ' key was not accepted: ' + found.detail + '. Nothing has ' +
+        'been saved.';
     return;
   }
 
