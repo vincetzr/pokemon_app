@@ -2952,11 +2952,22 @@ const SURFACE_FRAMES = 4;
 const SURFACE_MIN_FRAMES = 3;
 
 /**
- * Where relief stops being noise. The synthetic flat surface scored 0.016 to
- * 0.035 after registration and the embossed one 0.19 to 0.22; this sits well
- * clear of the flat range rather than splitting the difference, because being
- * wrong in the supporting direction costs a card nothing and being wrong the
- * other way accuses one.
+ * Where relief stops being noise, measured end to end rather than in isolation.
+ *
+ * The isolated prototype separated flat from embossed by 13x. Through the real
+ * pipeline it is nearer 3x, because frame-to-frame rectification error is a
+ * larger perturbation than the hand drift the prototype simulated. Across
+ * repeated runs of the full capture: a flat surface reads 0.048 to 0.066, an
+ * embossed one 0.140 to 0.190. The threshold sits between them, nearer the
+ * flat end.
+ *
+ * Nearer the flat end on purpose, because the two errors are not symmetric.
+ * This check only ever supports, so setting it too HIGH means a genuine holo
+ * quietly gets no support — which costs nothing, since a smooth reading is
+ * already the normal reading for most of a collection. Setting it too LOW
+ * means a flat reproduction is told it has surface relief, which is an active
+ * reassurance about a fake. So the margin is spent on the side that cannot
+ * hurt anyone.
  */
 const SURFACE_SUPPORT = 0.12;
 const SURFACE_STRONG = 0.22;
@@ -3067,9 +3078,15 @@ function surfaceRelief(frames, mask) {
       G[p][q] = G[q][p] = s;
     }
   }
+  // Only the first three singular values enter the ratio, because three is
+  // exactly what the model predicts: albedo times the three components of the
+  // normal. Everything past the third is noise, and including it made the
+  // score depend on how many frames were captured — six frames read a genuine
+  // relief LOWER than four did, purely by diluting the denominator, which
+  // would have meant recalibrating the threshold for every frame count.
   const sv = symmetricEigenvalues(G, N).map(Math.sqrt);
-  const total = sv.reduce((a, b) => a + b, 0) || 1;
-  return (sv[1] + (sv[2] || 0)) / total;
+  const top = sv[0] + sv[1] + (sv[2] || 0) || 1;
+  return (sv[1] + (sv[2] || 0)) / top;
 }
 
 /** Luminance of a rectified frame, at the surface grid. */
