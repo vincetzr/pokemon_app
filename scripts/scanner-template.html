@@ -4177,6 +4177,9 @@ async function analyzeSource(source, onStep, opts) {
     rectified: id.image,
     halfTurned: id.halfTurned,
     candidates: id.candidates,
+    // Kept so the report can be rebuilt without re-analysing the photo — the
+    // visual comparison being switched on after the fact is exactly that case.
+    contextLimitations,
     report: buildReport(signals, contextLimitations),
   };
 }
@@ -6570,10 +6573,29 @@ $('btn-goto-vision').addEventListener('click', () => {
   $('vision-key').focus();
 });
 
-$('btn-vision-save').addEventListener('click', () => {
+$('btn-vision-save').addEventListener('click', async () => {
   const v = $('vision-key').value.trim();
   if (!v) return;
   try { localStorage.setItem(VISION_KEY_STORE, v); } catch {}
+  renderVisionState();
+
+  // Run it on the card already on screen.
+  //
+  // Enabling the check and being shown the same "not established" report is a
+  // dead end: the reader has done the one thing the page asked for and nothing
+  // has changed, which reads as the feature not working. Nothing needs
+  // re-photographing — the flattened card from the last scan is still here, and
+  // that is exactly what the check looks at.
+  if (!LAST_RESULT || !LAST_RESULT.rectifiedRaw) return;
+  const btn = $('btn-vision-save');
+  $('vision-state').textContent = 'Enabled. Running the check on the card already scanned…';
+  try {
+    const card = LAST_RESULT.candidates && LAST_RESULT.candidates[0] ? LAST_RESULT.candidates[0].card : null;
+    const signal = await visionSignal(LAST_RESULT.rectifiedRaw, card);
+    const signals = LAST_RESULT.report.signals.map((s) => (s.id === 'vision' ? signal : s));
+    LAST_RESULT.report = buildReport(signals, LAST_RESULT.contextLimitations || []);
+    renderReport(LAST_RESULT.report);
+  } catch { /* the signal reports its own failures; nothing to add here */ }
   renderVisionState();
 });
 
