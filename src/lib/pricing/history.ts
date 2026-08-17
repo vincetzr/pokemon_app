@@ -131,23 +131,30 @@ export function buildRealSeries(
   const caveats: string[] = [];
   const cmDate = parseApiDate(raw.cardmarket?.updatedAt) ?? new Date().toISOString().slice(0, 10);
 
-  let seeded: PricePoint[] = [];
-  if (raw.cardmarket?.prices) {
-    const seed = seedFromCardmarket(raw.cardmarket.prices, cmDate, variant);
-    seeded = seed.points;
-    caveats.push(...seed.caveats);
-  }
+  // The Cardmarket seed is deliberately NOT used here any more.
+  //
+  // `seedFromCardmarket` takes three rolling averages — 1-day, 7-day, 30-day —
+  // and places them at the centroids of their windows. The figures are real,
+  // but the DATES are invented: a 30-day mean is not an observation from 15
+  // days ago, it is a summary of thirty of them. That produced a three-point
+  // euro "history" on dates nothing was measured, and it was the only history
+  // 2,048 of 2,052 series had.
+  //
+  // The scanner now ships two and a half years of prices actually observed on
+  // a given day, from the TCGCSV daily archive. Showing a fabricated three
+  // point euro line beside a measured dollar one in the same panel would be
+  // worse than showing nothing, so the seed is dropped rather than reconciled.
+  // The function is kept, and still tested, because its window arithmetic is
+  // the reference for what NOT to treat as an observation.
+  void cmDate;
 
   // Everything the daily snapshot job has captured for this card.
-  const recorded = readHistory(raw.id, variant, NM);
-
-  const points = mergePoints(seeded, recorded);
+  const points = readHistory(raw.id, variant, NM);
 
   if (points.length < 4) {
     caveats.push(
-      'Price history is still filling in. This app records real prices each day it runs, ' +
-        'so the chart extends over time. Cardmarket 1/7/30-day averages provide the ' +
-        'initial window.',
+      'Price history here is what this app has recorded itself. The scanner build carries a ' +
+        'longer series taken from prices observed on TCGplayer each day.',
     );
   }
 

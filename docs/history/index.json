@@ -1,0 +1,11 @@
+{
+ "buckets": 64,
+ "cards": 5493,
+ "points": 364099,
+ "firstDay": "2024-02-08",
+ "lastDay": "2026-08-16",
+ "englishFrom": "2024-02-08",
+ "japaneseFrom": "2025-01-07",
+ "source": "TCGplayer, via the TCGCSV daily archive",
+ "builtAt": "2026-08-17T12:50:52.065Z"
+}

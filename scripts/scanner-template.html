@@ -5221,13 +5221,68 @@ function conditionChart(rows) {
   return svg;
 }
 
-function renderHistory(card) {
+/* --- real price history, fetched only when a card is opened -------------- */
+
+const HISTORY_BUCKETS = 64;
+const HISTORY_CACHE = new Map();
+
+function historyBucket(id) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0) % HISTORY_BUCKETS;
+}
+
+/**
+ * Fetch this card's observed prices.
+ *
+ * The history is 6.4MB across every card, which is most of another page — so
+ * it ships beside the page in 64 buckets rather than inside it, and opening a
+ * card costs about 100KB once. Nothing is fetched until a card is tapped, so
+ * the first paint is unchanged.
+ *
+ * Failure is silent by design. No history is a normal state for a card too new
+ * or too thinly traded to have any, and an error banner over a price panel
+ * would read as something being wrong with the card.
+ */
+async function loadHistory(id) {
+  const n = historyBucket(id);
+  if (!HISTORY_CACHE.has(n)) {
+    HISTORY_CACHE.set(n, (async () => {
+      try {
+        const name = 'history/hist-' + String(n).padStart(2, '0') + '.json';
+        const res = await fetch(new URL(name, location.href).href, { cache: 'force-cache' });
+        if (!res.ok) return null;
+        return await res.json();
+      } catch { return null; }
+    })());
+  }
+  const bucket = await HISTORY_CACHE.get(n);
+  const points = bucket && bucket.cards && bucket.cards[id];
+  if (!points || points.length < 2) return [];
+  return [{
+    variant: 'market price',
+    currency: bucket.currency || 'USD',
+    // Stored as integer cents so a corpus whose median card is about a dollar
+    // does not get flattened to whole units.
+    points: points.map(([date, cents]) => ({
+      date, amount: cents / 100, source: bucket.source || 'TCGplayer',
+    })),
+  }];
+}
+
+async function renderHistory(card) {
   const sec = $('sec-history');
   const panel = $('history-panel');
   panel.innerHTML = '';
+  sec.hidden = true;
 
-  const series = (card.series || []).filter((s) => s.points.length >= 2);
-  if (series.length === 0) { sec.hidden = true; return; }
+  // Only observed history. The corpus used to carry a synthetic series built
+  // by fanning Cardmarket's 1/7/30-day averages out across fourteen invented
+  // dates — real numbers on dates they were never observed on — and showing
+  // that beside a genuine two-year line would put a fabricated euro trend next
+  // to a measured dollar one in the same panel.
+  const series = (await loadHistory(card.id)).filter((s) => s.points.length >= 2);
+  if (series.length === 0) return;
   sec.hidden = false;
 
   // Currencies are never mixed or converted, so each gets its own block —
@@ -5249,12 +5304,11 @@ function renderHistory(card) {
     const provisional = s.points.length < 3;
 
     intro.textContent =
-      s.points.length + ' real observations for ' + card.name + ' (' + s.variant + '), ' +
-      s.currency + ', from ' + s.points[0].date + ' to ' + s.points[s.points.length - 1].date +
-      ', via ' + s.points[0].source + '.' +
+      s.points.length + ' observed prices for ' + card.name + ', ' + s.currency +
+      ', from ' + s.points[0].date + ' to ' + s.points[s.points.length - 1].date +
+      ', via ' + s.points[0].source + '. Weekly over the last year and monthly before it.' +
       (provisional
-        ? ' Two points are not a trend — the dashed line only connects them. History accrues one ' +
-          'real point per day as cards are viewed.'
+        ? ' Two points are not a trend — the dashed line only connects them.'
         : '');
     block.appendChild(intro);
     block.appendChild(lineChart(s, provisional));
@@ -5275,6 +5329,22 @@ function renderHistory(card) {
 
     panel.appendChild(block);
   });
+
+  // Say where the line starts and why, because "price history" invites the
+  // reader to expect it back to the card's release and it does not go there.
+  // No free source does: the daily archives this is built from begin on
+  // 2024-02-08 for English cards, and the Japanese categories exist from
+  // 2024-09-16 but carry no price rows at all until 2025-01-07. Drawing a line
+  // back to a 2011 release would be inventing the interesting part.
+  const foot = document.createElement('p');
+  foot.className = 'note';
+  foot.style.cssText = 'margin:14px 0 0;color:var(--ink-400)';
+  foot.textContent =
+    'These are prices actually observed on TCGplayer, taken from the TCGCSV daily archive. ' +
+    'The record starts on 2024-02-08 for English cards and 2025-01-07 for Japanese ones — ' +
+    'that is where the archive begins, not where the card does, and no free source goes back ' +
+    'further. Nothing before those dates is drawn or guessed at.';
+  panel.appendChild(foot);
 }
 
 /** Points more than 2.5x away from the series median, in either direction. */
