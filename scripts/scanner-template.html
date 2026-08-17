@@ -1273,8 +1273,65 @@ function classifySubject(source, detection) {
   // proportions check exists for, so it stays scoreable.
   return { subject: 'card', inner: null, rigid: false };
 }
-const RESOLUTION_TIERS = { identify: 500, compare: 900, print: 1400 };
-const HALFTONE_LPI_RANGE = { min: 120, max: 200 };
+// `print` was 1400 and that number was wrong, not merely optimistic.
+//
+// A card is 63mm across, so a screen at L lines per inch is L x 2.48 cycles
+// wide however it is photographed — around 370 cycles at 150 LPI. At 1400
+// pixels that sits at 0.27 cycles per pixel and a 200 LPI screen at 0.354,
+// against a hard Nyquist limit of 0.5, before any lens, Bayer demosaic, JPEG
+// or noise reduction has touched it.
+//
+// Measured with the app's own FFT, on synthetic cards carrying a real dot
+// screen at the classic 15-degree angle plus sensor grain, against the app's
+// own 1.2 threshold:
+//
+//     px across card   133 LPI   150 LPI   175 LPI   200 LPI
+//         3500           fail      fail      fail      fail
+//         4200           2.75      fail      1.52      1.66
+//         5000           2.62      2.24      2.13      1.82
+//
+// So the floor is 5000, not 1400 and not 3500. Below it this check cannot
+// work on any card, and the old number meant it never once fired: thirteen
+// real photographs, thirteen abstentions.
+//
+// And then be plain about the consequence, because it is not a small one.
+//
+// MAX_SOURCE_EDGE downsamples every photograph to 4032 on its long edge, so a
+// portrait card filling the frame is about 2870 pixels across and that is a
+// STRUCTURAL ceiling, not a sensor one — a 48-megapixel capture is resampled
+// back to the same 4032 before anything measures it. No whole-card photograph
+// from any device can reach 5000.
+//
+// So this check cannot fire on the whole-card path, and saying otherwise would
+// be the third wrong number in a row. What it needs is a close-up of PART of a
+// card: pixels per halftone cell is the quantity that matters, and a 15mm patch
+// across a 4032px frame is roughly 45 pixels per cell at 150 LPI, against about
+// 7 for the whole card. That capture mode does not exist yet. Until it does the
+// abstention text says what is actually required rather than asking the reader
+// to move closer, which cannot help.
+//
+// Worth knowing before building that mode: finding a screen proves OFFSET
+// PRINTING, and competent counterfeits are offset printed too — the summary
+// below already says so. The discriminating version of this test is narrower:
+// the solid colour areas of a genuine card back are printed with spot inks and
+// should show NO rosette, while a copy reproducing them in process colour will.
+// That is a real difference; it needs the patch mode and confirmation against
+// known-genuine cards before it can be trusted.
+const RESOLUTION_TIERS = { identify: 500, compare: 900, print: 5000 };
+// The band has to cover the screen's GEOMETRY, not just its ruling.
+//
+// A halftone dot screen is a grid, which is the product of two gratings at the
+// screen angle. That product is a sum: cos(A)cos(B) = half of cos(A+B) plus
+// cos(A-B) — so the energy does not sit at the ruling frequency c, it sits at
+// radius c times root two, on the grid's diagonals. Measured, a 200 LPI screen
+// puts its peaks where a 283 LPI grating would, which fell outside a band that
+// stopped at 200 and was missed entirely; 133 LPI landed at 188 and was found.
+// That is why the detection rate across rulings looked erratic rather than
+// resolution-limited.
+//
+// The top of the band is therefore the highest plausible ruling times root
+// two. The bottom stays where it was: below 120 there is real image content.
+const HALFTONE_LPI_RANGE = { min: 120, max: 290 };
 const REGIONS = { artWindow: { x: 0.09, y: 0.11, width: 0.82, height: 0.42 } };
 
 const RECTIFIED_WIDTH = 1500;
@@ -2323,6 +2380,78 @@ function fft2Magnitude(input, n) {
   return out;
 }
 
+/**
+ * Cut the print-screen patches from the ORIGINAL photograph, not the
+ * rectification — because the rectification throws away the only thing this
+ * check is looking at.
+ *
+ * A card is 63mm wide, so a 150 LPI screen is 372 cycles across it no matter
+ * how it is photographed; the only question is how many pixels are spent on
+ * those cycles. `rectified` is always RECTIFIED_WIDTH (1500) across, which
+ * puts a 150 LPI screen at 0.25 cycles per pixel and a 200 LPI screen at 0.33
+ * — up against the 0.5 Nyquist limit, where optics, Bayer demosaic and JPEG
+ * have already destroyed it. Measured on a CLEAN SYNTHETIC screen with only
+ * mild degradation, the ratio at 1400 pixels is 1.00 to 1.07 against a
+ * threshold of 1.2: the check could not fire on a perfect input, let alone a
+ * photograph. It needs about 3500 pixels across the card before every screen
+ * ruling in the band is found reliably.
+ *
+ * Sampling from the source fixes that and one other thing at the same time.
+ * The band is computed by lpiToCyclesPerPixel(lpi, cardWidthPx) from the
+ * ORIGINAL photo's card width, while the patches were coming from the 1500px
+ * rectification — two different coordinate systems, equal only when the card
+ * happened to be photographed at exactly 1500 pixels. At 798 pixels the check
+ * searched 0.373 to 0.622 for a screen sitting at 0.198 to 0.331. Taking the
+ * patches in source pixels makes the existing formula correct by construction.
+ *
+ * The window is axis-aligned in source space rather than de-skewed, which
+ * costs nothing: screenEnergyRatio integrates over a RADIAL band, so it is
+ * already blind to the rotation a modest camera angle introduces.
+ */
+function samplePatchesFromSource(source, corners) {
+  const H = solveHomography(
+    [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }], corners);
+  const map = (fx, fy) => {
+    const d = H[6] * fx + H[7] * fy + H[8];
+    return { x: (H[0] * fx + H[1] * fy + H[2]) / d, y: (H[3] * fx + H[4] * fy + H[5]) / d };
+  };
+
+  const { data, width, height } = source;
+  const out = [];
+  const positions = [
+    [0.10, 0.20], [0.85, 0.20], [0.10, 0.60], [0.85, 0.60],
+    [0.30, 0.93], [0.65, 0.93], [0.50, 0.06], [0.20, 0.45],
+  ];
+
+  for (const [fx, fy] of positions) {
+    const c = map(fx, fy);
+    const x0 = Math.round(c.x - PATCH / 2), y0 = Math.round(c.y - PATCH / 2);
+    if (x0 < 0 || y0 < 0 || x0 + PATCH >= width || y0 + PATCH >= height) continue;
+
+    const patch = new Float32Array(PATCH * PATCH);
+    let sum = 0;
+    for (let y = 0; y < PATCH; y++) {
+      for (let x = 0; x < PATCH; x++) {
+        const i = ((y0 + y) * width + (x0 + x)) * 4;
+        const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        patch[y * PATCH + x] = lum;
+        sum += lum;
+      }
+    }
+    const mean = sum / patch.length;
+    let variance = 0;
+    for (let i = 0; i < patch.length; i++) variance += (patch[i] - mean) ** 2;
+    variance /= patch.length;
+
+    // Same gates as before: a patch that is burnt out, in shadow, or sitting on
+    // a hard edge is reporting on the scene rather than on the printing.
+    if (mean < 25 || mean > 240 || Math.sqrt(variance) > 70) continue;
+    for (let i = 0; i < patch.length; i++) patch[i] -= mean;
+    out.push(patch);
+  }
+  return out;
+}
+
 function samplePatches(img) {
   const { data, width, height } = img;
   const out = [];
@@ -2378,17 +2507,27 @@ function screenEnergyRatio(patch, bandLow, bandHigh) {
   return inBand / inCount / (outBand / outCount);
 }
 
-function printSignal(rectified, cardWidthPx) {
+function printSignal(rectified, cardWidthPx, source, corners) {
   const ID = 'print', LABEL = 'Print pattern';
 
   if (cardWidthPx < RESOLUTION_TIERS.print) {
     return abstain(ID, LABEL, PRINT_WEIGHT, 'insufficient_data',
-      'Print pattern analysis needs about ' + RESOLUTION_TIERS.print + ' pixels across the card; ' +
-      'this photo has roughly ' + Math.round(cardWidthPx) + '. Move closer or use a higher ' +
-      'resolution camera to enable this check.');
+      'Reading the print screen needs about ' + RESOLUTION_TIERS.print + ' pixels across the ' +
+      'card and this photo has roughly ' + Math.round(cardWidthPx) + '. The dot screen on a card ' +
+      'is around 400 cycles wide, so below this it is finer than the pixels available and no ' +
+      'processing can recover it. Nothing you can do to this photograph will fix that: every ' +
+      'photo is worked on at 4032 pixels along its long edge, which puts a card filling the ' +
+      'frame at about 2870 across however many megapixels the camera has. Reading the screen ' +
+      'needs a close-up of PART of a card rather than a better photo of all of it, and this ' +
+      'build does not take one yet. Nothing is concluded from its absence.');
   }
 
-  const patches = samplePatches(rectified);
+  // From the source at native resolution. Sampling the 1500px rectification
+  // discarded the screen before measuring it, and put the search band in a
+  // different coordinate system from the patches.
+  const patches = (source && corners)
+    ? samplePatchesFromSource(source, corners)
+    : samplePatches(rectified);
   if (patches.length === 0) {
     return abstain(ID, LABEL, PRINT_WEIGHT, 'insufficient_data',
       'No suitable flat area was found to analyse.');
@@ -2750,6 +2889,27 @@ function refToCanvas(rect) {
   return c;
 }
 
+/**
+ * Where on a card a grid cell sits, in the words someone holding it would use.
+ *
+ * The grid is 6 across by 9 down. Rows are named for what a Pokemon card
+ * actually carries there rather than by geometry alone: the name and HP run
+ * across the top, the artwork fills the upper middle, attacks the lower
+ * middle, and the set symbol, card number and copyright line sit along the
+ * bottom edge — which is where most of the tells a person is told to look for
+ * actually live.
+ */
+function refRegionName(gx, gy) {
+  const band =
+    gy === 0 ? 'the name and HP line' :
+    gy <= 3 ? 'the artwork' :
+    gy <= 6 ? 'the attacks and text box' :
+    gy === 7 ? 'the lower text' :
+              'the bottom edge, where the set symbol, number and copyright line sit';
+  const side = gx <= 1 ? 'left of ' : gx >= REFERENCE_GX - 2 ? 'right of ' : 'the middle of ';
+  return side + band;
+}
+
 async function referenceSignal(readings, candidate, ctx) {
   const ID = 'reference', LABEL = 'Comparison with the official image';
   const stand = (status, reason, extra) => ({
@@ -2866,7 +3026,15 @@ async function referenceSignal(readings, candidate, ctx) {
   // Per cell, because a fault that matters is LOCAL. A whole-card average
   // hides a wrong set symbol inside fifty-three cells that agree.
   const cw = Math.floor(REFERENCE_W / REFERENCE_GX), ch = Math.floor(REFERENCE_H / REFERENCE_GY);
-  const structures = [], colours = [];
+  // Per-cell readings are kept, not just their median. WHERE a card disagrees
+  // with its official image is the part a reader can act on — a set symbol or
+  // a stamp that stands out from fifty-three cells that agree is exactly what
+  // a human authenticator looks at — and the median throws that away. The
+  // SCORE deliberately stays the median: this file already measured that a
+  // deliberately degraded reprint scored HIGHER than the original it was made
+  // from, so the aggregate has no demonstrated power to tell a fake from a bad
+  // photograph. Naming the worst regions asserts nothing and points somewhere.
+  const structures = [], colours = [], cells = [];
   let usable = 0, total = 0;
 
   for (let gy = 0; gy < REFERENCE_GY; gy++) {
@@ -2903,7 +3071,7 @@ async function referenceSignal(readings, candidate, ctx) {
       // Zero means one side of this cell is flat — an empty border, a solid
       // panel. There is no structure there to agree or disagree about, so it
       // is left out of the structure statistic rather than counted as failure.
-      if (ncc !== 0) structures.push(ncc);
+      if (ncc !== 0) { structures.push(ncc); cells.push({ gx, gy, ncc }); }
     }
   }
 
@@ -2966,9 +3134,27 @@ async function referenceSignal(readings, candidate, ctx) {
   const score = Math.round(70 + Math.min(1,
     (structure - REFERENCE_SUPPORT_NCC) / (REFERENCE_STRONG_NCC - REFERENCE_SUPPORT_NCC)) * 30);
 
+  // The regions that agree least, in the reader's words and in card
+  // coordinates so the inspector can outline them. Only cells that are
+  // materially below this card's own typical agreement are worth naming —
+  // otherwise every card gets three "worst" regions and the pointer means
+  // nothing. The bar is half the median, which on a card agreeing at 0.6 names
+  // only cells under 0.3.
+  const outliers = cells
+    .filter((c) => c.ncc < structure * 0.5)
+    .sort((a, b) => a.ncc - b.ncc)
+    .slice(0, 3)
+    .map((c) => ({
+      x: c.gx / REFERENCE_GX, y: c.gy / REFERENCE_GY,
+      w: 1 / REFERENCE_GX, h: 1 / REFERENCE_GY,
+      agreement: Number(c.ncc.toFixed(3)),
+      where: refRegionName(c.gx, c.gy),
+    }));
+
   return {
     id: ID, label: LABEL, status: 'ok', score, weight: REFERENCE_WEIGHT,
     orientationFlipped: flip,
+    outliers,
     summary:
       'This card agrees with the official image of ' + candidate.card.name + ' across ' +
       structures.length + ' regions' + (throughPlastic ? ', read through the holder' : '') +
@@ -2980,7 +3166,15 @@ async function referenceSignal(readings, candidate, ctx) {
       'copy: the official image is published at ' + reference.naturalWidth + 'x' +
       reference.naturalHeight + ', far too coarse to judge print quality. What it does rule ' +
       'out is a different card and a crude copy, so this check supports a card and is never ' +
-      'allowed to accuse one.',
+      'allowed to accuse one.' +
+      (outliers.length
+        ? ' The regions that matched least well were ' +
+          outliers.map((o) => o.where).join('; ') + '. That is NOT a finding against the card — ' +
+          'glare, a fingertip, a holo sheen and a soft corner all land here first, and this ' +
+          'reference image is far too coarse to judge fine print. It is where to look first if ' +
+          'you want to check the card yourself: tap the card above to enlarge it, and these ' +
+          'regions are outlined for you.'
+        : ''),
     measurements: {
       structureAgreement: structure.toFixed(3),
       colourDeviation: colour.toFixed(3),
@@ -5395,7 +5589,8 @@ async function analyzeSource(source, onStep, opts) {
       ? abstain('print', 'Print pattern', PRINT_WEIGHT, 'not_applicable',
           'The card is inside a holder or sleeve. Plastic scatters the fine detail this check ' +
           'reads, so nothing is concluded from it either way.')
-      : quality.tooBlurry ? blurAbstention() : printSignal(rectified, cardWidthPx),
+      : quality.tooBlurry ? blurAbstention()
+        : printSignal(rectified, cardWidthPx, source, cardCorners),
   ];
 
   step(5);
@@ -5551,6 +5746,25 @@ function inspectPaint() {
   const ctx = canvas.getContext('2d');
   ctx.putImageData(img, 0, 0);
 
+  // On the flattened card, ring the regions that agreed least with the
+  // official image. Amber rather than red, and never labelled a fault: this is
+  // a pointer for the reader's own eyes, not a verdict.
+  if (INSPECT.view === 'card') {
+    const ref = ((LAST_RESULT.report && LAST_RESULT.report.signals) || [])
+      .find((s) => s.id === 'reference');
+    const boxes = (ref && ref.outliers) || [];
+    if (boxes.length) {
+      const scale = Math.max(img.width, img.height) / 900;
+      ctx.lineWidth = Math.max(2, 3 * scale);
+      ctx.strokeStyle = 'rgba(240, 178, 60, 0.95)';
+      ctx.setLineDash([Math.max(6, 9 * scale), Math.max(4, 6 * scale)]);
+      for (const b of boxes) {
+        ctx.strokeRect(b.x * img.width, b.y * img.height, b.w * img.width, b.h * img.height);
+      }
+      ctx.setLineDash([]);
+    }
+  }
+
   if (src.corners && src.corners.length === 4) {
     // Drawn at a width that survives being zoomed out, so the outline is
     // visible when the whole photo is on screen and does not swamp the card
@@ -5617,10 +5831,17 @@ function inspectNote() {
       '"Adjust the frame" on the report to correct it. The card measured ' + px +
       ' pixels across here.';
   }
+  const ref = ((r.report && r.report.signals) || []).find((s) => s.id === 'reference');
+  const boxes = (ref && ref.outliers) || [];
   return 'The card after being flattened to a straight-on view — this is exactly what every ' +
     'check was run on. Pinch or use + to zoom in on the edges, the set symbol and the small ' +
     'print. If an edge is shaved off, switch to the original photo to see whether the crop or ' +
-    'the framing caused it.';
+    'the framing caused it.' +
+    (boxes.length
+      ? ' The dashed boxes are the regions that matched the official image least well — most ' +
+        'often glare, a fingertip or a holo sheen rather than anything about the card. They are ' +
+        'where to look first, not a fault.'
+      : '');
 }
 
 function openInspector(view) {
