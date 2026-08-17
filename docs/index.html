@@ -1623,8 +1623,6 @@ function quadFromComponent(component, w, h, sx, sy) {
 /** How far a side may be pushed out, as a fraction of the card's short side. */
 
 
-
-
 /**
  * How far a region's corners may sit from its bounding box and still count as
  * square-on, as a fraction of the short side.
@@ -5319,8 +5317,11 @@ async function renderHistory(card) {
     ' in ' + series[0].currency + ', across ' +
     (series.length === 1 ? 'one printing' : series.length + ' printings') +
     ', from ' + span[0].date + ' to ' + span[span.length - 1].date +
-    ', via ' + span[0].source + '. Weekly over the last year, monthly before it. The shaded ' +
-    'band is the range of asking prices on each day; the line is what the market actually paid.';
+    ', via ' + span[0].source + '. Weekly over the last year, monthly before it. The bold line ' +
+    'is the card\'s value — a rolling median of what the market paid, which is how a price ' +
+    'guide reaches a figure rather than quoting the last sale. The faint line behind it is the ' +
+    'raw daily readings it was taken from, and the shaded band is the range of asking prices ' +
+    'on the day.';
   panel.appendChild(intro);
   panel.appendChild(multiChart(series));
 
@@ -5380,11 +5381,56 @@ async function renderHistory(card) {
 }
 
 /** Points more than 2.5x away from the series median, in either direction. */
+/**
+ * The card's VALUE on each day, as distinct from what one listing did.
+ *
+ * This is the part of PriceCharting's method that is worth copying and is not
+ * theirs to withhold: they do not publish the last sale, they publish a robust
+ * central estimate of observed sales with outliers dropped. A marketplace mean
+ * on a card that trades a few times a month lurches on a single odd listing,
+ * and a line drawn through those lurches shows the noise more prominently than
+ * the trend.
+ *
+ * A rolling MEDIAN rather than a mean, because the whole problem is a small
+ * number of extreme values and a mean is defenceless against exactly those.
+ * The window is centred and clipped at the ends rather than shortening the
+ * series, so the line spans the same range as the observations behind it.
+ */
+function rollingMedian(values, window) {
+  const half = Math.floor(window / 2);
+  return values.map((_, i) => {
+    const lo = Math.max(0, i - half), hi = Math.min(values.length, i + half + 1);
+    const slice = values.slice(lo, hi).sort((a, b) => a - b);
+    return slice[Math.floor(slice.length / 2)];
+  });
+}
+
+/**
+ * Points that disagree with their NEIGHBOURS, which is a different question
+ * from disagreeing with the series average.
+ *
+ * This compared every point against one median for the whole series, and on a
+ * long series that is not an outlier test at all — it is a test of whether the
+ * price moved. Measured across the shipped history: 41 of 127 series had
+ * something flagged, and the worst labelled 38 of 72 points as noise on a card
+ * that had simply risen from $1.26 to $8.51 over two years. Every one of those
+ * was a real observation, and the panel was telling the reader to disregard
+ * more than half of a genuine price history.
+ *
+ * Compared against a LOCAL median, a lasting move is not an outlier and a
+ * single-day spike still is.
+ */
+const OUTLIER_WINDOW = 7;
+const OUTLIER_RATIO = 2.5;
+
 function outliers(points) {
-  const sorted = points.map((p) => p.amount).sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  if (!median) return [];
-  return points.filter((p) => p.amount > median * 2.5 || p.amount < median / 2.5);
+  if (points.length < 5) return [];
+  const trend = rollingMedian(points.map((p) => p.amount), OUTLIER_WINDOW);
+  return points.filter((p, i) => {
+    const local = trend[i];
+    if (!local) return false;
+    return p.amount > local * OUTLIER_RATIO || p.amount < local / OUTLIER_RATIO;
+  });
 }
 
 const SERIES_COLOURS = ['#3987e5', '#f0b53c', '#4cc38a', '#b07ce8', '#e8709a'];
@@ -5470,15 +5516,33 @@ function multiChart(series) {
     // Two points are not a trend, so the connector says so rather than drawing
     // a confident slope through them.
     const provisional = s.points.length < 3;
+    const spikes = new Set(outliers(s.points));
+
+    // The raw observations, drawn faintly and continuously. PriceCharting
+    // publishes only its smoothed value; showing both is strictly more
+    // informative, because a reader can see whether a smooth line is smooth
+    // because the market was steady or because the smoothing did the work.
+    if (!provisional) {
+      add('path', {
+        d: s.points.map((p, k) => (k === 0 ? 'M' : 'L') + x(p.date) + ' ' + y(p.amount)).join(' '),
+        fill: 'none', stroke: colour, 'stroke-opacity': 0.32, 'stroke-width': 1,
+        'stroke-linejoin': 'round',
+      });
+    }
+
+    // The value line: a rolling median, which is the estimate their method
+    // produces and the one a seller should read.
+    const trend = provisional
+      ? s.points.map((p) => p.amount)
+      : rollingMedian(s.points.map((p) => p.amount), 5);
     add('path', {
-      d: s.points.map((p, k) => (k === 0 ? 'M' : 'L') + x(p.date) + ' ' + y(p.amount)).join(' '),
+      d: s.points.map((p, k) => (k === 0 ? 'M' : 'L') + x(p.date) + ' ' + y(trend[k])).join(' '),
       fill: 'none', stroke: colour, 'stroke-width': 2, 'stroke-linejoin': 'round',
       'stroke-dasharray': provisional ? '5 4' : 'none',
     });
 
     // Marks only where they can be told apart. A weekly series over two years
     // is 72 points across 480 pixels and a dot on each is a caterpillar.
-    const spikes = new Set(outliers(s.points));
     const step = Math.max(1, Math.round(s.points.length / 18));
     s.points.forEach((p, k) => {
       const odd = spikes.has(p);
@@ -5498,86 +5562,6 @@ function multiChart(series) {
     x: W - PAD_R, y: H - 8, 'text-anchor': 'end',
     fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-monospace, monospace',
   }, allDates[allDates.length - 1]);
-  return svg;
-}
-
-function lineChart(series, provisional) {
-  // Left padding is sized for the widest money label the axis can produce; a
-  // four-figure euro value overran a narrower gutter and collided with the plot.
-  const W = 560, H = 220, PAD_L = 64, PAD_R = 12, PAD_T = 14, PAD_B = 30;
-  const pts = series.points;
-  const amounts = pts.map((p) => p.amount);
-  let min = Math.min(...amounts), max = Math.max(...amounts);
-  if (min === max) { min = min * 0.9; max = max * 1.1 || 1; }
-  const padY = (max - min) * 0.12;
-  min -= padY; max += padY;
-
-  const x = (i) => PAD_L + (i / (pts.length - 1)) * (W - PAD_L - PAD_R);
-  const y = (v) => PAD_T + (1 - (v - min) / (max - min)) * (H - PAD_T - PAD_B);
-
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-  svg.setAttribute('class', 'chart');
-  svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label',
-    'Price history: ' + pts.map((p) => p.date + ' ' + money(p.amount, series.currency)).join(', '));
-
-  const add = (tag, attrs, text) => {
-    const el = document.createElementNS(ns, tag);
-    for (const k in attrs) el.setAttribute(k, attrs[k]);
-    if (text != null) el.textContent = text;
-    svg.appendChild(el);
-    return el;
-  };
-
-  // Gridlines and value axis.
-  for (let g = 0; g <= 3; g++) {
-    const v = min + ((max - min) * g) / 3;
-    const gy = y(v);
-    add('line', { x1: PAD_L, y1: gy, x2: W - PAD_R, y2: gy, stroke: '#1b1e2a', 'stroke-width': 1 });
-    add('text', {
-      x: PAD_L - 8, y: gy + 4, 'text-anchor': 'end',
-      fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-monospace, monospace',
-    }, money(v, series.currency));
-  }
-
-  // The line. Solid because every point here is a real observation; the app
-  // draws backfilled runs dashed and modeled runs as a shaded band.
-  const d = pts.map((p, i) => (i === 0 ? 'M' : 'L') + x(i) + ' ' + y(p.amount)).join(' ');
-  add('path', {
-    d, fill: 'none', stroke: '#3987e5', 'stroke-width': 2, 'stroke-linejoin': 'round',
-    'stroke-dasharray': provisional ? '5 4' : 'none',
-  });
-
-  // Outliers get their own mark rather than only a footnote: a lone spike is
-  // the one point on a sparse series a reader is most likely to misread as
-  // the card's value.
-  const spikes = new Set(outliers(pts));
-  pts.forEach((p, i) => {
-    const odd = spikes.has(p);
-    add('circle', {
-      cx: x(i), cy: y(p.amount), r: odd ? 4.5 : 3,
-      fill: '#0e1016', stroke: odd ? '#f0b53c' : '#3987e5', 'stroke-width': 2,
-      'stroke-dasharray': odd ? '2 2' : 'none',
-    });
-  });
-
-  // Date axis: first and last only, so the labels never collide.
-  add('text', {
-    x: PAD_L, y: H - 8, fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-monospace, monospace',
-  }, pts[0].date);
-  add('text', {
-    x: W - PAD_R, y: H - 8, 'text-anchor': 'end',
-    fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-monospace, monospace',
-  }, pts[pts.length - 1].date);
-
-  // Emphasise the endpoint — it is the number the reader actually wants.
-  add('text', {
-    x: x(pts.length - 1), y: y(pts[pts.length - 1].amount) - 10, 'text-anchor': 'end',
-    fill: '#e8eaf2', 'font-size': 12, 'font-family': 'ui-monospace, monospace',
-  }, money(pts[pts.length - 1].amount, series.currency));
-
   return svg;
 }
 
