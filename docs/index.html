@@ -578,6 +578,44 @@
     border: 1px solid var(--ink-700);
     display: block;
   }
+  .preview-btn {
+    padding: 0; border: 0; background: none; cursor: zoom-in;
+    display: block; position: relative; flex: none;
+  }
+  .preview-hint {
+    display: block; margin-top: 4px; font-size: 10.5px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-400); text-align: center;
+  }
+
+  /* --- the inspector ---------------------------------------------------
+     Full-screen because the whole point is pixels: a card examined inside a
+     108px thumbnail cannot answer "is this cut off", which is the question
+     it exists to answer. */
+  #inspector {
+    position: fixed; inset: 0; z-index: 60; background: var(--bg);
+    display: flex; flex-direction: column;
+  }
+  #inspector[hidden] { display: none; }
+  #inspect-bar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 10px 12px; border-bottom: 1px solid var(--ink-800);
+  }
+  #inspect-stage {
+    flex: 1; min-height: 0; overflow: hidden; position: relative;
+    background: #0b0d10; touch-action: none; cursor: grab;
+  }
+  #inspect-stage.dragging { cursor: grabbing; }
+  #inspect-canvas { position: absolute; transform-origin: 0 0; image-rendering: auto; }
+  #inspect-note {
+    padding: 9px 12px; border-top: 1px solid var(--ink-800);
+    font-size: 12px; color: var(--ink-300); margin: 0;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--ink-700); border-radius: 7px; overflow: hidden; }
+  .seg button {
+    background: none; border: 0; color: var(--ink-300); font: inherit; font-size: 12px;
+    padding: 6px 10px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--ink-800); color: var(--ink-050); }
 
   ul.plain { margin: 8px 0 0; padding-left: 1.1em; color: var(--ink-300); font-size: 12.5px; }
   ul.plain li { margin: 5px 0; }
@@ -703,13 +741,41 @@
     </div>
   </section>
 
+  <!-- Enlarged view of what was actually captured.
+       Two images, because they answer two different halves of one question.
+       The flattened card shows what the checks were run on; the original photo
+       with the outline drawn on it shows WHY it came out that way — an outline
+       hugging the card means the crop was right and the framing was the
+       problem, an outline cutting through the card means the crop was wrong. -->
+  <div id="inspector" hidden role="dialog" aria-modal="true" aria-label="The captured card, enlarged">
+    <div id="inspect-bar">
+      <button class="ghost" id="btn-inspect-close" type="button">Close</button>
+      <span class="seg" role="group" aria-label="Which image to show">
+        <button id="btn-view-card" type="button" aria-pressed="true">Flattened card</button>
+        <button id="btn-view-photo" type="button" aria-pressed="false">Original photo</button>
+      </span>
+      <span style="flex:1"></span>
+      <button class="ghost" id="btn-zoom-out" type="button" aria-label="Zoom out">−</button>
+      <span id="zoom-label" style="font-size:12px;color:var(--ink-300);min-width:44px;text-align:center">100%</span>
+      <button class="ghost" id="btn-zoom-in" type="button" aria-label="Zoom in">+</button>
+      <button class="ghost" id="btn-zoom-fit" type="button">Fit</button>
+    </div>
+    <div id="inspect-stage"><canvas id="inspect-canvas"></canvas></div>
+    <p id="inspect-note"></p>
+  </div>
+
   <div id="results" hidden>
 
     <section id="sec-verdict">
       <div class="eyebrow">Authenticity</div>
       <div class="panel">
         <div class="preview-wrap">
-          <canvas id="rectified" width="150" height="209" aria-label="The card, flattened to a straight-on view"></canvas>
+          <button id="btn-inspect" type="button" class="preview-btn"
+                  title="Tap to enlarge and check the crop"
+                  aria-label="Enlarge the captured card to check the crop">
+            <canvas id="rectified" width="150" height="209" aria-label="The card, flattened to a straight-on view"></canvas>
+            <span class="preview-hint" aria-hidden="true">Tap to enlarge</span>
+          </button>
           <div style="flex:1;min-width:0">
             <div class="verdict-head">
               <span class="pill" id="verdict-pill"></span>
@@ -5418,6 +5484,15 @@ async function analyzeSource(source, onStep, opts) {
     // Kept so the report can be rebuilt without re-analysing the photo — the
     // visual comparison being switched on after the fact is exactly that case.
     contextLimitations,
+    // The photograph as it was taken, and the outline that was cut out of it.
+    //
+    // Kept so the reader can check the crop themselves. "Is the card cut off
+    // because the app cropped it wrong, or because I framed it wrong" cannot be
+    // answered from the flattened result alone — both look identical there. It
+    // is answerable in one glance from the original with the outline drawn on
+    // top, so the inspector needs both, and neither survives the rectification.
+    sourceImage: source,
+    sourceCorners: cardCorners.map((c) => ({ x: c.x, y: c.y })),
     report: buildReport(signals, contextLimitations),
   };
 }
@@ -5440,6 +5515,129 @@ function foreignPrinting(top) {
   if (top.art < 0.86 || top.full > 0.74) return null;
   return { name: top.card.name, art: top.art, full: top.full };
 }
+
+/* ===================================================================
+   The inspector.
+
+   A 108px thumbnail cannot answer "did you crop my card wrong", so this
+   shows the capture at its own resolution and lets it be zoomed past that.
+   It carries two views deliberately. On the flattened card, a bad crop and
+   a badly framed photograph look exactly alike — both give a card with an
+   edge missing. On the ORIGINAL photograph with the detected outline drawn
+   over it they are immediately distinguishable, and that is the difference
+   between "the app got it wrong" and "hold the card differently".
+   =================================================================== */
+
+const INSPECT = { view: 'card', zoom: 1, fit: 1, x: 0, y: 0, w: 0, h: 0,
+                  drag: null, pinch: null };
+
+function inspectSource() {
+  const r = LAST_RESULT;
+  if (!r) return null;
+  if (INSPECT.view === 'photo') {
+    return r.sourceImage ? { data: r.sourceImage, corners: r.sourceCorners } : null;
+  }
+  return r.rectified ? { data: r.rectified, corners: null } : null;
+}
+
+/** Paint the chosen image once, at its own pixel size, with the outline. */
+function inspectPaint() {
+  const src = inspectSource();
+  const canvas = $('inspect-canvas');
+  if (!src) return;
+  const img = src.data;
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+  ctx.putImageData(img, 0, 0);
+
+  if (src.corners && src.corners.length === 4) {
+    // Drawn at a width that survives being zoomed out, so the outline is
+    // visible when the whole photo is on screen and does not swamp the card
+    // when it is zoomed in.
+    const scale = Math.max(img.width, img.height) / 900;
+    ctx.lineWidth = Math.max(2, 3 * scale);
+    ctx.strokeStyle = 'rgba(90, 200, 250, 0.95)';
+    ctx.beginPath();
+    ctx.moveTo(src.corners[0].x, src.corners[0].y);
+    for (let i = 1; i < 4; i++) ctx.lineTo(src.corners[i].x, src.corners[i].y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(90, 200, 250, 0.95)';
+    for (const c of src.corners) {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, Math.max(4, 6 * scale), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  INSPECT.w = img.width;
+  INSPECT.h = img.height;
+}
+
+function inspectApply() {
+  const canvas = $('inspect-canvas');
+  canvas.style.transform =
+    'translate(' + INSPECT.x + 'px,' + INSPECT.y + 'px) scale(' + INSPECT.zoom + ')';
+  // Shown relative to fit, because "100%" meaning "one card pixel per screen
+  // pixel" is a number about the sensor, and the reader is asking about the
+  // card. Fit is the view they started from.
+  $('zoom-label').textContent = Math.round((INSPECT.zoom / (INSPECT.fit || 1)) * 100) + '%';
+}
+
+function inspectFit() {
+  const stage = $('inspect-stage');
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  if (!INSPECT.w || !INSPECT.h || !sw || !sh) return;
+  INSPECT.fit = Math.min(sw / INSPECT.w, sh / INSPECT.h);
+  INSPECT.zoom = INSPECT.fit;
+  INSPECT.x = (sw - INSPECT.w * INSPECT.zoom) / 2;
+  INSPECT.y = (sh - INSPECT.h * INSPECT.zoom) / 2;
+  inspectApply();
+}
+
+/** Zoom about a point on the stage, so pinching keeps that point still. */
+function inspectZoomAt(factor, px, py) {
+  const next = Math.max(INSPECT.fit * 0.5, Math.min(INSPECT.fit * 24, INSPECT.zoom * factor));
+  const k = next / INSPECT.zoom;
+  INSPECT.x = px - (px - INSPECT.x) * k;
+  INSPECT.y = py - (py - INSPECT.y) * k;
+  INSPECT.zoom = next;
+  inspectApply();
+}
+
+function inspectNote() {
+  const r = LAST_RESULT;
+  if (!r) return '';
+  if (INSPECT.view === 'photo') {
+    const px = Math.round(r.cardWidthPx);
+    return 'Your photograph as taken, with the outline the scanner cut along drawn on it. ' +
+      'If that outline hugs the card, the crop was right and anything missing was outside ' +
+      'the photo. If it cuts across the card or sits on the desk, the crop was wrong — use ' +
+      '"Adjust the frame" on the report to correct it. The card measured ' + px +
+      ' pixels across here.';
+  }
+  return 'The card after being flattened to a straight-on view — this is exactly what every ' +
+    'check was run on. Pinch or use + to zoom in on the edges, the set symbol and the small ' +
+    'print. If an edge is shaved off, switch to the original photo to see whether the crop or ' +
+    'the framing caused it.';
+}
+
+function openInspector(view) {
+  if (!LAST_RESULT) return;
+  INSPECT.view = view || 'card';
+  $('btn-view-card').setAttribute('aria-pressed', String(INSPECT.view === 'card'));
+  $('btn-view-photo').setAttribute('aria-pressed', String(INSPECT.view === 'photo'));
+  // The original photo is not kept for every route into the report, so the
+  // toggle is disabled rather than offering a view that would come back blank.
+  $('btn-view-photo').disabled = !LAST_RESULT.sourceImage;
+  $('inspector').hidden = false;
+  $('inspect-note').textContent = inspectNote();
+  inspectPaint();
+  inspectFit();
+}
+
+function closeInspector() { $('inspector').hidden = true; }
 
 function drawRectified(canvas, rectified) {
   const dctx = canvas.getContext('2d');
@@ -6312,6 +6510,67 @@ async function openCamera() {
   throw lastErr || new Error('No camera available');
 }
 
+/**
+ * Ask the camera to behave like a camera.
+ *
+ * getUserMedia negotiates a RESOLUTION and nothing else — focus, exposure and
+ * white balance are left at whatever the platform defaults to, and on a track
+ * opened for video that default is frequently a fixed focus suited to a face
+ * a metre away rather than a card at arm's length. Every abstention for blur
+ * is downstream of that, and none of it costs anything to ask for.
+ *
+ * Each setting is applied on its own. They are applied as `advanced`, which
+ * browsers treat as best-effort, but a single applyConstraints carrying four
+ * of them is refused as a unit by some implementations, so one failure would
+ * silently cost the other three.
+ */
+async function tuneCamera(track) {
+  if (!track || !track.applyConstraints) return {};
+  const caps = track.getCapabilities ? (track.getCapabilities() || {}) : {};
+  const granted = {};
+  const want = [
+    ['focusMode', 'continuous'],
+    ['exposureMode', 'continuous'],
+    ['whiteBalanceMode', 'continuous'],
+  ];
+  for (const [key, value] of want) {
+    const allowed = caps[key];
+    if (!Array.isArray(allowed) || allowed.indexOf(value) < 0) continue;
+    try {
+      await track.applyConstraints({ advanced: [{ [key]: value }] });
+      granted[key] = value;
+    } catch { /* best effort; the next one is independent */ }
+  }
+  return granted;
+}
+
+/**
+ * How much optical/digital zoom this track can give, and what that is worth.
+ *
+ * This is the one lever that turns an abstention into a reading without asking
+ * the user to do anything differently. Measured across thirteen real photos,
+ * eight put roughly 780 pixels across the card against the 1400 the halftone
+ * check needs — and the shortfall is a factor of 1.8, comfortably inside the
+ * 2x to 5x these cameras report. Zoom is real magnification onto the same
+ * sensor, so unlike upscaling it adds detail rather than inventing it.
+ */
+function zoomRange(track) {
+  const caps = track && track.getCapabilities ? (track.getCapabilities() || {}) : {};
+  const z = caps.zoom;
+  if (!z || typeof z.max !== 'number' || typeof z.min !== 'number' || z.max <= z.min) return null;
+  return { min: z.min, max: z.max, step: z.step || (z.max - z.min) / 100 };
+}
+
+async function setZoom(track, value) {
+  const r = zoomRange(track);
+  if (!r) return null;
+  const v = Math.max(r.min, Math.min(r.max, value));
+  try {
+    await track.applyConstraints({ advanced: [{ zoom: v }] });
+    return v;
+  } catch { return null; }
+}
+
 function cameraFailureMessage(err) {
   const name = (err && err.name) || '';
   if (name === 'NotAllowedError' || name === 'SecurityError') {
@@ -6861,6 +7120,12 @@ function tick() {
 
   if (!CAM.autoDisabled) setHint(state);
 
+  // Magnify toward filling the guide, before the capture rather than after.
+  // Deliberately not awaited: this loop runs on a timer and must not be held
+  // up by a camera round trip, and the function guards itself against being
+  // entered twice.
+  maybeAutoZoom();
+
   if (state === 'locked' && CAM.goodFrames >= STABLE_FRAMES && !CAM.autoDisabled && CAM.armed) {
     if (looksLikeACard()) fireCapture('auto');
     return;
@@ -6976,6 +7241,78 @@ function looksLikeACard() {
     // with no card in it. The shutter is still there for anything this refuses.
     CAM.cardCheckResult = false;
     return false;
+  }
+}
+
+/**
+ * Close the resolution gap by magnifying, rather than by asking the user to
+ * hold the card closer than they can hold it steady.
+ *
+ * The halftone check wants about 1400 pixels across the card and a live track
+ * filling the guide typically delivers half that. Telling the reader to move
+ * closer trades one abstention for another, because at that distance the card
+ * leaves the frame and the hand shake that was tolerable becomes blur. The
+ * camera's own zoom has neither cost: it is magnification onto the same sensor
+ * at the same working distance.
+ *
+ * Bounded hard, and deliberately timid. It only acts on a card the loop can
+ * already see, it aims to fill the guide rather than to reach any particular
+ * number, it stops as soon as it is close, and it gives up after a few tries
+ * so a camera whose zoom does not behave as advertised cannot leave the user
+ * in a loop that keeps re-framing under their hands.
+ */
+const ZOOM_TARGET_FILL = 0.92;    // of the guide's width
+const ZOOM_TOLERANCE = 0.08;      // near enough; stop rather than hunt
+const ZOOM_MAX_TRIES = 4;
+
+async function maybeAutoZoom() {
+  if (!CAM.zoomRange || CAM.zoomSettled || CAM.zooming || CAM.firing) return;
+  if (CAM.zoomTries >= ZOOM_MAX_TRIES) { CAM.zoomSettled = true; return; }
+
+  const lb = CAM.lastBox, g = CAM.guide;
+  if (!lb || !g || !lb.w || !lb.sw || !g.vw || !CAM.cardSeen) return;
+
+  // Put both in ONE coordinate space before dividing. CAM.guide is in the video
+  // track's pixels and CAM.lastBox is in the scout frame's, which is 320 wide —
+  // comparing them directly reads a well-filled card as tiny and would zoom
+  // straight to the stop.
+  const guideW = g.w * (lb.sw / g.vw);
+  if (!guideW) return;
+  const fill = lb.w / guideW;
+  if (fill <= 0 || Math.abs(fill - ZOOM_TARGET_FILL) <= ZOOM_TOLERANCE) {
+    CAM.zoomSettled = true;
+    return;
+  }
+  // Only ever magnifies. Zooming back out to "fix" a card held close is the
+  // user's business, not the scanner's, and fighting them for the framing is
+  // the failure this whole loop keeps being rescued from.
+  if (fill > ZOOM_TARGET_FILL) { CAM.zoomSettled = true; return; }
+
+  CAM.zooming = true;
+  CAM.zoomTries++;
+  try {
+    const current = CAM.zoom || CAM.zoomRange.min || 1;
+    const wanted = current * (ZOOM_TARGET_FILL / fill);
+    const applied = await setZoom(CAM.track, wanted);
+    if (applied === null) { CAM.zoomSettled = true; return; }
+    if (Math.abs(applied - current) < (CAM.zoomRange.step || 0.01)) {
+      // Already at the stop; no more magnification is coming.
+      CAM.zoomSettled = true;
+    }
+    CAM.zoom = applied;
+    // The field of view just changed, so every window the loop was filling
+    // describes the old one. Re-learn rather than average across the change.
+    CAM.window = [];
+    CAM.focusRing = [];
+    CAM.stillRing = [];
+    CAM.clipRing = [];
+    CAM.stillSince = 0;
+    CAM.goodFrames = 0;
+    CAM.guide = null;
+  } catch {
+    CAM.zoomSettled = true;
+  } finally {
+    CAM.zooming = false;
   }
 }
 
@@ -7320,6 +7657,16 @@ async function startCamera() {
   const caps = CAM.track && CAM.track.getCapabilities ? CAM.track.getCapabilities() : {};
   $('btn-torch').hidden = !(caps && 'torch' in caps);
 
+  // Focus, exposure and white balance, none of which getUserMedia negotiates.
+  CAM.tuned = await tuneCamera(CAM.track);
+
+  // Start from no magnification, whatever the last session left behind, so the
+  // figure quoted below describes what the user is about to see.
+  CAM.zoomRange = zoomRange(CAM.track);
+  CAM.zoom = CAM.zoomRange ? await setZoom(CAM.track, CAM.zoomRange.min) : null;
+  CAM.zoomTries = 0;
+  CAM.zoomSettled = false;
+
   // Report what the platform actually granted. A live track is usually far
   // below the still camera, and the halftone check needs about 1400 pixels
   // across the card — so if this track cannot reach that, say so now rather
@@ -7336,8 +7683,13 @@ async function startCamera() {
     'puts about ' + cardPx + ' pixels across the card' +
     (cardPx >= RESOLUTION_TIERS.print
       ? ', enough for every check including the print pattern.'
-      : ', short of the ' + RESOLUTION_TIERS.print + ' the print-pattern check needs. For that one ' +
-        'check, use the photo button instead — your camera app shoots at full sensor resolution.');
+      : CAM.zoomRange
+        ? ', short of the ' + RESOLUTION_TIERS.print + ' the print-pattern check needs — so the ' +
+          'camera zooms in on its own to close that gap once it can see the card. If it cannot ' +
+          'reach it, the photo button shoots at full sensor resolution.'
+        : ', short of the ' + RESOLUTION_TIERS.print + ' the print-pattern check needs. For that ' +
+          'one check, use the photo button instead — your camera app shoots at full sensor ' +
+          'resolution.');
 
   CAM.running = true;
   CAM.firing = false;
@@ -7762,6 +8114,95 @@ for (const id of ['file-camera', 'file-library']) {
     e.target.value = '';
     if (file) openAligner(file);
   });
+}
+
+/* --- inspector wiring ------------------------------------------------- */
+
+$('btn-inspect').addEventListener('click', () => openInspector('card'));
+$('btn-inspect-close').addEventListener('click', closeInspector);
+$('btn-view-card').addEventListener('click', () => openInspector('card'));
+$('btn-view-photo').addEventListener('click', () => openInspector('photo'));
+$('btn-zoom-in').addEventListener('click', () => {
+  const s = $('inspect-stage');
+  inspectZoomAt(1.4, s.clientWidth / 2, s.clientHeight / 2);
+});
+$('btn-zoom-out').addEventListener('click', () => {
+  const s = $('inspect-stage');
+  inspectZoomAt(1 / 1.4, s.clientWidth / 2, s.clientHeight / 2);
+});
+$('btn-zoom-fit').addEventListener('click', inspectFit);
+
+document.addEventListener('keydown', (e) => {
+  if ($('inspector').hidden) return;
+  if (e.key === 'Escape') closeInspector();
+});
+
+{
+  const stage = $('inspect-stage');
+  const pts = new Map();
+
+  const centreOf = () => {
+    const a = [...pts.values()];
+    return { x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2,
+             d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) };
+  };
+
+  stage.addEventListener('pointerdown', (e) => {
+    stage.setPointerCapture(e.pointerId);
+    const r = stage.getBoundingClientRect();
+    pts.set(e.pointerId, { x: e.clientX - r.left, y: e.clientY - r.top });
+    if (pts.size === 2) INSPECT.pinch = centreOf();
+    else { INSPECT.drag = { x: e.clientX - r.left - INSPECT.x, y: e.clientY - r.top - INSPECT.y };
+           stage.classList.add('dragging'); }
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId)) return;
+    const r = stage.getBoundingClientRect();
+    pts.set(e.pointerId, { x: e.clientX - r.left, y: e.clientY - r.top });
+
+    if (pts.size >= 2 && INSPECT.pinch) {
+      const now = centreOf();
+      if (INSPECT.pinch.d > 0) inspectZoomAt(now.d / INSPECT.pinch.d, now.x, now.y);
+      // Pan with the pinch as well, so two fingers do both at once the way
+      // every other photo viewer on the device behaves.
+      INSPECT.x += now.x - INSPECT.pinch.x;
+      INSPECT.y += now.y - INSPECT.pinch.y;
+      INSPECT.pinch = now;
+      inspectApply();
+      return;
+    }
+    if (INSPECT.drag) {
+      INSPECT.x = e.clientX - r.left - INSPECT.drag.x;
+      INSPECT.y = e.clientY - r.top - INSPECT.drag.y;
+      inspectApply();
+    }
+  });
+
+  const release = (e) => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2) INSPECT.pinch = null;
+    if (pts.size === 0) { INSPECT.drag = null; stage.classList.remove('dragging'); }
+  };
+  stage.addEventListener('pointerup', release);
+  stage.addEventListener('pointercancel', release);
+
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = stage.getBoundingClientRect();
+    inspectZoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+
+  // Double tap or double click to go in and back out again, which is the
+  // gesture people try first.
+  stage.addEventListener('dblclick', (e) => {
+    const r = stage.getBoundingClientRect();
+    const px = e.clientX - r.left, py = e.clientY - r.top;
+    if (INSPECT.zoom > INSPECT.fit * 1.5) inspectFit();
+    else inspectZoomAt(3, px, py);
+  });
+
+  window.addEventListener('resize', () => { if (!$('inspector').hidden) inspectFit(); });
 }
 
 $('btn-analyse').addEventListener('click', () => analyseAligned());
