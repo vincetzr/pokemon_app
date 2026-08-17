@@ -6110,19 +6110,19 @@ function renderSingle(result) {
     : nothingClose
       ? 'Nothing here is a close match — these are only the nearest of ' + CARDS.length +
         ' cards. If your card is not from one of the sets listed below it cannot appear at all, ' +
-        'however high these percentages look. Tap a card to price it anyway.'
+        'however high these percentages look. Tap a card to price it and chart it anyway.'
       : confirmedByReference && top.score < CONFIDENT_MATCH
         ? 'The artwork was checked against the official image of ' + top.card.name + ' and ' +
           'matched it region by region, so that is the card. What is not settled is which ' +
           'PRINTING you have — the same picture is reissued across sets and they are worth ' +
-          'very different money. Pick the one your card actually is; the set and number under ' +
-          'each name are what separate them.'
+          'very different money. Pick the one your card actually is — the set and number under ' +
+          'each name are what separate them — and its prices and chart open below.'
       : tooAlike
         ? 'The artwork is matched, but these printings score within a whisker of each other and ' +
           'can be worth very different money. Pick the one your card actually is — the set and ' +
-          'number under each name are what separate them.'
-        : 'Tap the card that matches to see its prices. The percentages rank the list; they are ' +
-          'not the odds that the top one is right.';
+          'number under each name are what separate them. Its prices and chart open below.'
+        : 'Tap the card that matches to see its prices and its price chart. The percentages rank ' +
+          'the list; they are not the odds that the top one is right.';
 
   const list = $('candidates');
   list.innerHTML = '';
@@ -6440,6 +6440,11 @@ const CAM = {
   goodFrames: 0,
   window: [],
   focusRing: [],
+  // The constraint set currently live on the track. Held because
+  // applyConstraints replaces rather than merges, so every change has to
+  // re-send everything that should stay.
+  settings: {},
+  zoomProbe: null,
   stillRing: [],
   stillSince: 0,
   wasStill: false,
@@ -6815,9 +6820,37 @@ async function openCamera() {
  * of them is refused as a unit by some implementations, so one failure would
  * silently cost the other three.
  */
+/**
+ * Apply a camera setting while KEEPING the ones already applied.
+ *
+ * applyConstraints replaces a track's constraint set. It does not merge. That
+ * one fact broke the whole of the tuning below: asking for continuous focus,
+ * then continuous exposure, then continuous white balance left only the white
+ * balance, and the first zoom adjustment then replaced even that with a bare
+ * `{zoom}` — so the moment the camera magnified anything it also discarded the
+ * autofocus it had been given, and went back to whatever the platform defaults
+ * to for video. Which is why it went soft exactly when it zoomed in.
+ *
+ * So the accumulated set is held and re-sent whole every time. A setting the
+ * camera refuses leaves the previous good set standing, because CAM.settings
+ * is only advanced on success.
+ */
+async function applyCameraSettings(track, patch) {
+  if (!track || !track.applyConstraints) return false;
+  const next = Object.assign({}, CAM.settings, patch);
+  try {
+    await track.applyConstraints({ advanced: [next] });
+    CAM.settings = next;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function tuneCamera(track) {
   if (!track || !track.applyConstraints) return {};
   const caps = track.getCapabilities ? (track.getCapabilities() || {}) : {};
+  CAM.settings = {};
   const granted = {};
   const want = [
     ['focusMode', 'continuous'],
@@ -6827,10 +6860,7 @@ async function tuneCamera(track) {
   for (const [key, value] of want) {
     const allowed = caps[key];
     if (!Array.isArray(allowed) || allowed.indexOf(value) < 0) continue;
-    try {
-      await track.applyConstraints({ advanced: [{ [key]: value }] });
-      granted[key] = value;
-    } catch { /* best effort; the next one is independent */ }
+    if (await applyCameraSettings(track, { [key]: value })) granted[key] = value;
   }
   return granted;
 }
@@ -6856,10 +6886,8 @@ async function setZoom(track, value) {
   const r = zoomRange(track);
   if (!r) return null;
   const v = Math.max(r.min, Math.min(r.max, value));
-  try {
-    await track.applyConstraints({ advanced: [{ zoom: v }] });
-    return v;
-  } catch { return null; }
+  // Through the accumulator, so magnifying does not throw the autofocus away.
+  return (await applyCameraSettings(track, { zoom: v })) ? v : null;
 }
 
 function cameraFailureMessage(err) {
@@ -7556,8 +7584,56 @@ const ZOOM_TARGET_FILL = 0.92;    // of the guide's width
 const ZOOM_TOLERANCE = 0.08;      // near enough; stop rather than hunt
 const ZOOM_MAX_TRIES = 4;
 
+/**
+ * How far focus is allowed to fall after magnifying before the zoom is undone.
+ *
+ * Even with the autofocus constraint preserved, there is a distance below
+ * which a phone lens cannot focus at all, and zooming in on a card already
+ * held close walks straight into it — the picture gets bigger and softer at
+ * the same time, which is the worst trade available. The loop already measures
+ * focus every frame, so the honest test is empirical: magnify, look, and put
+ * it back if looking got worse.
+ */
+const ZOOM_FOCUS_FLOOR = 0.75;    // of the focus reading before the zoom
+const ZOOM_SETTLE_FRAMES = 12;    // give continuous AF time to re-converge
+
+/** Median of the recent focus samples, or null before there are enough. */
+function focusNow() {
+  const r = CAM.focusRing;
+  if (!r || r.length < 5) return null;
+  const s = r.slice(-8).sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
 async function maybeAutoZoom() {
-  if (!CAM.zoomRange || CAM.zoomSettled || CAM.zooming || CAM.firing) return;
+  if (!CAM.zoomRange || CAM.zooming || CAM.firing) return;
+
+  // Did the last magnification cost more than it bought?
+  const probe = CAM.zoomProbe;
+  if (probe && CAM.framesSeen - probe.at >= ZOOM_SETTLE_FRAMES) {
+    CAM.zoomProbe = null;
+    const after = focusNow();
+    if (probe.before && after && after < probe.before * ZOOM_FOCUS_FLOOR) {
+      CAM.zooming = true;
+      try {
+        const back = await setZoom(CAM.track, probe.from);
+        if (back !== null) CAM.zoom = back;
+      } finally { CAM.zooming = false; }
+      // Stop here rather than trying the next step: this camera cannot focus
+      // at that magnification on a card held this close, and stepping again
+      // would only find that out again.
+      CAM.zoomSettled = true;
+      CAM.window = [];
+      CAM.focusRing = [];
+      CAM.stillRing = [];
+      CAM.clipRing = [];
+      CAM.goodFrames = 0;
+      CAM.guide = null;
+      return;
+    }
+  }
+
+  if (CAM.zoomSettled) return;
   if (CAM.zoomTries >= ZOOM_MAX_TRIES) { CAM.zoomSettled = true; return; }
 
   const lb = CAM.lastBox, g = CAM.guide;
@@ -7584,8 +7660,11 @@ async function maybeAutoZoom() {
   try {
     const current = CAM.zoom || CAM.zoomRange.min || 1;
     const wanted = current * (ZOOM_TARGET_FILL / fill);
+    // Remember what focus looked like here, so the next pass can tell whether
+    // magnifying made the picture better or merely bigger.
+    CAM.zoomProbe = { from: current, before: focusNow(), at: CAM.framesSeen };
     const applied = await setZoom(CAM.track, wanted);
-    if (applied === null) { CAM.zoomSettled = true; return; }
+    if (applied === null) { CAM.zoomSettled = true; CAM.zoomProbe = null; return; }
     if (Math.abs(applied - current) < (CAM.zoomRange.step || 0.01)) {
       // Already at the stop; no more magnification is coming.
       CAM.zoomSettled = true;
