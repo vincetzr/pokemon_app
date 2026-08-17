@@ -2052,18 +2052,21 @@ function buildReport(signals, contextLimitations) {
     : 0;
   const coverage = totalWeight > 0 ? ranWeight / totalWeight : 0;
 
-  // Two denominators, because there are two different questions.
+  // ONE denominator, over every check this build carries.
   //
-  // `coverage` — over EVERY listed check — is what the verdict is gated on. It
-  // is unchanged, and it is right: proportions alone have not covered enough
-  // ground for a verdict no matter which checks this build happens to carry.
+  // There used to be two, on the theory that a check the build could not run
+  // should not count against the coverage figure. Every check here can be run
+  // here, so the second denominator had exactly one member — the vision check
+  // with no key — and it bought three contradictions: five rows on screen
+  // described as four, a fifth check attributed to "the full app" when the
+  // number came from this build's own signal list, and a percentage that FELL
+  // when the user supplied the key the panel had just asked for, because the
+  // denominator grew before the check had run.
   //
-  // `inScopeCoverage` is what the panel SHOWS. A figure half-determined by a
-  // compile-time fact is not measuring the card and cannot be improved by a
-  // better photograph; this one can.
-  const inScope = signals.filter((s) => s.available !== false);
-  const inScopeWeight = inScope.reduce((sum, s) => sum + s.weight, 0);
-  const inScopeCoverage = inScopeWeight > 0 ? ranWeight / inScopeWeight : 0;
+  // Coverage is now the same figure the verdict is gated on, it counts every
+  // check, and it only ever rises when one actually runs.
+  const inScope = signals;
+  const inScopeCoverage = coverage;
 
   const verdict = decideVerdict(ran.length, score, coverage);
 
@@ -2082,18 +2085,22 @@ function buildReport(signals, contextLimitations) {
   // Split, because "could not run on this photo" is false of a check this build
   // never carried, and after the panel names two denominators the old single
   // sentence contradicts the tile beside it.
-  const abstained = signals.filter((s) => s.status !== 'ok' && s.available !== false);
-  const unavailable = signals.filter((s) => s.available === false);
+  // Split by WHY, not by whether the build carries the check. "Could not run on
+  // this photo" is false of a check that is only waiting for a key — a better
+  // photograph will not produce one — and lumping the two together tells the
+  // user to retake a picture that was never the problem.
+  const needKey = signals.filter((s) => s.status !== 'ok' && s.needsKey);
+  const abstained = signals.filter((s) => s.status !== 'ok' && !s.needsKey);
   if (abstained.length > 0) {
     limitations.push(
-      abstained.length + ' of ' + (signals.length - unavailable.length) +
-      ' checks this build carries could not run on this photo (' +
+      abstained.length + ' of ' + signals.length +
+      ' checks could not run on this photo (' +
       abstained.map((s) => s.label).join(', ') + '), so this analysis is partial.'
     );
   }
-  if (unavailable.length > 0) {
+  if (needKey.length > 0) {
     limitations.push(
-      'This build is not running ' + unavailable.map((s) => s.label.toLowerCase()).join(', ') +
+      'This report has not run ' + needKey.map((s) => s.label.toLowerCase()).join(', ') +
       ' — it needs an API key you supply, and none has been given. That is ground no photo ' +
       'taken here can cover until it is switched on.'
     );
@@ -2900,10 +2907,14 @@ async function referenceSignal(readings, candidate, ctx) {
       'This card agrees with the official image of ' + candidate.card.name + ' across ' +
       structures.length + ' regions' + (throughPlastic ? ', read through the holder' : '') +
       ' — same layout, same art placement, same proportions, same colour once the lighting is ' +
-      'accounted for. What that rules out is a crude copy. It cannot rule out a good one: the ' +
-      'official image is published at ' + reference.naturalWidth + 'x' + reference.naturalHeight +
-      ', which is far too coarse to judge print quality, so this check supports a card and is ' +
-      'never allowed to accuse one.',
+      'accounted for. Two limits on what that means. It was compared against the top-ranked ' +
+      'card only, not searched against all ' + CARDS.length + ', so it confirms the artwork is ' +
+      'that card\'s rather than independently identifying it — and the same artwork is often ' +
+      'printed in several sets, which this cannot tell apart. And it cannot rule out a good ' +
+      'copy: the official image is published at ' + reference.naturalWidth + 'x' +
+      reference.naturalHeight + ', far too coarse to judge print quality. What it does rule ' +
+      'out is a different card and a crude copy, so this check supports a card and is never ' +
+      'allowed to accuse one.',
     measurements: {
       structureAgreement: structure.toFixed(3),
       colourDeviation: colour.toFixed(3),
@@ -3688,9 +3699,16 @@ function visionUnavailable() {
       'no measurement here can reach. It needs a model and a key, not a server, so it CAN run ' +
       'here with a key you supply under "Detailed visual comparison" below. A free Google AI ' +
       'Studio key runs it at no cost. Until then it is listed rather than hidden, because a ' +
-      'build that cannot make this comparison has covered less ground than one that can, and ' +
+      'report that has not made this comparison has covered less ground than one that has, and ' +
       'you should know that.'),
-    available: false,
+    // NOT `available: false`. That flag means "this build does not carry the
+    // check", and this build does — the sentence above says so and tells you
+    // how to run it. Marking it out of scope deported a row that is on screen
+    // to "the full app", printed "2 of 4" under five visible checks, and made
+    // the denominator move the moment a key was pasted, so doing the thing the
+    // panel asked for dropped the coverage figure. It is a check this build
+    // runs and has not been given what it needs yet, which is an abstention.
+    needsKey: true,
     whyShort: 'has not been given a key to run with',
   };
 }
@@ -4490,7 +4508,7 @@ function renderReport(report) {
   // When the only thing between this card and a verdict is a check that is
   // switched off, say so next to the verdict rather than in a paragraph
   // further down that a reader has no reason to open.
-  const visionOff = report.signals.some((s) => s.id === 'vision' && s.available === false);
+  const visionOff = report.signals.some((s) => s.id === 'vision' && s.needsKey && s.status !== 'ok');
   const prompt = $('verdict-enable');
   if (prompt) prompt.hidden = !(visionOff && !report.scoreIsMeaningful);
 
@@ -4498,10 +4516,11 @@ function renderReport(report) {
   $('fig-conf').textContent = ranCount === 0 ? '—' : cov + '%';
   $('bar-conf').style.width = (ranCount === 0 ? 0 : cov) + '%';
   $('fig-conf-note').textContent =
-    'of the ' + (report.inScopeCount || 0) + ' checks this build can run';
-  $('fig-ran').innerHTML = ranCount + ' <small>of ' +
-    (report.inScopeCount || report.totalCount) + ' here · ' +
-    report.totalCount + ' in the full app</small>';
+    'of the ' + report.totalCount + ' checks this build runs';
+  // One number against one denominator, and it is the count of rows drawn
+  // below. Anything else invites the reader to count the list and find it
+  // disagrees with the heading.
+  $('fig-ran').innerHTML = ranCount + ' <small>of ' + report.totalCount + '</small>';
 
   const ul = $('signals');
   ul.innerHTML = '';
@@ -4842,9 +4861,21 @@ function renderPrices(card) {
     );
   }
 
-  notes.push('Captured ' + new Date(card.conditions.fetchedAt).toLocaleString() +
-    ' · TCGplayer product ' + card.conditions.productId + '.');
-  $('price-foot').textContent = notes.join(' ');
+  notes.push('Captured ' + new Date(card.conditions.fetchedAt).toLocaleString() + '.');
+  // The product id was printed as a bare integer with nothing to do with it.
+  // These prices were read at a point in time and the listings behind them move,
+  // so the one thing a reader wants next is the page they came from.
+  $('price-foot').textContent = notes.join(' ') + ' ';
+  const pid = card.conditions.productId;
+  if (pid != null && /^\d+$/.test(String(pid))) {
+    const a = document.createElement('a');
+    a.href = 'https://www.tcgplayer.com/product/' + pid;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = 'See the current listings on TCGplayer';
+    $('price-foot').appendChild(a);
+    $('price-foot').appendChild(document.createTextNode('.'));
+  }
 }
 
 /**
@@ -5514,16 +5545,28 @@ function renderSingle(result) {
   // applies. The panel reads its state from the report, so this just refreshes.
   if (typeof renderSurfaceState === 'function') renderSurfaceState();
 
-  // Offer the manual frame only where it can help: on a photo, where the quad
-  // came from detection and might be wrong. A live capture has already been
-  // gated on framing, and a frame the user placed themselves needs no offer.
-  const canReframe = !!(ALIGN.source && ALIGN.autoFramed);
+  // Did the comparison against the official image confirm the top card? This is
+  // read in two places below, so it is settled once, here.
+  const refConfirmed = (result.report.signals || [])
+    .some((s) => s.id === 'reference' && s.status === 'ok');
+
+  // Offer the manual frame wherever the user did not place it themselves.
+  //
+  // It was keyed on `autoFramed`, which is set only when detection SUCCEEDED
+  // and cleared when it failed — so the offer was hidden precisely on the
+  // photos whose frame is most likely to be wrong. A capture that fell back to
+  // the guide rectangle is the case that most needs a repair button, and it
+  // was the one case that did not get one.
+  const canReframe = !!(ALIGN.source && !ALIGN.moved);
   $('sec-reframe').hidden = !canReframe;
   if (canReframe) {
-    $('reframe-note').textContent = confidentPick(result.candidates)
-      ? 'The card\'s edges were found automatically.'
-      : 'The card\'s edges were found automatically — if the match below looks wrong, the frame ' +
-        'is the usual reason.';
+    $('reframe-note').textContent = refConfirmed
+      ? 'The card\'s edges were found automatically, and the flattened card matched the official ' +
+        'image — so the frame is right.'
+      : confidentPick(result.candidates)
+        ? 'The card\'s edges were found automatically.'
+        : 'The card\'s edges were found automatically — if the match below looks wrong, or the ' +
+          'flattened card above is cut off, the frame is the usual reason. Adjust it and scan again.';
   }
   drawRectified($('rectified'), result.rectified);
   renderReport(result.report);
@@ -5548,8 +5591,29 @@ function renderSingle(result) {
   // picture with a drop shadow and are 6.7x apart in price.
   const top = candidates[0];
   const runnerUp = candidates[1];
-  const nothingClose = !top || top.score < CONFIDENT_MATCH;
+  let nothingClose = !top || top.score < CONFIDENT_MATCH;
   const tooAlike = !nothingClose && runnerUp && top.score - runnerUp.score < CONFIDENT_MARGIN;
+
+  // A second opinion that outranks the match score, when there is one.
+  //
+  // These two panels were deciding the same question on different evidence and
+  // never speaking: the comparison runs whenever the top candidate scores 0.62,
+  // and once it lines the photo up against that card's OFFICIAL image and
+  // agrees region by region, it names the card in prose — while this panel,
+  // gated at 0.80, was calling the same card no match in the paragraph above.
+  // Every card scoring between the two got named and disowned in one report.
+  //
+  // The comparison is the better evidence of the two and the file already
+  // measured why: alignment separates the right card (0.49 to 0.77) from the
+  // wrong one (0.04 to 0.19) with nothing in between, while the match scores
+  // for right and wrong cards overlap heavily. So when it has confirmed the
+  // top card, "nothing here is a close match" is simply false and is dropped.
+  //
+  // It confirms the ARTWORK, though, not the printing — the same picture is
+  // reprinted across sets at very different prices — so the tap is still
+  // required and the printing warning below is left to fire on its own terms.
+  const confirmedByReference = !!top && !result.foreign && refConfirmed;
+  if (confirmedByReference) nothingClose = false;
 
   $('id-intro').textContent = result.foreign
     ? 'The artwork matches ' + result.foreign.name + ', but the rest of the card does not — see ' +
@@ -5558,6 +5622,12 @@ function renderSingle(result) {
       ? 'Nothing here is a close match — these are only the nearest of ' + CARDS.length +
         ' cards. If your card is not from one of the sets listed below it cannot appear at all, ' +
         'however high these percentages look. Tap a card to price it anyway.'
+      : confirmedByReference && top.score < CONFIDENT_MATCH
+        ? 'The artwork was checked against the official image of ' + top.card.name + ' and ' +
+          'matched it region by region, so that is the card. What is not settled is which ' +
+          'PRINTING you have — the same picture is reissued across sets and they are worth ' +
+          'very different money. Pick the one your card actually is; the set and number under ' +
+          'each name are what separate them.'
       : tooAlike
         ? 'The artwork is matched, but these printings score within a whisker of each other and ' +
           'can be worth very different money. Pick the one your card actually is — the set and ' +
@@ -7044,6 +7114,15 @@ async function fireCapture(how) {
   if (CAM.firing) return;
   CAM.firing = true;
   setHint('locked');
+
+  // A live capture has no aligner behind it. Any ALIGN state still standing
+  // belongs to an earlier PHOTO, and leaving it there put an "Adjust the frame"
+  // button on this capture's report which then reopened the previous photo.
+  ALIGN.source = null;
+  ALIGN.detected = null;
+  ALIGN.corners = null;
+  ALIGN.moved = false;
+  ALIGN.autoFramed = false;
 
   // Pause the loop but keep the stream alive: a rejected capture goes straight
   // back to the viewfinder, and tearing the camera down to rebuild it would
