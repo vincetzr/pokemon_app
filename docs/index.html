@@ -6848,6 +6848,10 @@ const HINTS = {
   glare: ['Tilt the card — move the shine off the text', 'warn'],
   moving: ['Hold still', 'ready'],
   focusing: ['Focusing…', 'ready'],
+  // Not a fault the user caused, so it says what to do rather than what is
+  // wrong: the camera magnified, could not hold focus at that magnification,
+  // and put it back. Moving the card away is the only thing that helps.
+  tooclose: ['Move the card further away — the lens cannot focus this close', 'warn'],
   locked: ['Hold it — capturing', 'locked'],
   scanned: ['Read — tap Scan another card for the next one', 'locked'],
 };
@@ -7021,6 +7025,42 @@ async function tuneCamera(track) {
  * 2x to 5x these cameras report. Zoom is real magnification onto the same
  * sensor, so unlike upscaling it adds detail rather than inventing it.
  */
+/**
+ * Point the autofocus at somewhere specific and make it converge again.
+ *
+ * Continuous autofocus decides for itself what the subject is, and on a card
+ * flat on a desk under a tablet it frequently decides the subject is the desk
+ * — especially once zoomed, where the card no longer dominates the frame.
+ * Every phone camera app answers this with a tap, so this one does too.
+ *
+ * Two mechanisms, because devices differ in which they expose.
+ * `pointsOfInterest` says WHERE to focus. Cycling focusMode through
+ * single-shot and back to continuous is what actually makes it re-converge —
+ * re-sending `continuous` alone is a no-op on a track already in that mode.
+ */
+async function refocus(track, xFrac, yFrac) {
+  if (!track || !track.getCapabilities) return false;
+  const caps = track.getCapabilities() || {};
+  let did = false;
+
+  if (caps.pointsOfInterest && xFrac != null) {
+    const x = Math.max(0, Math.min(1, xFrac)), y = Math.max(0, Math.min(1, yFrac));
+    if (await applyCameraSettings(track, { pointsOfInterest: [{ x, y }] })) did = true;
+  }
+  const modes = Array.isArray(caps.focusMode) ? caps.focusMode : [];
+  if (modes.indexOf('single-shot') >= 0) {
+    if (await applyCameraSettings(track, { focusMode: 'single-shot' })) did = true;
+    // Straight back to continuous: a card being turned over under the lens
+    // needs to keep tracking, not hold the focus it found on the first frame.
+    if (modes.indexOf('continuous') >= 0) {
+      await applyCameraSettings(track, { focusMode: 'continuous' });
+    }
+  } else if (modes.indexOf('continuous') >= 0) {
+    if (await applyCameraSettings(track, { focusMode: 'continuous' })) did = true;
+  }
+  return did;
+}
+
 function zoomRange(track) {
   const caps = track && track.getCapabilities ? (track.getCapabilities() || {}) : {};
   const z = caps.zoom;
@@ -7583,7 +7623,14 @@ function tick() {
     return;
   }
 
-  if (!CAM.autoDisabled) setHint(state);
+  // A zoom that had to be undone is worth one clear sentence, once, ahead of
+  // whatever else the frame is doing — it is the only state here the reader
+  // cannot fix by reframing.
+  if (CAM.zoomGaveUp && state !== 'locked') {
+    if (!CAM.autoDisabled) setHint('tooclose');
+    CAM.zoomGaveUpShown = (CAM.zoomGaveUpShown || 0) + 1;
+    if (CAM.zoomGaveUpShown > 25) CAM.zoomGaveUp = false;
+  } else if (!CAM.autoDisabled) setHint(state);
 
   // Magnify toward filling the guide, before the capture rather than after.
   // Deliberately not awaited: this loop runs on a timer and must not be held
@@ -7767,8 +7814,13 @@ async function maybeAutoZoom() {
       } finally { CAM.zooming = false; }
       // Stop here rather than trying the next step: this camera cannot focus
       // at that magnification on a card held this close, and stepping again
-      // would only find that out again.
+      // would only find that out again. Say so, because from the outside the
+      // picture simply got smaller again for no visible reason — and the one
+      // thing the reader can do about it is move the card, which no amount of
+      // constraint fiddling here can substitute for.
       CAM.zoomSettled = true;
+      CAM.zoomGaveUp = true;
+      await refocus(CAM.track, 0.5, 0.5);
       CAM.window = [];
       CAM.focusRing = [];
       CAM.stillRing = [];
@@ -8633,6 +8685,28 @@ for (const id of ['file-camera', 'file-library']) {
 }
 
 /* --- inspector wiring ------------------------------------------------- */
+
+// Tap the viewfinder to focus there, the way every camera app works. Cheap,
+// and it is the answer to "it went soft" that does not require the scanner to
+// guess what the subject is.
+$('viewfinder').addEventListener('click', async (e) => {
+  if (!CAM.track || !CAM.running) return;
+  const r = $('viewfinder').getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const did = await refocus(CAM.track, (e.clientX - r.left) / r.width,
+                                       (e.clientY - r.top) / r.height);
+  if (did) {
+    // Focus is about to change, so every reading averaged over the old one is
+    // stale — including the plateau the loop uses to decide focus has settled.
+    CAM.focusRing = [];
+    CAM.window = [];
+    CAM.stillRing = [];
+    CAM.goodFrames = 0;
+    CAM.sharpPeak = 0;
+    CAM.zoomGaveUp = false;
+    setHint('focusing');
+  }
+});
 
 $('btn-inspect').addEventListener('click', () => openInspector('card'));
 $('btn-inspect-close').addEventListener('click', closeInspector);
