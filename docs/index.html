@@ -5257,17 +5257,36 @@ async function loadHistory(id) {
     })());
   }
   const bucket = await HISTORY_CACHE.get(n);
-  const points = bucket && bucket.cards && bucket.cards[id];
-  if (!points || points.length < 2) return [];
-  return [{
-    variant: 'market price',
-    currency: bucket.currency || 'USD',
-    // Stored as integer cents so a corpus whose median card is about a dollar
-    // does not get flattened to whole units.
-    points: points.map(([date, cents]) => ({
-      date, amount: cents / 100, source: bucket.source || 'TCGplayer',
-    })),
-  }];
+  const entry = bucket && bucket.cards && bucket.cards[id];
+  if (!entry) return [];
+
+  // Every printing of the card, not just the one it was baked with. Which is
+  // the point: a Normal at 10c beside a Reverse Holofoil at 26c is the
+  // comparison a seller is actually making, and 2,222 of the 4,975 products
+  // here carry more than one priced printing.
+  //
+  // Stored as [dateIndex, market, low, high] in integer cents, with the dates
+  // held once per bucket rather than repeated on every one of half a million
+  // points.
+  const dates = bucket.dates || [];
+  const out = [];
+  for (const name of Object.keys(entry)) {
+    const pts = entry[name];
+    if (!pts || pts.length < 2) continue;
+    out.push({
+      variant: name,
+      currency: bucket.currency || 'USD',
+      points: pts.map(([d, market, low, high]) => ({
+        date: dates[d], amount: market / 100,
+        low: (low == null ? market : low) / 100,
+        high: (high == null ? market : high) / 100,
+        source: bucket.source || 'TCGplayer',
+      })).filter((p) => p.date),
+    });
+  }
+  // Dearest printing first: it is the one a holder most wants to see.
+  out.sort((a, b) => b.points[b.points.length - 1].amount - a.points[a.points.length - 1].amount);
+  return out.filter((s) => s.points.length >= 2);
 }
 
 async function renderHistory(card) {
@@ -5285,50 +5304,63 @@ async function renderHistory(card) {
   if (series.length === 0) return;
   sec.hidden = false;
 
-  // Currencies are never mixed or converted, so each gets its own block —
-  // TCGplayer reports dollars and Cardmarket euros, and averaging them would
-  // make any combined figure wrong.
-  series.sort((a, b) => b.points.length - a.points.length);
+  // ONE chart carrying every printing, rather than a stack of charts.
+  //
+  // Separate blocks per printing was the wrong shape for the question being
+  // asked. What a holder wants to know is which printing they have and what
+  // the gap is worth, and two lines in one frame answer that at a glance where
+  // two charts with independent axes actively hide it.
+  const span = series[0].points;
+  const intro = document.createElement('p');
+  intro.className = 'note';
+  intro.style.margin = '0 0 10px';
+  intro.textContent =
+    series.reduce((n, s) => n + s.points.length, 0) + ' observed prices for ' + card.name +
+    ' in ' + series[0].currency + ', across ' +
+    (series.length === 1 ? 'one printing' : series.length + ' printings') +
+    ', from ' + span[0].date + ' to ' + span[span.length - 1].date +
+    ', via ' + span[0].source + '. Weekly over the last year, monthly before it. The shaded ' +
+    'band is the range of asking prices on each day; the line is what the market actually paid.';
+  panel.appendChild(intro);
+  panel.appendChild(multiChart(series));
 
+  // The legend doubles as the price list, so the numbers are readable without
+  // trying to measure a line against an axis.
+  const legend = document.createElement('div');
+  legend.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px 18px;margin:10px 0 0';
   series.forEach((s, i) => {
-    const block = document.createElement('div');
-    if (i > 0) block.style.cssText = 'margin-top:18px;padding-top:16px;border-top:1px solid var(--ink-800)';
-
-    const intro = document.createElement('p');
-    intro.className = 'note';
-    intro.style.margin = '0 0 10px';
-
-    // Two points still get a chart, because a chart is what the reader came
-    // for — but the connector is dashed and labelled, because a line through
-    // two points draws a trend the data does not evidence.
-    const provisional = s.points.length < 3;
-
-    intro.textContent =
-      s.points.length + ' observed prices for ' + card.name + ', ' + s.currency +
-      ', from ' + s.points[0].date + ' to ' + s.points[s.points.length - 1].date +
-      ', via ' + s.points[0].source + '. Weekly over the last year and monthly before it.' +
-      (provisional
-        ? ' Two points are not a trend — the dashed line only connects them.'
-        : '');
-    block.appendChild(intro);
-    block.appendChild(lineChart(s, provisional));
-
-    const spikes = outliers(s.points);
-    if (spikes.length > 0) {
-      const warn = document.createElement('p');
-      warn.className = 'note';
-      warn.style.cssText = 'margin:8px 0 0;color:var(--warn)';
-      warn.textContent =
-        (spikes.length === 1 ? 'One observation sits' : spikes.length + ' observations sit') +
-        ' far outside the rest of this series (' +
-        spikes.map((p) => p.date + ' at ' + money(p.amount, s.currency)).join(', ') +
-        '). A single unusual listing moves a marketplace average sharply on a card that ' +
-        'trades rarely, so read those points as noise until a later one confirms them.';
-      block.appendChild(warn);
-    }
-
-    panel.appendChild(block);
+    const last = s.points[s.points.length - 1];
+    const first = s.points[0];
+    const move = first.amount > 0 ? (last.amount - first.amount) / first.amount : 0;
+    const row = document.createElement('span');
+    row.className = 'note';
+    row.style.cssText = 'margin:0;display:flex;align-items:center;gap:6px';
+    const dot = document.createElement('i');
+    dot.style.cssText = 'width:10px;height:10px;border-radius:2px;flex:none;background:' +
+      SERIES_COLOURS[i % SERIES_COLOURS.length];
+    row.appendChild(dot);
+    row.appendChild(document.createTextNode(
+      s.variant + ' — ' + money(last.amount, s.currency) +
+      '  (' + (move >= 0 ? '+' : '') + Math.round(move * 100) + '% since ' +
+      first.date.slice(0, 7) + ')'));
+    legend.appendChild(row);
   });
+  panel.appendChild(legend);
+
+  for (const s of series) {
+    const spikes = outliers(s.points);
+    if (spikes.length === 0) continue;
+    const warn = document.createElement('p');
+    warn.className = 'note';
+    warn.style.cssText = 'margin:8px 0 0;color:var(--warn)';
+    warn.textContent =
+      (spikes.length === 1 ? 'One observation sits' : spikes.length + ' observations sit') +
+      ' far outside the rest of the ' + s.variant + ' line (' +
+      spikes.map((p) => p.date + ' at ' + money(p.amount, s.currency)).join(', ') +
+      '). A single unusual listing moves a marketplace average sharply on a card that ' +
+      'trades rarely, so read those points as noise until a later one confirms them.';
+    panel.appendChild(warn);
+  }
 
   // Say where the line starts and why, because "price history" invites the
   // reader to expect it back to the card's release and it does not go there.
@@ -5353,6 +5385,120 @@ function outliers(points) {
   const median = sorted[Math.floor(sorted.length / 2)];
   if (!median) return [];
   return points.filter((p) => p.amount > median * 2.5 || p.amount < median / 2.5);
+}
+
+const SERIES_COLOURS = ['#3987e5', '#f0b53c', '#4cc38a', '#b07ce8', '#e8709a'];
+
+/**
+ * Every printing of one card on shared axes, each with the day's asking range
+ * behind it.
+ *
+ * Shared axes are the whole point. Drawn on separate charts each printing is
+ * auto-scaled to its own range, so a 10c Normal and a 26c Reverse Holofoil
+ * produce two identical-looking lines and the reader has to compare axis
+ * labels to notice one is worth two and a half times the other. On one frame
+ * the gap is the first thing visible.
+ *
+ * The band is low-to-high asking price on the day, which is the honest width
+ * of the market: on a thinly traded card the spread is most of what there is
+ * to know, and a single mean line silently hides it.
+ */
+function multiChart(series) {
+  const W = 560, H = 240, PAD_L = 64, PAD_R = 12, PAD_T = 14, PAD_B = 30;
+  const currency = series[0].currency;
+
+  // Dates are shared, so the x axis runs over the union of every printing's
+  // days rather than over one printing's index — otherwise two lines with
+  // different start dates would be drawn on top of each other.
+  const allDates = [...new Set(series.flatMap((s) => s.points.map((p) => p.date)))].sort();
+  const slot = new Map(allDates.map((d, i) => [d, i]));
+
+  let min = Infinity, max = -Infinity;
+  for (const s of series) {
+    for (const p of s.points) {
+      min = Math.min(min, p.low, p.amount);
+      max = Math.max(max, p.high, p.amount);
+    }
+  }
+  if (!Number.isFinite(min) || min === max) { min = (min || 1) * 0.9; max = (max || 1) * 1.1 || 1; }
+  const padY = (max - min) * 0.1;
+  min = Math.max(0, min - padY); max += padY;
+
+  const x = (d) => PAD_L + (slot.get(d) / Math.max(1, allDates.length - 1)) * (W - PAD_L - PAD_R);
+  const y = (v) => PAD_T + (1 - (v - min) / (max - min)) * (H - PAD_T - PAD_B);
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('class', 'chart');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Price history. ' + series.map((s) =>
+    s.variant + ': ' + s.points.map((p) => p.date + ' ' + money(p.amount, currency)).join(', ')
+  ).join('. '));
+
+  const add = (tag, attrs, text) => {
+    const el = document.createElementNS(ns, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    if (text != null) el.textContent = text;
+    svg.appendChild(el);
+    return el;
+  };
+
+  for (let g = 0; g <= 3; g++) {
+    const v = min + ((max - min) * g) / 3;
+    const gy = y(v);
+    add('line', { x1: PAD_L, y1: gy, x2: W - PAD_R, y2: gy, stroke: '#1b1e2a', 'stroke-width': 1 });
+    add('text', {
+      x: PAD_L - 8, y: gy + 4, 'text-anchor': 'end',
+      fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-monospace, monospace',
+    }, money(v, currency));
+  }
+
+  // Bands first, so the lines are never buried under a later printing's shade.
+  series.forEach((s, i) => {
+    const colour = SERIES_COLOURS[i % SERIES_COLOURS.length];
+    const top = s.points.map((p) => x(p.date) + ' ' + y(p.high));
+    const bottom = s.points.slice().reverse().map((p) => x(p.date) + ' ' + y(p.low));
+    add('path', {
+      d: 'M' + top.join(' L') + ' L' + bottom.join(' L') + ' Z',
+      fill: colour, 'fill-opacity': 0.12, stroke: 'none',
+    });
+  });
+
+  series.forEach((s, i) => {
+    const colour = SERIES_COLOURS[i % SERIES_COLOURS.length];
+    // Two points are not a trend, so the connector says so rather than drawing
+    // a confident slope through them.
+    const provisional = s.points.length < 3;
+    add('path', {
+      d: s.points.map((p, k) => (k === 0 ? 'M' : 'L') + x(p.date) + ' ' + y(p.amount)).join(' '),
+      fill: 'none', stroke: colour, 'stroke-width': 2, 'stroke-linejoin': 'round',
+      'stroke-dasharray': provisional ? '5 4' : 'none',
+    });
+
+    // Marks only where they can be told apart. A weekly series over two years
+    // is 72 points across 480 pixels and a dot on each is a caterpillar.
+    const spikes = new Set(outliers(s.points));
+    const step = Math.max(1, Math.round(s.points.length / 18));
+    s.points.forEach((p, k) => {
+      const odd = spikes.has(p);
+      if (!odd && k % step !== 0 && k !== s.points.length - 1) return;
+      add('circle', {
+        cx: x(p.date), cy: y(p.amount), r: odd ? 4.5 : 2.5,
+        fill: '#0e1016', stroke: odd ? '#f0b53c' : colour, 'stroke-width': 2,
+        'stroke-dasharray': odd ? '2 2' : 'none',
+      });
+    });
+  });
+
+  add('text', {
+    x: PAD_L, y: H - 8, fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-monospace, monospace',
+  }, allDates[0]);
+  add('text', {
+    x: W - PAD_R, y: H - 8, 'text-anchor': 'end',
+    fill: '#6b7189', 'font-size': 10, 'font-family': 'ui-monospace, monospace',
+  }, allDates[allDates.length - 1]);
+  return svg;
 }
 
 function lineChart(series, provisional) {

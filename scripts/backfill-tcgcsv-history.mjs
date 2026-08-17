@@ -174,7 +174,8 @@ for root, _, files in os.walk(${JSON.stringify(dir)}):
                 # nothing". Writing it as 0 would draw a crash on the chart.
                 if mp is None:
                     continue
-                rows.append([r['productId'], r['subTypeName'], mp])
+                rows.append([r['productId'], r['subTypeName'], mp,
+                             r.get('lowPrice'), r.get('highPrice')])
 json.dump(rows, sys.stdout)
 `;
   const stdout = execFileSync('python3', ['-c', py], {
@@ -191,19 +192,26 @@ today.setUTCHours(0, 0, 0, 0);
 const dates = targetDates(today);
 const corpus = readCorpus();
 
-// productId+subType -> card ids. Several printings can share a product.
+// productId -> card ids, keyed on the PRODUCT rather than on the product-and-
+// variant pair the card happens to have been baked with.
+//
+// A chart worth looking at shows every printing of a card at once, which is
+// what PriceCharting does with its grade tiers: a Normal at 10c beside a
+// Reverse Holofoil at 26c is the comparison a seller actually wants. 2,222 of
+// the 4,975 corpus products carry more than one priced printing, and matching
+// only the baked variant threw every other one away.
 const wanted = new Map();
 for (const [id, v] of corpus) {
-  const k = v.productId + ' ' + v.subType;
-  if (!wanted.has(k)) wanted.set(k, []);
-  wanted.get(k).push(id);
+  if (!wanted.has(v.productId)) wanted.set(v.productId, []);
+  wanted.get(v.productId).push(id);
 }
 
-console.log(`corpus: ${corpus.size} cards with a product id, ${wanted.size} distinct product/variant pairs`);
+console.log(`corpus: ${corpus.size} cards with a product id, ${wanted.size} distinct products`);
 console.log(`fetching ${dates.length} days: ${dates[0]} .. ${dates[dates.length - 1]}\n`);
 
 mkdirSync(WORK, { recursive: true });
-const series = new Map();          // card id -> [[date, cents], ...]
+// card id -> printing -> [[dateIndex, market, low, high], ...], all in cents.
+const series = new Map();
 let bytes = 0, missing = 0, matchedRows = 0;
 
 for (let i = 0; i < dates.length; i++) {
@@ -219,16 +227,24 @@ for (let i = 0; i < dates.length; i++) {
   bytes += got.bytes;
 
   let hits = 0;
-  for (const [productId, subTypeName, marketPrice] of extractDay(got.archive, date)) {
-    const ids = wanted.get(productId + ' ' + subTypeName);
+  for (const [productId, subTypeName, marketPrice, lowPrice, highPrice] of
+       extractDay(got.archive, date)) {
+    const ids = wanted.get(productId);
     if (!ids) continue;
     // Cents, not currency units. The corpus median price is about a dollar, so
     // rounding to whole units would flatten half of it to "1".
     const cents = Math.round(marketPrice * 100);
     if (!Number.isFinite(cents) || cents <= 0) continue;
+    // The band. Every archive row carries a low and a high, so the chart can
+    // show the spread the market was quoting rather than a bare mean — which
+    // on a thinly traded card is most of what there is to know.
+    const lo = Math.round((lowPrice == null ? marketPrice : lowPrice) * 100);
+    const hi = Math.round((highPrice == null ? marketPrice : highPrice) * 100);
     for (const id of ids) {
-      if (!series.has(id)) series.set(id, []);
-      series.get(id).push([date, cents]);
+      if (!series.has(id)) series.set(id, new Map());
+      const byPrinting = series.get(id);
+      if (!byPrinting.has(subTypeName)) byPrinting.set(subTypeName, []);
+      byPrinting.get(subTypeName).push([i, cents, Math.min(lo, cents), Math.max(hi, cents)]);
     }
     hits++;
   }
@@ -251,20 +267,31 @@ const hash = (s) => {
 };
 
 const files = Array.from({ length: BUCKETS }, () => ({}));
-let points = 0;
-for (const [id, pts] of series) {
-  pts.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  // One reading per day, and the corpus can map two cards to one product.
-  const seen = new Set();
-  const clean = pts.filter(([d]) => (seen.has(d) ? false : (seen.add(d), true)));
-  if (clean.length < 2) continue;                 // a single dot is not a history
-  files[hash(id)][id] = clean;
-  points += clean.length;
+let points = 0, printings = 0;
+for (const [id, byPrinting] of series) {
+  const out = {};
+  for (const [printing, pts] of byPrinting) {
+    pts.sort((a, b) => a[0] - b[0]);
+    // One reading per day per printing: two corpus cards can share a product.
+    const seen = new Set();
+    const clean = pts.filter(([d]) => (seen.has(d) ? false : (seen.add(d), true)));
+    if (clean.length < 2) continue;               // a single dot is not a history
+    out[printing] = clean;
+    points += clean.length;
+    printings++;
+  }
+  if (Object.keys(out).length === 0) continue;
+  files[hash(id)][id] = out;
 }
 
 let total = 0;
 for (let b = 0; b < BUCKETS; b++) {
-  const body = JSON.stringify({ currency: 'USD', source: 'TCGplayer via TCGCSV', cards: files[b] });
+  // The dates live once per bucket rather than on all 364,000 points, so each
+  // point is an index plus three small integers. That is most of the size of
+  // carrying three prices instead of one paid back.
+  const body = JSON.stringify({
+    currency: 'USD', source: 'TCGplayer via TCGCSV', dates, cards: files[b],
+  });
   writeFileSync(join(OUT, `hist-${String(b).padStart(2, '0')}.json`), body);
   total += body.length;
 }
@@ -281,5 +308,6 @@ writeFileSync(join(OUT, 'index.json'), JSON.stringify({
 }, null, 1));
 
 console.log(`wrote ${BUCKETS} buckets, ${(total / 1048576).toFixed(2)}MB total, ` +
-  `${points} points over ${Object.values(files).reduce((n, f) => n + Object.keys(f).length, 0)} cards`);
+  `${points} points across ${printings} printings of ` +
+  `${Object.values(files).reduce((n, f) => n + Object.keys(f).length, 0)} cards`);
 console.log(`average ${Math.round(total / Math.max(1, series.size))}B per card, fetched only when a card is opened`);
