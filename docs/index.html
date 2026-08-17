@@ -5247,7 +5247,12 @@ async function loadHistory(id) {
   if (!HISTORY_CACHE.has(n)) {
     HISTORY_CACHE.set(n, (async () => {
       try {
-        const name = 'history/hist-' + String(n).padStart(2, '0') + '.json';
+        // Versioned, so a CDN holding an older copy of this bucket cannot
+        // serve it to a page that has already been updated. The page and the
+        // buckets are built together and the bake date changes with them, so
+        // it is exactly the key that should invalidate them together.
+        const name = 'history/hist-' + String(n).padStart(2, '0') + '.json' +
+          '?v=' + encodeURIComponent(CORPUS.bakedAt || '1');
         const res = await fetch(new URL(name, location.href).href, { cache: 'force-cache' });
         if (!res.ok) return null;
         return await res.json();
@@ -5267,20 +5272,44 @@ async function loadHistory(id) {
   // held once per bucket rather than repeated on every one of half a million
   // points.
   const dates = bucket.dates || [];
-  const out = [];
-  for (const name of Object.keys(entry)) {
-    const pts = entry[name];
-    if (!pts || pts.length < 2) continue;
-    out.push({
-      variant: name,
-      currency: bucket.currency || 'USD',
-      points: pts.map(([d, market, low, high]) => ({
+  const source = bucket.source || 'TCGplayer';
+  const currency = bucket.currency || 'USD';
+
+  // Read BOTH shapes, because a CDN does not update every file at once.
+  //
+  // The first version of these buckets was one flat [date, cents] list per
+  // card; the current one is a date table plus [dateIndex, market, low, high]
+  // per printing. Both were served from the same URL within a day of each
+  // other, and githack was still handing out the old one for the buckets after
+  // it had caught up on the page. Read strictly, an old bucket has no date
+  // table, every point resolves to undefined, they all filter out and the
+  // chart SILENTLY DISAPPEARS — the failure looks exactly like a card with no
+  // history, which is a normal state, so nothing would have reported it.
+  const rows = (pts) => pts.map((p) => {
+    if (dates.length) {
+      const [d, market, low, high] = p;
+      return {
         date: dates[d], amount: market / 100,
         low: (low == null ? market : low) / 100,
         high: (high == null ? market : high) / 100,
-        source: bucket.source || 'TCGplayer',
-      })).filter((p) => p.date),
-    });
+        source,
+      };
+    }
+    // Old shape: the date is in the point itself and there is no band.
+    const [date, cents] = p;
+    return { date, amount: cents / 100, low: cents / 100, high: cents / 100, source };
+  }).filter((p) => p.date && Number.isFinite(p.amount));
+
+  const out = [];
+  // An old bucket maps a card straight to a list; a new one maps it to
+  // printings first.
+  const printings = Array.isArray(entry) ? { 'market price': entry } : entry;
+  for (const name of Object.keys(printings)) {
+    const pts = printings[name];
+    if (!Array.isArray(pts) || pts.length < 2) continue;
+    const points = rows(pts);
+    if (points.length < 2) continue;
+    out.push({ variant: name, currency, points });
   }
   // Dearest printing first: it is the one a holder most wants to see.
   out.sort((a, b) => b.points[b.points.length - 1].amount - a.points[a.points.length - 1].amount);
@@ -5321,7 +5350,9 @@ async function renderHistory(card) {
     'is the card\'s value — a rolling median of what the market paid, which is how a price ' +
     'guide reaches a figure rather than quoting the last sale. The faint line behind it is the ' +
     'raw daily readings it was taken from, and the shaded band is the range of asking prices ' +
-    'on the day.';
+    'on the day. Every line here is an UNGRADED card. A graded copy of the same card sells for ' +
+    'a different figure entirely — often several times this — and no free source publishes ' +
+    'graded prices, so none are shown rather than guessed at.';
   panel.appendChild(intro);
   panel.appendChild(multiChart(series));
 
