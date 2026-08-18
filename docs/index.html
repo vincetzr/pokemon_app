@@ -1368,12 +1368,19 @@ const RECTIFIED_HEIGHT = Math.round(RECTIFIED_WIDTH / CARD_ASPECT);
 /**
  * Cap on the working copy of the photo.
  *
- * Sized against the print tier rather than picked round. A 12MP tablet photo
- * is 4032x3024; a card filling the frame's short edge occupies about 0.72 of
- * it, so downscaling to 3200 left roughly 1440px across the card — barely over
- * the 1400 the halftone check needs, and under it the moment the card sits any
- * further away. Keeping the full 4032 keeps that check reachable, and stays
- * well inside iOS Safari's 16.7M-pixel canvas ceiling (4032x3024 is 12.2M).
+ * Chosen as the largest a 12MP tablet photo comes in at (4032x3024), which
+ * stays well inside iOS Safari's 16.7M-pixel canvas ceiling — 12.2M against
+ * 16.7M — and keeps identification and the reference comparison at full
+ * fidelity.
+ *
+ * It does NOT make the print check reachable, and the note here used to claim
+ * it did, on the old 1400px tier. That tier was wrong: measured against the
+ * app's own FFT, a clean synthetic screen scores 1.00 to 1.07 at 1400 with a
+ * threshold of 1.2, and only clears reliably around 5000. A card filling the
+ * frame at this cap is about 2,870 across, so no whole-card photograph
+ * satisfies it on any device. Raising the cap is not the answer either — the
+ * quantity that matters is pixels per halftone cell, which a close-up of part
+ * of a card gets and a wider photo of all of it never will.
  */
 const MAX_SOURCE_EDGE = 4032;
 
@@ -6277,22 +6284,33 @@ function renderQuality(result) {
     box.appendChild(div);
   }
 
+  // Lower-cased mid-sentence, so the sentence has to start with something
+  // else: "card width fell short on this photo." read as a typo, because it
+  // was one — the label was being dropped in at the head of a sentence.
   const failing = readings.filter((r) => !r.ok);
+  const names = failing.map((r) => r.k.toLowerCase());
   $('quality-intro').textContent = failing.length === 0
     ? 'The photo cleared every capture threshold, so nothing below was limited by the image itself.'
-    : 'These readings decide which checks are allowed to run at all. ' +
-      failing.map((r) => r.k.toLowerCase()).join(' and ') +
-      (failing.length === 1 ? ' fell short' : ' fell short') + ' on this photo.';
+    : 'These readings decide which checks are allowed to run at all. On this photo, ' +
+      (names.length === 1 ? names[0] + ' fell short'
+        : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' fell short') + '.';
 
   const advice = $('quality-advice');
   advice.innerHTML = '';
   const tips = q.warnings.slice();
   if (result.cardWidthPx < RESOLUTION_TIERS.print) {
+    // Says what is true rather than what used to be true. Every photo is
+    // worked on at 4032 pixels along its long edge, so a card filling the
+    // frame reaches about 2,870 across whatever the camera does — the old
+    // advice to "take another photo closer in" could never succeed, and the
+    // print check's own text was corrected while this one was left saying it.
     tips.push(
-      'The card covered about ' + Math.round(result.cardWidthPx) + ' pixels across its short edge. ' +
-      'The halftone check needs ' + RESOLUTION_TIERS.print + ', which in practice means filling ' +
-      'the frame with the card. It is the only check here that can actively support a card, so ' +
-      'it is worth another photo taken closer in.'
+      'The card covered about ' + Math.round(result.cardWidthPx) + ' pixels across its short ' +
+      'edge, and reading the print screen needs about ' + RESOLUTION_TIERS.print + '. Moving ' +
+      'closer will not get there: photos are worked on at 4032 pixels along the long edge, so ' +
+      'a card filling the frame reaches about 2,870 however many megapixels the camera has. ' +
+      'That check needs a close-up of PART of a card, which this build does not take yet — ' +
+      'nothing is concluded from its absence.'
     );
   }
   if (result.halfTurned) {
@@ -8577,9 +8595,9 @@ async function startCamera() {
   CAM.zoomSettled = false;
 
   // Report what the platform actually granted. A live track is usually far
-  // below the still camera, and the halftone check needs about 1400 pixels
-  // across the card — so if this track cannot reach that, say so now rather
-  // than letting every scan come back with that check abstaining.
+  // below the still camera, so the figure a filled guide actually yields is
+  // worth stating up front rather than letting every scan come back with the
+  // resolution-gated checks abstaining unexplained.
   const settings = CAM.track && CAM.track.getSettings ? CAM.track.getSettings() : {};
   // Derive the figure from the same guide the user will fill, not from the
   // frame's short edge — the guide is height-limited on a tall frame, so the
