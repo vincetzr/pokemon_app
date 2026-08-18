@@ -6391,6 +6391,10 @@ function collapseCapture() {
 }
 
 async function scan(file) {
+  // Same reason as the aligner: a viewfinder left running can fire its own
+  // capture over the top of the files the user just picked.
+  stopCamera();
+
   $('sec-error').hidden = true;
   $('results').hidden = true;
   $('sec-bulk').hidden = true;
@@ -6421,6 +6425,10 @@ async function scan(file) {
    =================================================================== */
 
 async function runBulk(files) {
+  // Same reason as the aligner: a viewfinder left running can fire its own
+  // capture over the top of the files the user just picked.
+  stopCamera();
+
   $('sec-error').hidden = true;
   $('results').hidden = true;
   $('sec-bulk').hidden = true;
@@ -8463,6 +8471,16 @@ function updateAlignNote() {
 }
 
 async function openAligner(file) {
+  // Put the viewfinder down first.
+  //
+  // Choosing a photo left the live camera running underneath, still ticking
+  // and still armed — so it could fire its own capture while this photo was
+  // being framed or analysed, and hand back a report of whatever happened to
+  // be under the lens instead of the picture that was chosen. Two capture
+  // paths cannot own the report at once, and the one the user just asked for
+  // wins.
+  stopCamera();
+
   $('sec-error').hidden = true;
   $('results').hidden = true;
   $('sec-bulk').hidden = true;
