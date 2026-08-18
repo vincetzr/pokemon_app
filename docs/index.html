@@ -815,9 +815,16 @@
 
         <div class="figures">
           <div class="figure">
-            <div class="k">Score</div>
+            <!-- NOT "Score". Under a heading that says Authenticity, a bare
+                 "Score 100" reads as "100% genuine" — which is the one thing
+                 this page must never say, and it was saying it in the largest
+                 type on the panel. It is the average agreement of the checks
+                 that actually ran, and the label now says so. -->
+            <div class="k">Agreement</div>
             <div class="v" id="fig-score">—</div>
             <div class="meter"><i id="bar-score" style="width:0%"></i></div>
+            <div class="k" id="fig-score-note"
+                 style="letter-spacing:0;text-transform:none;margin-top:3px"></div>
           </div>
           <div class="figure">
             <div class="k">Coverage</div>
@@ -4779,6 +4786,13 @@ function renderReport(report) {
 
   $('fig-score').textContent = report.scoreIsMeaningful ? report.score : '—';
   $('bar-score').style.width = (report.scoreIsMeaningful ? report.score : 0) + '%';
+  const scoreNote = $('fig-score-note');
+  if (scoreNote) {
+    scoreNote.textContent = !report.scoreIsMeaningful
+      ? 'too little ran to average'
+      : 'across the ' + ranCount + (ranCount === 1 ? ' check' : ' checks') +
+        ' that ran — not a percentage genuine';
+  }
 
   // Coverage, not confidence. Confidence is confidence in a VERDICT, and there
   // usually is not one here — so the figure sat between 21% and 40% describing
