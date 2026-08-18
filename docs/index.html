@@ -617,6 +617,12 @@
   }
   .seg button[aria-pressed="true"] { background: var(--ink-800); color: var(--ink-050); }
 
+  /* The summary is read, not scanned, so it gets prose sizing rather than the
+     dense figure styling the panels below it use. */
+  .lede { margin: 0 0 9px; font-size: 15px; line-height: 1.5; color: var(--ink-100); }
+  .lede:last-of-type { margin-bottom: 0; }
+  .lede b { color: var(--ink-050); }
+
   ul.plain { margin: 8px 0 0; padding-left: 1.1em; color: var(--ink-300); font-size: 12.5px; }
   ul.plain li { margin: 5px 0; }
 
@@ -765,6 +771,21 @@
   </div>
 
   <div id="results" hidden>
+
+    <!-- The answer, before the machinery.
+         Everything below this is a measurement, and measurements are what a
+         grader shows a colleague. What a customer asked was: what is it, what
+         is it worth, is it real, and what should I do. That is four sentences
+         and it belongs at the top. -->
+    <section id="sec-summary">
+      <div class="eyebrow">What we can tell you</div>
+      <div class="panel">
+        <p class="lede" id="sum-what"></p>
+        <p class="lede" id="sum-worth"></p>
+        <p class="lede" id="sum-real"></p>
+        <p class="note" id="sum-next" style="margin:12px 0 0"></p>
+      </div>
+    </section>
 
     <section id="sec-verdict">
       <div class="eyebrow">Authenticity</div>
@@ -4888,6 +4909,9 @@ function selectCard(card, btn) {
   renderPrices(card);
   renderHistory(card);
   renderCentering(card);
+  // The summary said "tap the card below" — once that has happened it should
+  // be answering the question, not still asking it.
+  if (LAST_RESULT) renderSummary(LAST_RESULT, card);
 }
 
 /**
@@ -6236,6 +6260,124 @@ function renderQuality(result) {
   }
 }
 
+/**
+ * The four things a person actually asked, answered in their own words.
+ *
+ * Everything else in this report is a measurement shown the way a grader would
+ * show a colleague: a score, a coverage figure, five checks with their
+ * reasons. That is the right material and the wrong opening. Someone holding a
+ * card wants to know what it is, what it is worth, whether it is real, and
+ * what to do next — and none of those are answered by "Coverage 36%".
+ *
+ * Every sentence here is derived from the same state the panels below use.
+ * Nothing is softened: where the honest answer is "we cannot tell you", it
+ * says so, because a summary that reads more confident than the evidence is
+ * worse than no summary at all.
+ */
+function renderSummary(result, chosen) {
+  const report = result.report;
+  const top = result.candidates && result.candidates[0];
+  const refOk = (report.signals || [])
+    .some((s) => s.id === 'reference' && s.status === 'ok');
+  const named = chosen || ((top && (namePick(result.candidates) || refOk)) ? top.card : null);
+
+  /* --- what is it --- */
+  //
+  // Named the way the card names itself: set, number out of the printed total,
+  // rarity, year. That is what a person reads off the card to check we agree
+  // with them, and it is the difference between "trust me" and "look".
+  let what = '';
+  if (named) {
+    const bits = [];
+    if (named.setName) bits.push(escapeHtml(String(named.setName)));
+    if (named.number) {
+      bits.push('card ' + escapeHtml(String(named.number)) +
+        (named.printedTotal ? ' of ' + escapeHtml(String(named.printedTotal)) : ''));
+    }
+    if (named.rarity) bits.push(escapeHtml(String(named.rarity)));
+    if (named.releaseDate) bits.push(escapeHtml(String(named.releaseDate).slice(0, 4)));
+    what = 'This is <b>' + escapeHtml(named.name) + '</b>' +
+      (bits.length ? ' — ' + bits.join(', ') : '') + '.';
+    if (named.language && named.language !== 'English') {
+      what += ' It is the ' + escapeHtml(String(named.language)) + ' printing, which trades ' +
+        'separately from the English one.';
+    }
+    if (!chosen && refOk && !namePick(result.candidates)) {
+      what += ' The artwork was checked against the official image to confirm it.';
+    }
+  } else {
+    what = 'We could not pin this down to a single card. The closest matches are ' +
+      'listed below — tap the one you are holding.';
+  }
+  $('sum-what').innerHTML = what;
+
+  /* --- what is it worth --- */
+  const value = named ? bestValue(named) : null;
+  $('sum-worth').innerHTML = !named
+    ? 'Once you pick the right card, its price and chart open below.'
+    : value
+      ? 'A Near Mint copy is asking about <b>' + money(value.amount, value.currency) + '</b>' +
+        (chosen ? ' — the chart below shows how that has moved.'
+                : '. Tap it below for the full price breakdown and chart.')
+      : 'No price is baked in for this card, so there is nothing reliable to quote.';
+
+  /* --- is it real --- */
+  //
+  // The one place this page must not overclaim. Nothing here can prove a card
+  // genuine: the checks that catch a good counterfeit need magnification and
+  // lighting this app does not have, which is stated rather than implied.
+  const ran = report.ranCount;
+  const settled = report.scoreIsMeaningful;
+  $('sum-real').innerHTML =
+    ran === 0
+      ? 'We could not check anything about this photo, so nothing is known ' +
+        'either way about whether the card is genuine.'
+      : report.verdict === 'red_flags'
+        ? 'Something about this card does not match what we expect. Read the ' +
+          'checks below before buying or selling it.'
+        : (settled ? 'Nothing looks wrong. ' : 'Too little could be measured to settle it. ') +
+          'Everything we <i>could</i> measure — ' + ran +
+          (ran === 1 ? ' check' : ' checks') + ' of ' + report.totalCount +
+          ' — is consistent with a genuine card. That is not the same as proving ' +
+          'it genuine: the things that give away a good fake need magnification ' +
+          'and lighting this app does not have, so we never claim a card is real.';
+
+  /* --- what to do next --- */
+  //
+  // ONE action, the one that would move this particular report furthest, so it
+  // reads as advice rather than a menu.
+  const sig = (id) => (report.signals || []).find((s) => s.id === id);
+  const visionOff = (sig('vision') || {}).needsKey && (sig('vision') || {}).status !== 'ok';
+  const surfaceUncaptured = (sig('surface') || {}).whyShort === 'has not been given its own capture yet';
+  const softPhoto = result.quality && result.quality.tooBlurry;
+  const dear = value && value.amount >= 50;
+
+  // Value outranks everything except an unusable photo, because on a card
+  // worth real money the honest advice is not "run one more check here" — it
+  // is that nothing on this page substitutes for a professional opinion, and
+  // saying anything else first would be selling the app over the customer.
+  $('sum-next').textContent =
+    softPhoto
+      ? 'Next: retake the photo with the card flat, filling the frame and in focus — this one was too soft for several checks to read.'
+      : !named
+        ? 'Next: tap the card you are holding from the list below, or search for it by name.'
+        : dear
+          ? 'Next: at around ' + money(value.amount, value.currency) + ' this is worth an expert ' +
+            'opinion before you buy or sell. Nothing on this page replaces professional ' +
+            'authentication, and this is exactly the value counterfeiters aim at.' +
+            (visionOff ? ' The detailed inspection below is free and worth switching on first.' : '')
+          : visionOff
+            ? 'Next: switch on the detailed inspection further down. It reads the fine print a measurement cannot, it runs in this page, and a free Google AI Studio key costs nothing.'
+            : surfaceUncaptured
+              ? 'Next: run the surface capture below — a few seconds of video under a moving light, which is the one check here that looks at the card as an object rather than a picture.'
+              : 'Next: nothing further is needed here. The checks below show exactly what was and was not looked at.';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function renderSingle(result) {
   LAST_RESULT = result;
 
@@ -6267,6 +6409,7 @@ function renderSingle(result) {
           'flattened card above is cut off, the frame is the usual reason. Adjust it and scan again.';
   }
   drawRectified($('rectified'), result.rectified);
+  renderSummary(result, null);
   renderReport(result.report);
   renderQuality(result);
 
