@@ -6362,6 +6362,16 @@ function renderSummary(result, chosen) {
   const refOk = (report.signals || [])
     .some((s) => s.id === 'reference' && s.status === 'ok');
   const named = chosen || ((top && (namePick(result.candidates) || refOk)) ? top.card : null);
+  // Named, but which PRINTING? Base and Base Set (Shadowless) are the same
+  // picture with a drop shadow, score 96% and 94% here, and are several times
+  // apart in price. Asserting one of them at the top — with its price — while
+  // the panel below says they are within a whisker of each other is the most
+  // expensive contradiction this page could print, so the summary carries the
+  // doubt instead of hiding it. Suppressed once the reader has chosen: at that
+  // point the printing is their call, and they have made it.
+  const runnerUp = result.candidates && result.candidates[1];
+  const printingUnsure = !chosen && !!named && !!runnerUp &&
+    (top.score - runnerUp.score) < CONFIDENT_MARGIN;
 
   /* --- what is it --- */
   //
@@ -6387,6 +6397,12 @@ function renderSummary(result, chosen) {
     if (!chosen && refOk && !namePick(result.candidates)) {
       what += ' The artwork was checked against the official image to confirm it.';
     }
+    if (printingUnsure) {
+      what += ' The artwork is certain; WHICH PRINTING is not. ' +
+        escapeHtml(runnerUp.card.setName || 'another printing') +
+        ' scores almost as closely, and the two are worth very different money — ' +
+        'pick yours from the list below.';
+    }
   } else {
     what = 'We could not pin this down to a single card. The closest matches are ' +
       'listed below — tap the one you are holding.';
@@ -6407,6 +6423,11 @@ function renderSummary(result, chosen) {
   let worth;
   if (!named) {
     worth = 'Once you pick the right card, its price and chart open below.';
+  } else if (printingUnsure && value) {
+    worth = 'If it is the ' + escapeHtml(String(named.setName || 'top match')) + ' printing, a ' +
+      'Near Mint copy is asking about <b>' + money(value.amount, value.currency) + '</b> — but ' +
+      'that figure belongs to that printing alone, and the printing is not settled. Pick the ' +
+      'right one below before relying on any number here.';
   } else if (value && paid && Math.abs(paid.amount - value.amount) / Math.max(1, value.amount) > 0.1) {
     worth = 'Sellers are asking about <b>' + money(value.amount, value.currency) +
       '</b> for a Near Mint copy; the last price actually paid was <b>' +
@@ -6463,7 +6484,11 @@ function renderSummary(result, chosen) {
       ? 'Next: retake the photo with the card flat, filling the frame and in focus — this one was too soft for several checks to read.'
       : !named
         ? 'Next: tap the card you are holding from the list below, or search for it by name.'
-        : dear
+        : printingUnsure
+          ? 'Next: settle which printing you have, from the list below — the set symbol and the ' +
+            'number under each name are what separate them. Every price on this page depends on ' +
+            'getting that right.'
+          : dear
           ? 'Next: at around ' + money(value.amount, value.currency) + ' this is worth an expert ' +
             'opinion before you buy or sell. Nothing on this page replaces professional ' +
             'authentication, and this is exactly the value counterfeiters aim at.' +
