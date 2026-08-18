@@ -5700,12 +5700,60 @@ function namePick(candidates) {
  * Kept free of rendering so the pile scan can run it over a stack of photos
  * without the single-card view fighting it for the same elements.
  */
+/**
+ * Which way to look at a photograph nobody aimed.
+ *
+ * The live path tells detection where the card is, because the user was
+ * holding it inside a guide. A photograph from the library says nothing, and
+ * detecting over the whole frame gets the card only when the card is the most
+ * obvious region in it. Measured over eight real photographs, blind detection
+ * named 3 of 8 against the aimed path's 7 of 8 — and the failures are legible
+ * in one number: the blind quad came back around 3,016 pixels wide on a 4,032
+ * pixel photo, three quarters of the frame. It had found the desk.
+ *
+ * So both are tried and the better one is kept. Detection is cheap — it runs
+ * on a 480px working copy — while identification is not, so this spends a
+ * second detection to avoid identifying the wrong rectangle.
+ *
+ * "Better" is deliberately not "bigger". A region three quarters of the frame
+ * across is exactly the failure being fixed, so the test is how close the
+ * measured proportions are to a CARD's, with size only breaking a tie.
+ */
+function photoRegion(source) {
+  const region = captureRegion(source);
+  const score = (det) => {
+    if (!det || det.method !== 'contour') return -1;
+    const aspectError = Math.abs(det.measuredAspect - CARD_ASPECT) / CARD_ASPECT;
+    if (aspectError > GROSS_DEVIATION) return -1;
+    const xs = det.corners.map((c) => c.x), ys = det.corners.map((c) => c.y);
+    const w = Math.max.apply(null, xs) - Math.min.apply(null, xs);
+    const h = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+    const fill = (w * h) / (source.width * source.height);
+    // A card that fills nearly the whole frame is a frame, not a card.
+    if (fill > 0.85) return -1;
+    return (1 - aspectError) + fill * 0.1;
+  };
+
+  let aimed = null, blind = null;
+  try { aimed = detectCard(source, { roi: region.roi, expect: region.expect }); } catch { /* */ }
+  try { blind = detectCard(source); } catch { /* */ }
+  return score(aimed) >= score(blind) ? region : undefined;
+}
+
 async function analyzePhoto(file, onStep, opts) {
   const step = onStep || (() => {});
   step(0);
   await yieldToPaint();
   const img = await loadImage(file);
-  return analyzeSource(imageDataFromImg(img), onStep, opts);
+  const source = imageDataFromImg(img);
+  // Only when the caller has not already said where to look — the aligner
+  // passes hand-placed corners and must not be second-guessed.
+  const options = opts || {};
+  if (!options.corners && !options.expect) {
+    const region = photoRegion(source);
+    if (region) return analyzeSource(source, onStep, { ...options, ...region });
+  }
+  return analyzeSource(source, onStep, opts);
 }
 
 /** The pipeline from a decoded frame on, shared by the file and camera paths. */
@@ -8505,9 +8553,20 @@ async function openAligner(file) {
   renderSteps(1);
   await yieldToPaint();
 
+  // The SAME choice the analysis makes, rather than a blind look.
+  //
+  // This detected over the whole frame with no aim, which on a photo of a card
+  // on a textured desk finds the desk: measured on pale-victini it returned a
+  // quad 3,016px across on a 4,032px photo and the auto-analysis that follows
+  // then identified a different card entirely — Paras rather than Victini — on
+  // a photo the aimed path names at 0.917. Worse, it did so CONFIDENTLY, so
+  // the aligner never opened and the user was never offered the correction.
   let detection = null;
   try {
-    detection = detectCard(source);
+    const region = photoRegion(source);
+    detection = region
+      ? detectCard(source, { roi: region.roi, expect: region.expect })
+      : detectCard(source);
   } catch { detection = null; }
 
   const usable = detection && detection.method === 'contour' && detection.confidence >= 0.45;
