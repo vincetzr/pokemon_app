@@ -4903,14 +4903,18 @@ function candidateButton(entry, onPick) {
   return btn;
 }
 
-function selectCard(card, btn) {
+async function selectCard(card, btn) {
   document.querySelectorAll('.cand[aria-pressed=true]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
   if (btn) btn.setAttribute('aria-pressed', 'true');
   renderPrices(card);
-  renderHistory(card);
   renderCentering(card);
   // The summary said "tap the card below" — once that has happened it should
-  // be answering the question, not still asking it.
+  // be answering the question, not still asking it. Drawn twice on purpose:
+  // once now, so the panel updates the instant the card is tapped, and again
+  // after the history lands, because only then can it quote what the card
+  // actually SOLD for beside what sellers are asking.
+  if (LAST_RESULT) renderSummary(LAST_RESULT, card);
+  await renderHistory(card);
   if (LAST_RESULT) renderSummary(LAST_RESULT, card);
 }
 
@@ -5247,6 +5251,10 @@ function conditionChart(rows) {
 
 const HISTORY_BUCKETS = 64;
 const HISTORY_CACHE = new Map();
+// The same buckets once they have RESOLVED. The summary is drawn synchronously
+// and cannot await a fetch, so it reads this and simply says less until the
+// chart has pulled the bucket.
+const HISTORY_READY = new Map();
 
 function historyBucket(id) {
   let h = 2166136261;
@@ -5279,7 +5287,9 @@ async function loadHistory(id) {
           '?v=' + encodeURIComponent(CORPUS.bakedAt || '1');
         const res = await fetch(new URL(name, location.href).href, { cache: 'force-cache' });
         if (!res.ok) return null;
-        return await res.json();
+        const body = await res.json();
+        HISTORY_READY.set(n, body);
+        return body;
       } catch { return null; }
     })());
   }
@@ -5370,13 +5380,8 @@ async function renderHistory(card) {
     ' in ' + series[0].currency + ', across ' +
     (series.length === 1 ? 'one printing' : series.length + ' printings') +
     ', from ' + span[0].date + ' to ' + span[span.length - 1].date +
-    ', via ' + span[0].source + '. Weekly over the last year, monthly before it. The bold line ' +
-    'is the card\'s value — a rolling median of what the market paid, which is how a price ' +
-    'guide reaches a figure rather than quoting the last sale. The faint line behind it is the ' +
-    'raw daily readings it was taken from, and the shaded band is the range of asking prices ' +
-    'on the day. Every line here is an UNGRADED card. A graded copy of the same card sells for ' +
-    'a different figure entirely — often several times this — and no free source publishes ' +
-    'graded prices, so none are shown rather than guessed at.';
+    '. The bold line is the card\'s value; the faint line behind it is the daily readings it ' +
+    'was taken from; the shaded band is the range of asking prices that day.';
   panel.appendChild(intro);
   panel.appendChild(multiChart(series));
 
@@ -5427,11 +5432,18 @@ async function renderHistory(card) {
   const foot = document.createElement('p');
   foot.className = 'note';
   foot.style.cssText = 'margin:14px 0 0;color:var(--ink-400)';
+  // The caveats live here rather than above the chart. Someone looking at a
+  // price chart wants the chart; the provenance matters, and it matters after
+  // they have seen the line rather than instead of it.
   foot.textContent =
-    'These are prices actually observed on TCGplayer, taken from the TCGCSV daily archive. ' +
-    'The record starts on 2024-02-08 for English cards and 2025-01-07 for Japanese ones — ' +
-    'that is where the archive begins, not where the card does, and no free source goes back ' +
-    'further. Nothing before those dates is drawn or guessed at.';
+    'Every line here is an UNGRADED card — a graded copy sells for a different figure ' +
+    'entirely, often several times this, and no free source publishes graded prices, so none ' +
+    'are shown rather than guessed at. The value line is a rolling median, which is how a ' +
+    'price guide reaches a figure rather than quoting the last sale. Sampled weekly over the ' +
+    'last year and monthly before it, from prices actually observed on TCGplayer via the ' +
+    'TCGCSV daily archive. The record starts on 2024-02-08 for English cards and 2025-01-07 ' +
+    'for Japanese ones — that is where the archive begins, not where the card does, and no ' +
+    'free source goes back further. Nothing before those dates is drawn or guessed at.';
   panel.appendChild(foot);
 }
 
@@ -5514,13 +5526,26 @@ function multiChart(series) {
   const allDates = [...new Set(series.flatMap((s) => s.points.map((p) => p.date)))].sort();
   const slot = new Map(allDates.map((d, i) => [d, i]));
 
+  // The axis follows what the market PAID, not what anyone asked.
+  //
+  // Asking prices have no upper bound — one listing at $5,030 on a card
+  // trading at $852 is a normal thing to find on a marketplace — and scaling
+  // to the band let a single absurd ask rescale the whole chart and squash the
+  // value line into the bottom fifth. The band is still drawn, and simply
+  // runs off the top where it is silly, which is the honest picture: the line
+  // is the answer and the band is context.
   let min = Infinity, max = -Infinity;
   for (const s of series) {
     for (const p of s.points) {
-      min = Math.min(min, p.low, p.amount);
-      max = Math.max(max, p.high, p.amount);
+      min = Math.min(min, p.amount);
+      max = Math.max(max, p.amount);
     }
   }
+  // Let the band widen the axis, but only as far as it stays informative.
+  const lows = series.flatMap((s) => s.points.map((p) => p.low)).sort((a, b) => a - b);
+  const highs = series.flatMap((s) => s.points.map((p) => p.high)).sort((a, b) => a - b);
+  if (lows.length) min = Math.min(min, lows[Math.floor(lows.length * 0.1)]);
+  if (highs.length) max = Math.max(max, highs[Math.floor(highs.length * 0.75)]);
   if (!Number.isFinite(min) || min === max) { min = (min || 1) * 0.9; max = (max || 1) * 1.1 || 1; }
   const padY = (max - min) * 0.1;
   min = Math.max(0, min - padY); max += padY;
@@ -5555,7 +5580,19 @@ function multiChart(series) {
     }, money(v, currency));
   }
 
-  // Bands first, so the lines are never buried under a later printing's shade.
+  // Bands first, so the lines are never buried under a later printing's shade,
+  // and clipped to the plot so a band running off the top does not paint over
+  // the axis labels.
+  const clipId = 'plot-clip';
+  const defs = document.createElementNS(ns, 'defs');
+  const clip = document.createElementNS(ns, 'clipPath');
+  clip.setAttribute('id', clipId);
+  const clipRect = document.createElementNS(ns, 'rect');
+  clipRect.setAttribute('x', PAD_L); clipRect.setAttribute('y', PAD_T);
+  clipRect.setAttribute('width', W - PAD_L - PAD_R);
+  clipRect.setAttribute('height', H - PAD_T - PAD_B);
+  clip.appendChild(clipRect); defs.appendChild(clip); svg.appendChild(defs);
+
   series.forEach((s, i) => {
     const colour = SERIES_COLOURS[i % SERIES_COLOURS.length];
     const top = s.points.map((p) => x(p.date) + ' ' + y(p.high));
@@ -5563,6 +5600,7 @@ function multiChart(series) {
     add('path', {
       d: 'M' + top.join(' L') + ' L' + bottom.join(' L') + ' Z',
       fill: colour, 'fill-opacity': 0.12, stroke: 'none',
+      'clip-path': 'url(#' + clipId + ')',
     });
   });
 
@@ -6274,6 +6312,36 @@ function renderQuality(result) {
  * says so, because a summary that reads more confident than the evidence is
  * worse than no summary at all.
  */
+/**
+ * The last observed market price for a card, IF the history bucket is already
+ * in hand. Deliberately synchronous and deliberately allowed to return null:
+ * the summary is drawn the instant a scan finishes and must not wait on a
+ * network fetch to say what the card is. Once the chart has pulled its bucket
+ * — which it does when a card is tapped — the summary is redrawn and this
+ * answers.
+ */
+function latestPaid(id) {
+  // A card with no id is a legitimate state — the pile scan and the aligner
+  // both build partial records — and it must not take the whole summary down
+  // with it, which is what hashing an undefined id did.
+  if (!id) return null;
+  const bucket = HISTORY_READY.get(historyBucket(String(id)));
+  const entry = bucket && bucket.cards && bucket.cards[id];
+  if (!entry) return null;
+  const dates = bucket.dates || [];
+  let best = null;
+  const printings = Array.isArray(entry) ? { x: entry } : entry;
+  for (const name of Object.keys(printings)) {
+    const pts = printings[name];
+    if (!pts || !pts.length) return null;
+    const last = pts[pts.length - 1];
+    const when = dates.length ? last[0] : -1;
+    const cents = dates.length ? last[1] : last[1];
+    if (!best || when > best.when) best = { when, amount: cents / 100, currency: bucket.currency || 'USD' };
+  }
+  return best;
+}
+
 function renderSummary(result, chosen) {
   const report = result.report;
   const top = result.candidates && result.candidates[0];
@@ -6312,14 +6380,34 @@ function renderSummary(result, chosen) {
   $('sum-what').innerHTML = what;
 
   /* --- what is it worth --- */
+  //
+  // TWO numbers, named apart, because the page carries two and they differ.
+  // `bestValue` is the median NEAR MINT ASKING price from the condition table;
+  // the chart's last point is what the market actually PAID. On a Base Set
+  // Charizard those were $1,500 and $852 — both true, and printing one at the
+  // top while the chart showed the other read as the page contradicting
+  // itself. What a seller wants is the gap: asking is what you can list at,
+  // paid is what you can expect.
   const value = named ? bestValue(named) : null;
-  $('sum-worth').innerHTML = !named
-    ? 'Once you pick the right card, its price and chart open below.'
-    : value
-      ? 'A Near Mint copy is asking about <b>' + money(value.amount, value.currency) + '</b>' +
-        (chosen ? ' — the chart below shows how that has moved.'
-                : '. Tap it below for the full price breakdown and chart.')
-      : 'No price is baked in for this card, so there is nothing reliable to quote.';
+  const paid = named ? latestPaid(named.id) : null;
+  let worth;
+  if (!named) {
+    worth = 'Once you pick the right card, its price and chart open below.';
+  } else if (value && paid && Math.abs(paid.amount - value.amount) / Math.max(1, value.amount) > 0.1) {
+    worth = 'Sellers are asking about <b>' + money(value.amount, value.currency) +
+      '</b> for a Near Mint copy; the last price actually paid was <b>' +
+      money(paid.amount, paid.currency) + '</b>' +
+      (chosen ? ' — the chart below shows how that has moved.' : '.');
+  } else if (value) {
+    worth = 'A Near Mint copy is asking about <b>' + money(value.amount, value.currency) + '</b>' +
+      (chosen ? ' — the chart below shows how that has moved.'
+              : '. Tap it below for the full price breakdown and chart.');
+  } else if (paid) {
+    worth = 'The last price actually paid was <b>' + money(paid.amount, paid.currency) + '</b>.';
+  } else {
+    worth = 'No price is baked in for this card, so there is nothing reliable to quote.';
+  }
+  $('sum-worth').innerHTML = worth;
 
   /* --- is it real --- */
   //
