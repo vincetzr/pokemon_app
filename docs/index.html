@@ -2426,8 +2426,8 @@ function fft2Magnitude(input, n) {
  * have already destroyed it. Measured on a CLEAN SYNTHETIC screen with only
  * mild degradation, the ratio at 1400 pixels is 1.00 to 1.07 against a
  * threshold of 1.2: the check could not fire on a perfect input, let alone a
- * photograph. It needs about 3500 pixels across the card before every screen
- * ruling in the band is found reliably.
+ * photograph. With realistic sensor grain it needs about 5000 pixels across
+ * the card before every screen ruling in the band is found reliably.
  *
  * Sampling from the source fixes that and one other thing at the same time.
  * The band is computed by lpiToCyclesPerPixel(lpi, cardWidthPx) from the
@@ -4771,11 +4771,10 @@ function renderReport(report) {
   // "Inconclusive" is a finding: it says the evidence was weighed and did not
   // settle. When NOTHING could be weighed, saying it is not honest — and
   // printing 0% beside it reads as a measurement of the card rather than of
-  // this build's reach. Two of the four checks are often unavailable on a
+  // this build's reach. Two of the five checks routinely stand down on a
   // phone: the detailed inspection needs a key the user has to supply, and the
-  // print screen is routinely dissolved by the noise reduction and JPEG
-  // compression every phone applies, which the check correctly declines to
-  // read anything into.
+  // print screen needs a magnification no whole-card photograph reaches, which
+  // the check correctly declines to read anything into.
   // So when no check ran, the panel says it was not checked and why, and
   // leaves the figures blank rather than filling them with zeroes.
   // Three states, not two. "Inconclusive" is a FINDING — it says the evidence
@@ -6924,10 +6923,10 @@ function renderBulk(rows) {
    Live viewfinder with an alignment frame and automatic capture.
 
    The frame is not decoration. Framing is the single biggest lever on
-   whether any of the checks downstream can run at all: the halftone check
-   needs about 1400 pixels across the card, which on a tablet only happens
-   when the card genuinely fills the frame. Asking the user to fill a
-   card-shaped guide is how that gets met.
+   whether any of the checks downstream can run at all — identification wants
+   500 pixels across the card and the reference comparison 900, and a card
+   held at arm's length in a corner of the frame clears neither. Asking the
+   user to fill a card-shaped guide is how that gets met.
 
    The guide is drawn at the video's own aspect ratio with object-fit
    contain, so what you see is exactly what is captured — no hidden crop
@@ -8119,8 +8118,8 @@ function looksLikeACard() {
  * Close the resolution gap by magnifying, rather than by asking the user to
  * hold the card closer than they can hold it steady.
  *
- * The halftone check wants about 1400 pixels across the card and a live track
- * filling the guide typically delivers half that. Telling the reader to move
+ * The resolution-gated checks want more pixels across the card than a live
+ * track filling the guide typically delivers. Telling the reader to move
  * closer trades one abstention for another, because at that distance the card
  * leaves the frame and the hand shake that was tolerable becomes blur. The
  * camera's own zoom has neither cost: it is magnification onto the same sensor
