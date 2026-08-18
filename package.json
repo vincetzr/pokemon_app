@@ -15,7 +15,8 @@
     "bake": "tsx scripts/bake-offline.ts",
     "bake:catalogue": "tsx scripts/bake-tcgcsv.ts",
     "build:scanner": "node scripts/build-scanner.mjs",
-    "dev:phone": "next dev --experimental-https -H 0.0.0.0"
+    "dev:phone": "next dev --experimental-https -H 0.0.0.0",
+    "backfill:history": "node scripts/backfill-tcgcsv-history.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

@@ -85,15 +85,23 @@ cards, and a false accusation is a much worse failure here than an inconclusive
 result: it can cost a real sale or a trade, and the user has no way to argue
 with it.
 
-Confidence is reported separately from score, because two checks passing while
-four abstained is not the same as six passing.
+Coverage is reported separately from agreement, because two checks passing
+while three abstained is not the same as five passing. The agreement figure is
+labelled "not a percentage genuine" in the UI for the same reason.
 
 Some calibration examples from building this, to make the point concrete:
 
-- The print-pattern check needs roughly 1400 pixels across the card to resolve
-  the halftone screen that offset printing leaves. That figure is derived from
-  the Nyquist limit for a 133–175 LPI screen on a 63 mm card, not guessed. Below
-  it the pattern is simply not in the data, so the check abstains.
+- The print-pattern check needs roughly 5000 pixels across the card to resolve
+  the halftone screen that offset printing leaves. An earlier 1400 was derived
+  from the bare Nyquist limit and was wrong in practice: measured with the app's
+  own FFT on a clean synthetic screen, the energy ratio at 1400 is 1.00–1.07
+  against a threshold of 1.2, so the check could not have fired on a perfect
+  input. With realistic sensor grain it first clears at every ruling around
+  5000. Since every photo is worked on at 4032 px on its long edge, a card
+  filling the frame reaches about 2870 — so this check cannot fire on a
+  whole-card photograph on any device, and says so rather than asking the user
+  to move closer. Reaching it needs a close-up of part of a card, which this
+  build does not take yet.
 - An early blur threshold flagged the official Base Set Charizard reference
   image as "too blurry". Vintage scans are legitimately softer than modern ones
   (measured Laplacian variance 45 versus 210). The threshold was recalibrated
@@ -133,9 +141,18 @@ All optional. See `.env.example`.
 
 ### Building price history
 
-The app ships with a short window of real history from Cardmarket's rolling
-1/7/30-day averages, and extends it from there. Run the snapshot job daily to
-keep accruing:
+The scanner build ships about two and a half years of real observed prices,
+backfilled from the TCGCSV daily archive of TCGplayer's own price endpoint
+(`npm run backfill:history` → `scripts/backfill-tcgcsv-history.mjs`). It
+matches on `productId`, which is an exact join: 5,519 of 5,521 corpus cards
+carry one that the archive knows.
+
+An earlier "history" built by spreading Cardmarket's 1/7/30-day rolling
+averages across invented dates has been removed. The figures were real but the
+dates were not — a 30-day mean is not an observation from 15 days ago — and it
+would have drawn a fabricated three-point line beside a measured two-year one.
+
+Run the snapshot job daily to extend the series past the archive's cutoff:
 
 ```
 0 6 * * *  cd /path/to/app && npm run snapshot >> snapshot.log 2>&1
@@ -224,11 +241,18 @@ one era would hide that.
 - **The local database assumes a persistent filesystem.** On ephemeral
   serverless hosts it resets on cold start — point `DATABASE_PATH` at a mounted
   volume, or run the snapshot job somewhere durable.
-- **Price history starts short.** Cardmarket's rolling averages give about a
-  month; everything beyond that accrues as the app runs. There is no third-party
-  backfill: PriceCharting was evaluated and rejected because its terms forbid
-  using price data in any app accessible to third parties, and its API serves no
-  historic prices at any tier.
+- **Price history does not reach a card's release.** The TCGCSV archive begins
+  2024-02-08 for English cards and carries no Japanese price rows until
+  2025-01-07 — the 2024-09-16 date that circulates for Japanese is when the
+  group directories were created and they are empty. No free source goes back
+  further, and the chart says where the record starts rather than drawing a line
+  to a 1999 release. PriceCharting was evaluated and rejected: its terms forbid
+  using price data in any app accessible to third parties, including at the paid
+  tier, which grants internal business use only.
+- **No graded prices.** PSA's public API is a cert lookup, eBay's sold-listing
+  data is a restricted API that forbids redistribution and needs a client secret
+  a public page cannot hold, and Beckett has no public API. Every line on the
+  chart is an ungraded card and the page says so.
 - **Cardmarket figures lag.** Measured on this app's own snapshots, Cardmarket
   data was 40–50 days old while TCGplayer was 2 days old. Both are labelled with
   the date they refer to, and a stale source is called out in the UI.
