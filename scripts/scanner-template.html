@@ -867,6 +867,10 @@
       <div class="panel">
         <p class="note" id="id-intro" style="margin:0 0 12px"></p>
         <div class="cand-list" id="candidates"></div>
+        <!-- Below the list, not above it: it explains numbers the reader has
+             just looked at, and putting it first would stand three lines of
+             statistics between them and their card. -->
+        <p class="note" id="id-scale" style="margin:12px 0 0;color:var(--ink-400)"></p>
         <div style="margin-top:12px">
           <input type="search" id="search" placeholder="Not it? Search by name or number…" autocomplete="off" spellcheck="false">
         </div>
@@ -4546,7 +4550,22 @@ function matchCard(desc, limit) {
   });
 
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit);
+  const out = scored.slice(0, limit);
+
+  // What a TYPICAL card in the corpus scores against this photo.
+  //
+  // Free, because every card has just been scored anyway, and it is the piece
+  // of context the list cannot be read without: these numbers are similarities
+  // between two Pokemon cards, and two Pokemon cards are never dissimilar.
+  // They share a frame, a back, proportions and a colour language, so nothing
+  // in the corpus scores near zero. Measured over five photographs the lowest
+  // card of 5,577 came in at 36-39% and the median at 53-60%, which means a
+  // runner-up shown at "75% match" is not three-quarters right — it is the
+  // nearest of thousands of wrong cards.
+  out.baseline = scored.length ? scored[Math.floor(scored.length / 2)].score : 0;
+  out.floor = scored.length ? scored[scored.length - 1].score : 0;
+  out.field = scored.length;
+  return out;
 }
 
 function rotate180(img) {
@@ -4669,6 +4688,10 @@ function identify(rect, limit) {
 
   return {
     candidates: better,
+    // Carried alongside the list so the panel can say what the numbers mean.
+    baseline: better.baseline,
+    floor: better.floor,
+    field: better.field,
     image: turn ? flipped : rect,
     // The reading NOT chosen, kept rather than recomputed. Comparing the card
     // against its own official image settles the orientation better than
@@ -6037,6 +6060,7 @@ async function analyzeSource(source, onStep, opts) {
     rectified: uprightImage,
     halfTurned,
     candidates: id.candidates,
+    matchBaseline: id.baseline, matchFloor: id.floor, matchField: id.field,
     // Kept so the report can be rebuilt without re-analysing the photo — the
     // visual comparison being switched on after the fact is exactly that case.
     contextLimitations,
@@ -6623,8 +6647,33 @@ function renderSingle(result) {
         ? 'The artwork is matched, but these printings score within a whisker of each other and ' +
           'can be worth very different money. Pick the one your card actually is — the set and ' +
           'number under each name are what separate them. Its prices and chart open below.'
-        : 'Tap the card that matches to see its prices and its price chart. The percentages rank ' +
-          'the list; they are not the odds that the top one is right.';
+        : 'Tap the card that matches to see its prices and its price chart.';
+  // Then, always, what the numbers actually are — because "75% match" reads as
+  // "probably right" and it is not. The figures come from THIS photo, not from
+  // a note written once: every card in the build was scored against it, and
+  // these are where those scores landed.
+  const scale = $('id-scale');
+  if (scale) {
+    const b = result.matchBaseline, fl = result.matchFloor, n = result.matchField;
+    if (b && n) {
+      const pc = (v) => Math.round(v * 100) + '%';
+      const lead = runnerUp ? Math.round((top.score - runnerUp.score) * 100) : null;
+      scale.textContent =
+        'About those percentages: they are similarities, not odds, and they do not start at ' +
+        'zero. Every Pokemon card shares a frame, a back and the same proportions, so against ' +
+        'this photo the least similar of ' + n.toLocaleString() + ' cards still scored ' +
+        pc(fl) + ', and a typical one scored ' + pc(b) + '. The runners-up above are simply ' +
+        'the closest wrong cards in the build. What settles it is the LEAD' +
+        (lead !== null
+          ? ': ' + top.card.name + ' is ' + lead + ' point' + (lead === 1 ? '' : 's') +
+            ' clear of the next, and ' + (lead >= 3
+              ? 'that is a decisive gap.'
+              : 'that is too close to call — which is why the printing has to be your choice.')
+          : '.');
+    } else {
+      scale.textContent = '';
+    }
+  }
 
   const list = $('candidates');
   list.innerHTML = '';
