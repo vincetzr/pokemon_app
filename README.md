@@ -39,6 +39,13 @@ signal cannot run, and the report will say so and lower its own confidence.
 perspective, reads its name and collector number, and resolves it to a specific
 printing.
 
+**Read the card's own words** — the name line, the artwork and the bottom strip
+are cut out of your photograph at the card's own resolution and enlarged, beside
+what the matched card should say. Deliberately not OCR: you are holding the
+card, and comparing four characters by eye beats any recogniser a single-file
+page could carry. It is also the only part of the report that is evidence rather
+than inference — if the strip disagrees with the match, the strip is right.
+
 **Price by condition** — real per-condition prices read from live TCGplayer
 listings: cheapest and typical asking price for Near Mint through Damaged, with
 the number of listings behind each figure. Plus current market price, history
