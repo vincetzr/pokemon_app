@@ -6445,7 +6445,13 @@ function renderSummary(result, chosen) {
       'Near Mint copy is asking about <b>' + money(value.amount, value.currency) + '</b> — but ' +
       'that figure belongs to that printing alone, and the printing is not settled. Pick the ' +
       'right one below before relying on any number here.';
-  } else if (value && paid && Math.abs(paid.amount - value.amount) / Math.max(1, value.amount) > 0.1) {
+  // Divided by the PRICE, not by max(1, price). The floor was there to avoid a
+  // divide by zero and quietly broke the test on cheap cards: on a $0.35
+  // Victini a $0.05 gap is 14% of the card's value but scored as 5% against a
+  // floor of a dollar, so the summary printed $0.35 while the chart legend
+  // printed $0.30 and the reader saw two numbers with no explanation again.
+  } else if (value && paid &&
+             Math.abs(paid.amount - value.amount) / Math.max(0.01, value.amount) > 0.1) {
     worth = 'Sellers are asking about <b>' + money(value.amount, value.currency) +
       '</b> for a Near Mint copy; the last price actually paid was <b>' +
       money(paid.amount, paid.currency) + '</b>' +
