@@ -33,6 +33,11 @@
     color-scheme: dark;
 
     --ink-950: #08090d;
+    /* Referenced by the summary's bold runs and the fold's hover state. It was
+       used in four rules before it was ever defined, which CSS resolves by
+       silently dropping the declaration — so those rules had simply been
+       inheriting rather than emphasising. */
+    --ink-050: #f5f6fa;
     --ink-900: #0e1016;
     --ink-850: #14161f;
     --ink-800: #1b1e2a;
@@ -623,19 +628,26 @@
   .lede:last-of-type { margin-bottom: 0; }
   .lede b { color: var(--ink-050); }
 
-  /* The extracted bands, fitted to the panel. They arrive at 600-2400px, so
-     on a phone this is a downscale in CSS pixels and roughly 1:1 in device
-     pixels — which is the point: the detail shown is detail that is there. */
-  .band { margin: 0 0 14px; }
-  .band:last-child { margin-bottom: 0; }
-  .band .k {
-    font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--ink-400); margin: 0 0 5px;
+  /* A correction, not an action. It has to be findable the moment a reader
+     doubts the card, and invisible the rest of the time — a full button beside
+     one line of grey text reads as the thing you are meant to press. */
+  .inline-link {
+    background: none; border: 0; padding: 0; margin-left: 6px;
+    font: inherit; color: var(--info); text-decoration: underline;
+    text-underline-offset: 2px; cursor: pointer;
   }
-  .band img {
-    display: block; width: 100%; border-radius: 5px;
-    border: 1px solid var(--ink-800); background: #0b0d10;
+  .inline-link:hover { color: var(--ink-050); }
+
+  /* The folded-away half. */
+  #report-details > summary {
+    cursor: pointer; list-style: none; padding: 11px 14px; margin: 0 0 4px;
+    border: 1px solid var(--ink-800); border-radius: 10px;
+    color: var(--ink-300); font-size: 13px; background: var(--ink-900);
   }
+  #report-details > summary::-webkit-details-marker { display: none; }
+  #report-details > summary::after { content: ' ▸'; color: var(--ink-400); }
+  #report-details[open] > summary::after { content: ' ▾'; }
+  #report-details > summary:hover { color: var(--ink-050); }
 
   ul.plain { margin: 8px 0 0; padding-left: 1.1em; color: var(--ink-300); font-size: 12.5px; }
   ul.plain li { margin: 5px 0; }
@@ -787,18 +799,62 @@
   <div id="results" hidden>
 
     <!-- The answer, before the machinery.
-         Everything below this is a measurement, and measurements are what a
-         grader shows a colleague. What a customer asked was: what is it, what
-         is it worth, is it real, and what should I do. That is four sentences
-         and it belongs at the top. -->
+         A customer asked two questions: what is it worth, and is it real.
+         Those are the two sentences here, in that order, and everything else
+         the app knows is arranged underneath as support for them — the price
+         and its history first, then the authenticity checks, then the working.
+         Which card it is used to be the opening sentence; it is a premise of
+         the price rather than an answer, so it now sits with the price where
+         it can be corrected. -->
     <section id="sec-summary">
       <div class="eyebrow">What we can tell you</div>
       <div class="panel">
-        <p class="lede" id="sum-what"></p>
         <p class="lede" id="sum-worth"></p>
         <p class="lede" id="sum-real"></p>
         <p class="note" id="sum-next" style="margin:12px 0 0"></p>
       </div>
+    </section>
+
+    <!-- An action, not machinery, so it stays out of the fold.
+         This appears only when the automatic frame is doubtful, and it is the
+         one thing that can fix every number below it — a card cropped wrong is
+         matched wrong and therefore priced wrong. Folded away it would be an
+         offer nobody sees. -->
+    <section id="sec-reframe" hidden>
+      <div class="panel" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <p class="note" id="reframe-note" style="margin:0;flex:1;min-width:200px"></p>
+        <button class="ghost" id="btn-reframe" type="button">Adjust the frame</button>
+      </div>
+    </section>
+
+    <section id="sec-price" hidden>
+      <div class="eyebrow">Price by condition</div>
+      <div class="panel">
+        <!-- Which card these prices are FOR, with the way to change it.
+             Identification lives in the folded-away half now, and a price for
+             the wrong card is worse than no price at all — so the one control
+             that fixes it has to stay where the price is. -->
+        <p class="note" id="price-as" style="margin:0 0 10px">
+          <span id="price-as-card"></span>
+          <button id="btn-not-this" type="button" class="inline-link">Not this card?</button>
+        </p>
+        <p class="note" id="price-intro" style="margin:0 0 10px"></p>
+        <div id="price-chart"></div>
+        <div class="scroll-x">
+          <table id="price-table">
+            <thead>
+              <tr><th>Condition</th><th>Cheapest</th><th>Typical</th><th>Listings</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="note" id="price-foot" style="margin:10px 0 0"></p>
+      </div>
+    </section>
+
+    <section id="sec-history" hidden>
+      <div class="eyebrow">Price history</div>
+      <div class="panel" id="history-panel"></div>
     </section>
 
     <section id="sec-verdict">
@@ -860,80 +916,14 @@
       </div>
     </section>
 
-    <section id="sec-reframe" hidden>
-      <div class="panel" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <p class="note" id="reframe-note" style="margin:0;flex:1;min-width:200px"></p>
-        <button class="ghost" id="btn-reframe" type="button">Adjust the frame</button>
-      </div>
-    </section>
-
-    <section id="sec-quality">
-      <div class="eyebrow">Capture quality</div>
-      <div class="panel">
-        <p class="note" id="quality-intro" style="margin:0 0 12px"></p>
-        <div class="figures" id="quality-figures"></div>
-        <ul class="plain" id="quality-advice"></ul>
-      </div>
-    </section>
-
-    <section id="sec-identify">
-      <div class="eyebrow">Which card is it</div>
-      <div class="panel">
-        <p class="note" id="id-intro" style="margin:0 0 12px"></p>
-        <div class="cand-list" id="candidates"></div>
-        <!-- Below the list, not above it: it explains numbers the reader has
-             just looked at, and putting it first would stand three lines of
-             statistics between them and their card. -->
-        <p class="note" id="id-scale" style="margin:12px 0 0;color:var(--ink-400)"></p>
-        <div style="margin-top:12px">
-          <input type="search" id="search" placeholder="Not it? Search by name or number…" autocomplete="off" spellcheck="false">
-        </div>
-        <div class="cand-list" id="search-results" style="margin-top:8px"></div>
-        <!-- The boundary of what can ever be recognised. A card from outside it
-             still produces a ranked list, so the list has to say what it covers. -->
-        <details style="margin-top:12px">
-          <summary class="note" style="cursor:pointer">Which sets are in this build</summary>
-          <p class="note" style="margin:8px 0 0">__SETLIST__</p>
-        </details>
-      </div>
-    </section>
-
-    <!-- The card's own words, cut out and enlarged.
-         Identification is a similarity score; this is the card TELLING you
-         what it is. Putting the two side by side turns "trust the match" into
-         "check the match", which is the whole difference for someone who does
-         not know Pokemon cards. -->
-    <section id="sec-cardtext" hidden>
-      <div class="eyebrow">What the card itself says</div>
-      <div class="panel">
-        <p class="note" id="cardtext-intro" style="margin:0 0 12px"></p>
-        <div id="cardtext-bands"></div>
-        <p class="note" id="cardtext-foot" style="margin:12px 0 0;color:var(--ink-400)"></p>
-      </div>
-    </section>
-
-    <section id="sec-variant" hidden>
-      <div class="eyebrow">What this card is</div>
-      <div class="panel" id="variant-notes"></div>
-    </section>
-
-    <section id="sec-price" hidden>
-      <div class="eyebrow">Price by condition</div>
-      <div class="panel">
-        <p class="note" id="price-intro" style="margin:0 0 10px"></p>
-        <div id="price-chart"></div>
-        <div class="scroll-x">
-          <table id="price-table">
-            <thead>
-              <tr><th>Condition</th><th>Cheapest</th><th>Typical</th><th>Listings</th></tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <p class="note" id="price-foot" style="margin:10px 0 0"></p>
-      </div>
-    </section>
-
+    <!-- Everything below is machinery.
+         A customer asked two questions — what is it worth, and is it real —
+         and those are answered above. What follows is how those answers were
+         arrived at: the capture, the candidate list, the individual checks and
+         their limits. A grader shows this to a colleague, not to the person
+         at the counter, so it is folded away rather than deleted. It opens by
+         itself whenever the card could not be identified, because then the
+         candidate list is not machinery, it is the next thing to do. -->
     <!-- Its own capture, because the measurement IS the movement: a single
          photograph cannot carry how the shading changes as the card tilts. -->
     <section id="sec-surface">
@@ -968,6 +958,45 @@
     <!-- Opt-in, off by default. Stated plainly rather than buried: the photo
          goes to whichever provider the key belongs to, the key stays in this
          browser, and one of the accepted providers is free. -->
+    <details id="report-details">
+      <summary id="report-details-summary">How this was worked out</summary>
+
+    <section id="sec-quality">
+      <div class="eyebrow">Capture quality</div>
+      <div class="panel">
+        <p class="note" id="quality-intro" style="margin:0 0 12px"></p>
+        <div class="figures" id="quality-figures"></div>
+        <ul class="plain" id="quality-advice"></ul>
+      </div>
+    </section>
+
+    <section id="sec-identify">
+      <div class="eyebrow">Which card is it</div>
+      <div class="panel">
+        <p class="note" id="id-intro" style="margin:0 0 12px"></p>
+        <div class="cand-list" id="candidates"></div>
+        <!-- Below the list, not above it: it explains numbers the reader has
+             just looked at, and putting it first would stand three lines of
+             statistics between them and their card. -->
+        <p class="note" id="id-scale" style="margin:12px 0 0;color:var(--ink-400)"></p>
+        <div style="margin-top:12px">
+          <input type="search" id="search" placeholder="Not it? Search by name or number…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="cand-list" id="search-results" style="margin-top:8px"></div>
+        <!-- The boundary of what can ever be recognised. A card from outside it
+             still produces a ranked list, so the list has to say what it covers. -->
+        <details style="margin-top:12px">
+          <summary class="note" style="cursor:pointer">Which sets are in this build</summary>
+          <p class="note" style="margin:8px 0 0">__SETLIST__</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="sec-variant" hidden>
+      <div class="eyebrow">What this card is</div>
+      <div class="panel" id="variant-notes"></div>
+    </section>
+
     <section id="sec-vision">
       <div class="eyebrow">Detailed visual comparison</div>
       <div class="panel">
@@ -1022,17 +1051,14 @@
       </div>
     </section>
 
-    <section id="sec-history" hidden>
-      <div class="eyebrow">Price history</div>
-      <div class="panel" id="history-panel"></div>
-    </section>
-
     <section id="sec-limits">
       <div class="eyebrow">What this cannot tell you</div>
       <div class="panel">
         <ul class="plain" id="limits"></ul>
       </div>
     </section>
+
+    </details>
 
   </div>
 
@@ -1044,10 +1070,13 @@
       a soft one back rather than reporting on it. Card detection, flattening, sharpness, glare,
       proportions and print-screen analysis all run in this page on the photo you supply — the
       same ported code the app runs on the server. Identification matches your photo against
-      perceptual hashes of
-      <span id="corpus-count">__CARDCOUNT__</span> official card images baked into this file,
-      trying both the upright and the half-turned orientation so a card photographed sideways or
-      upside down still matches. Once it knows which card this is, the page fetches that one
+      descriptors for
+      <span id="corpus-count">__CARDCOUNT__</span> official card images baked into this file:
+      nine measures in all — six comparing the card as a picture, and three comparing what is
+      WRITTEN on it, the name line, the attack block and the strip along the bottom carrying the
+      set symbol, number and rarity. Those three are what separate two printings that share the
+      same artwork. It tries both the upright and the half-turned orientation, so a card
+      photographed sideways or upside down still matches. Once it knows which card this is, the page fetches that one
       card's official image — about 50KB — and compares your photo against it region by region,
       which also settles which way up to show the card.
     </p>
@@ -4413,6 +4442,70 @@ const DESC_INSETS = [0, 0.022, 0.045];
  */
 const MATCH_WEIGHTS = [0.22, 0.18, 0.18, 0.16, 0.08, 0.18];
 
+/* --- the card's own words, as match terms -------------------------------
+ *
+ * Everything above compares the card as a picture. But what a card says is
+ * what a card IS: the name line at the top, the attack block in the lower
+ * half, and the strip along the bottom carrying the set symbol, the number
+ * and the rarity. Averaged into one whole-card correlation those bands are a
+ * minority of the cells and are outvoted by artwork — which is exactly wrong
+ * for the case that matters most, two printings of the same card that SHARE
+ * artwork and differ only in what is written on them.
+ *
+ * No re-bake and no extra bytes: `gr` is already a 16x22 rank grid over the
+ * whole card, so the bands are rows of a descriptor every card already
+ * carries. Correlation is invariant to any affine change of either vector, so
+ * a slice of ranks stays as lighting-invariant as the whole.
+ *
+ * Bands are ROW INDICES, not fractions. At 22 rows a fraction rounds
+ * unpredictably — the name line as 0.028-0.113 collapses to a single 16-cell
+ * row, too thin a statistic to trust.
+ *
+ * Measured over 47 cards under seven degradations (perspective, crop error,
+ * colour cast, gamma, JPEG, blur, and specular glare in four different
+ * PLACES), against the shipped blend:
+ *
+ *     right            278/329  ->  300/329
+ *     asserted right    82      ->   95
+ *     asserted WRONG     0      ->    0
+ *
+ * The three together, rather than the best one alone. A single band wins on
+ * paper only until the lamp lands on it: weighting the attack block alone
+ * scored best while the glare sat over the artwork, and began asserting
+ * falsehoods the moment the glare was moved onto the text. Three bands in
+ * different parts of the card mean a highlight can erase one and the others
+ * still speak, which is why the worst case — a wide lamp across the whole
+ * card — improves most, 23/47 to 34/47.
+ */
+const REGION_BANDS = [
+  { rows: [0, 3],   weight: 0.20 },   // border, name, stage, HP
+  { rows: [13, 19], weight: 0.15 },   // the attack block
+  { rows: [19, 22], weight: 0.20 },   // set symbol, number, rarity, illustrator
+];
+
+/** Everything renormalised to sum to 1, so scores stay on the scale that
+ *  CONFIDENT_MARGIN and every displayed percentage were calibrated against. */
+const REGION_NORM = 1 / (1 + REGION_BANDS.reduce((s, b) => s + b.weight, 0));
+
+/** Rows of the full-card rank grid, as a flat vector, for one band. */
+function bandSlice(arr, rows, out) {
+  const w = DESC_FULL.w, r0 = rows[0], r1 = rows[1];
+  const dst = out || new Float32Array((r1 - r0) * w);
+  for (let r = r0; r < r1; r++) {
+    for (let x = 0; x < w; x++) dst[(r - r0) * w + x] = arr[r * w + x];
+  }
+  return dst;
+}
+
+function bandSliceMask(mask, rows) {
+  const w = DESC_FULL.w, r0 = rows[0], r1 = rows[1];
+  const out = new Uint8Array((r1 - r0) * w);
+  for (let r = r0; r < r1; r++) {
+    for (let x = 0; x < w; x++) out[(r - r0) * w + x] = mask[r * w + x];
+  }
+  return out;
+}
+
 const B64 = (() => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   const lookup = new Uint8Array(256);
@@ -4524,8 +4617,9 @@ function rankDescriptors(rect, inset) {
   const cw = W - 2 * ix, ch = H - 2 * iy;
 
   const a = REGIONS.artWindow;
+  const full = withMask(greyGrid(rect, ix, iy, cw, ch, DESC_FULL.w, DESC_FULL.h));
   return {
-    full: withMask(greyGrid(rect, ix, iy, cw, ch, DESC_FULL.w, DESC_FULL.h)),
+    full,
     art: withMask(greyGrid(
       rect,
       ix + Math.round(a.x * cw), iy + Math.round(a.y * ch),
@@ -4533,15 +4627,28 @@ function rankDescriptors(rect, inset) {
       DESC_ART.w, DESC_ART.h,
     )),
     coarse: withMask(greyGrid(rect, ix, iy, cw, ch, DESC_COARSE.w, DESC_COARSE.h)),
+    // Sliced once per inset rather than once per card: the query is the same
+    // for all 5,577 comparisons, and slicing inside the loop would repeat this
+    // work five thousand times for no answer it does not already have.
+    bands: REGION_BANDS.map((b) => ({
+      ranks: bandSlice(full.ranks, b.rows),
+      mask: bandSliceMask(full.mask, b.rows),
+    })),
   };
 }
 
 /** Reference descriptors, decoded and normalised once per session. */
 function cardDescriptors(c) {
   if (c._d === undefined) {
-    c._d = c.gr && c.ar && c.gc
-      ? { full: B64(c.gr), art: B64(c.ar), coarse: B64(c.gc) }
-      : null;
+    if (c.gr && c.ar && c.gc) {
+      const full = B64(c.gr);
+      c._d = {
+        full, art: B64(c.ar), coarse: B64(c.gc),
+        bands: REGION_BANDS.map((b) => bandSlice(full, b.rows)),
+      };
+    } else {
+      c._d = null;
+    }
   }
   return c._d;
 }
@@ -4558,7 +4665,7 @@ function matchCard(desc, limit) {
 
     // The frame is never placed perfectly, so the best of a few insets is
     // taken rather than insisting the user's crop matched the reference's.
-    let nF = 0, nA = 0, nC = 0;
+    let nF = 0, nA = 0, nC = 0, words = 0;
     if (ref) {
       for (const q of queries) {
         const f = maskedCorrelation(q.full.ranks, ref.full, q.full.mask);
@@ -4567,12 +4674,23 @@ function matchCard(desc, limit) {
         const fs = f === null ? 0 : (f + 1) / 2;
         const as = a === null ? 0 : (a + 1) / 2;
         const ks = k === null ? 0 : (k + 1) / 2;
-        if (fs + ks > nF + nC) { nF = fs; nA = as; nC = ks; }
+        if (fs + ks > nF + nC) {
+          nF = fs; nA = as; nC = ks;
+          // The written bands, read at the inset that fits best — the same
+          // frame the picture terms just agreed on, so all of them describe
+          // one alignment rather than each picking its own.
+          words = 0;
+          for (let b = 0; b < REGION_BANDS.length; b++) {
+            const v = maskedCorrelation(q.bands[b].ranks, ref.bands[b], q.bands[b].mask);
+            words += REGION_BANDS[b].weight * (v === null ? 0 : (v + 1) / 2);
+          }
+        }
       }
     }
 
-    const score = MATCH_WEIGHTS[0] * hFull + MATCH_WEIGHTS[1] * hArt + MATCH_WEIGHTS[2] * sig +
-                  MATCH_WEIGHTS[3] * nF + MATCH_WEIGHTS[4] * nA + MATCH_WEIGHTS[5] * nC;
+    const score = (MATCH_WEIGHTS[0] * hFull + MATCH_WEIGHTS[1] * hArt + MATCH_WEIGHTS[2] * sig +
+                   MATCH_WEIGHTS[3] * nF + MATCH_WEIGHTS[4] * nA + MATCH_WEIGHTS[5] * nC +
+                   words) * REGION_NORM;
 
     return { card: c, score, full: nF || hFull, art: nA || hArt, sig };
   });
@@ -4984,7 +5102,7 @@ async function selectCard(card, btn) {
   // once now, so the panel updates the instant the card is tapped, and again
   // after the history lands, because only then can it quote what the card
   // actually SOLD for beside what sellers are asking.
-  if (LAST_RESULT) { renderSummary(LAST_RESULT, card); renderCardText(LAST_RESULT, card); }
+  if (LAST_RESULT) renderSummary(LAST_RESULT, card);
   await renderHistory(card);
   if (LAST_RESULT) renderSummary(LAST_RESULT, card);
 }
@@ -5142,6 +5260,14 @@ function renderPrices(card) {
     return;
   }
   sec.hidden = false;
+
+  // Named the way the card is catalogued, so a reader who disagrees can see
+  // WHAT to disagree with — a name alone is not enough when the difference
+  // between two printings is the set and the number, and the price.
+  $('price-as-card').textContent = 'Priced as ' + card.name +
+    (card.setName ? ' — ' + card.setName : '') +
+    (card.number ? ' #' + card.number + (card.printedTotal ? '/' + card.printedTotal : '') : '') +
+    (card.language && card.language !== 'English' ? ' (' + card.language + ')' : '') + '.';
 
   $('price-intro').textContent =
     'What sellers were asking on TCGplayer for ' + card.name + ' (' + card.conditions.variant +
@@ -6425,136 +6551,6 @@ function latestPaid(id) {
   return best;
 }
 
-/**
- * The card's own words, cut out of the photograph and enlarged.
- *
- * The bands are taken from the SOURCE at the card's own pixel width rather
- * than from the 1500px working rectification, because the whole point is to
- * be readable and the working copy is sized for the matcher, not for eyes.
- * Measured on a 1512px Victini the strip along the bottom resolves the set
- * code, the number, the rarity letter and the illustrator credit cleanly.
- *
- * Nothing here is OCR'd. It does not need to be: the reader has the card in
- * their hand and can compare four characters against four characters faster
- * and more reliably than any recogniser this page could carry. What the app
- * adds is knowing WHERE to look and what it should say.
- */
-const CARD_BANDS = [
-  ['The name line', 'name, stage and HP', 0.04, 0.028, 0.92, 0.085],
-  ['The artwork', 'and the Pokedex line under it', 0.085, 0.105, 0.83, 0.435],
-  ['The bottom strip', 'set, number, rarity and illustrator', 0.04, 0.885, 0.92, 0.105],
-];
-
-function renderCardText(result, card) {
-  const sec = $('sec-cardtext');
-  const bands = $('cardtext-bands');
-  bands.innerHTML = '';
-  sec.hidden = true;
-
-  const src = result.sourceImage, corners = result.sourceCorners;
-  if (!src || !corners || corners.length !== 4) return;
-
-  // Rectify once, at the card's own width, capped so a huge photo cannot
-  // allocate an enormous canvas on a phone.
-  const xs = corners.map((c) => c.x), ys = corners.map((c) => c.y);
-  const wide = Math.max.apply(null, xs) - Math.min.apply(null, xs);
-  const tall = Math.max.apply(null, ys) - Math.min.apply(null, ys);
-  const width = Math.max(600, Math.min(2400, Math.round(Math.max(wide, tall * CARD_ASPECT))));
-  let flat;
-  try {
-    flat = rectifyCard(src, corners, width, Math.round(width / CARD_ASPECT));
-  } catch { return; }
-
-  const whole = document.createElement('canvas');
-  whole.width = flat.width; whole.height = flat.height;
-  const wctx = whole.getContext('2d');
-  wctx.putImageData(flat, 0, 0);
-
-  // The half-turn, which rectifyCard does NOT apply.
-  //
-  // Orientation is settled well after the geometry, by matching both ways up
-  // and then by the reference comparison, and only the report's flattened
-  // image inherits the answer. Cutting from the raw rectification of a card
-  // photographed upside down puts the attack text under the heading "the name
-  // line", inverted — a panel whose entire job is to let a reader check the
-  // match would be the thing making them doubt a correct one.
-  if (result.halfTurned) {
-    const turned = document.createElement('canvas');
-    turned.width = whole.width; turned.height = whole.height;
-    const tctx = turned.getContext('2d');
-    tctx.translate(turned.width, turned.height);
-    tctx.rotate(Math.PI);
-    tctx.drawImage(whole, 0, 0);
-    wctx.clearRect(0, 0, whole.width, whole.height);
-    wctx.drawImage(turned, 0, 0);
-  }
-
-  for (const [label, sub, fx, fy, fw, fh] of CARD_BANDS) {
-    const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(flat.width * fw));
-    c.height = Math.max(1, Math.round(flat.height * fh));
-    c.getContext('2d').drawImage(whole,
-      Math.round(flat.width * fx), Math.round(flat.height * fy), c.width, c.height,
-      0, 0, c.width, c.height);
-
-    const wrap = document.createElement('div');
-    wrap.className = 'band';
-    const k = document.createElement('p');
-    k.className = 'k';
-    k.textContent = label + ' — ' + sub;
-    const img = document.createElement('img');
-    img.src = c.toDataURL('image/png');
-    img.alt = label;
-    wrap.appendChild(k); wrap.appendChild(img);
-    bands.appendChild(wrap);
-  }
-
-  // What it SHOULD say, from the card that was matched, so the comparison is
-  // one glance rather than a memory test.
-  // Quoted so that neither form surprises the reader.
-  //
-  // Whether a set zero-pads its numbering is NOT derivable from the corpus,
-  // which stores 4 and 102 either way. A 1999 Base Charizard prints "4/102";
-  // this Japanese Victini prints "012/098"; a modern English card prints
-  // "025/172". Asserting one form is wrong a third of the time, and being told
-  // to look for "004/102" on a card that plainly says "4/102" is precisely the
-  // hesitation this panel exists to remove. So the number is quoted as stored
-  // and the padding is named as a difference in printing, not in identity.
-  const expect = [];
-  let padNote = '';
-  if (card && card.number) {
-    const total = card.printedTotal ? String(card.printedTotal) : '';
-    const plain = String(card.number) + (total ? '/' + total : '');
-    expect.push(plain);
-    const padded = /^\d+$/.test(String(card.number)) && total
-      ? String(card.number).padStart(3, '0') + '/' + total.padStart(3, '0')
-      : plain;
-    if (padded !== plain) {
-      padNote = ' Sets differ over leading zeros, so a card reading ' + padded +
-        ' carries the same number as one reading ' + plain + '.';
-    }
-  }
-  if (card && card.rarity) expect.push(card.rarity);
-  const foreignName = card && card.language && card.language !== 'English';
-  $('cardtext-intro').textContent = card
-    ? 'Cut from your photograph and enlarged. If this is ' + card.name + ', the strip along the ' +
-      'bottom should carry ' + (expect.length ? expect.join(' and ') : 'this set\'s code') +
-      (foreignName
-        ? ', and the name line will read ' + card.name + ' in ' + card.language + ' rather than in ' +
-          'English. Check them against the card in your hand.'
-        : ', and the name line should read ' + card.name + '. Check them against the card in ' +
-          'your hand.') + padNote
-    : 'Cut from your photograph and enlarged, so you can read what the card says for yourself. ' +
-      'The strip along the bottom carries the set, the card number and the rarity, which is what ' +
-      'identifies a card beyond its picture.';
-  $('cardtext-foot').textContent =
-    'These are your own pixels, enlarged, not a stock image — so if a letter or a number here ' +
-    'disagrees with what is claimed above, believe the card. Nothing has been read automatically: ' +
-    'four characters compared by eye against four characters is more reliable than any text ' +
-    'recogniser this page could carry, and you are holding the card.';
-  sec.hidden = false;
-}
-
 function renderSummary(result, chosen) {
   const report = result.report;
   const top = result.candidates && result.candidates[0];
@@ -6572,42 +6568,6 @@ function renderSummary(result, chosen) {
   const printingUnsure = !chosen && !!named && !!runnerUp &&
     (top.score - runnerUp.score) < CONFIDENT_MARGIN;
 
-  /* --- what is it --- */
-  //
-  // Named the way the card names itself: set, number out of the printed total,
-  // rarity, year. That is what a person reads off the card to check we agree
-  // with them, and it is the difference between "trust me" and "look".
-  let what = '';
-  if (named) {
-    const bits = [];
-    if (named.setName) bits.push(escapeHtml(String(named.setName)));
-    if (named.number) {
-      bits.push('card ' + escapeHtml(String(named.number)) +
-        (named.printedTotal ? ' of ' + escapeHtml(String(named.printedTotal)) : ''));
-    }
-    if (named.rarity) bits.push(escapeHtml(String(named.rarity)));
-    if (named.releaseDate) bits.push(escapeHtml(String(named.releaseDate).slice(0, 4)));
-    what = 'This is <b>' + escapeHtml(named.name) + '</b>' +
-      (bits.length ? ' — ' + bits.join(', ') : '') + '.';
-    if (named.language && named.language !== 'English') {
-      what += ' It is the ' + escapeHtml(String(named.language)) + ' printing, which trades ' +
-        'separately from the English one.';
-    }
-    if (!chosen && refOk && !namePick(result.candidates)) {
-      what += ' The artwork was checked against the official image to confirm it.';
-    }
-    if (printingUnsure) {
-      what += ' The artwork is certain; WHICH PRINTING is not. ' +
-        escapeHtml(runnerUp.card.setName || 'another printing') +
-        ' scores almost as closely, and the two are worth very different money — ' +
-        'pick yours from the list below.';
-    }
-  } else {
-    what = 'We could not pin this down to a single card. The closest matches are ' +
-      'listed below — tap the one you are holding.';
-  }
-  $('sum-what').innerHTML = what;
-
   /* --- what is it worth --- */
   //
   // TWO numbers, named apart, because the page carries two and they differ.
@@ -6619,14 +6579,26 @@ function renderSummary(result, chosen) {
   // paid is what you can expect.
   const value = named ? bestValue(named) : null;
   const paid = named ? latestPaid(named.id) : null;
+
+  // The card names itself here now, because the sentence that used to do it is
+  // gone. A price with no subject is the one thing worse than no price: the
+  // reader cannot tell whether it is for the card in their hand.
+  const subject = named ? '<b>' + escapeHtml(named.name) + '</b>' +
+    (named.language && named.language !== 'English'
+      ? ' (the ' + escapeHtml(String(named.language)) + ' printing, which trades separately ' +
+        'from the English one)' : '') : '';
+
   let worth;
   if (!named) {
-    worth = 'Once you pick the right card, its price and chart open below.';
+    worth = 'We could not settle which card this is, so there is no price to give. ' +
+      'The closest matches are listed below — tap the one you are holding and the price ' +
+      'and its chart open here.';
   } else if (printingUnsure && value) {
-    worth = 'If it is the ' + escapeHtml(String(named.setName || 'top match')) + ' printing, a ' +
-      'Near Mint copy is asking about <b>' + money(value.amount, value.currency) + '</b> — but ' +
-      'that figure belongs to that printing alone, and the printing is not settled. Pick the ' +
-      'right one below before relying on any number here.';
+    worth = 'This is ' + subject + ', but not which PRINTING of it. If it is the ' +
+      escapeHtml(String(named.setName || 'top match')) + ' printing, a Near Mint copy is asking ' +
+      'about <b>' + money(value.amount, value.currency) + '</b> — but that figure belongs to that ' +
+      'printing alone, and they are worth very different money. Pick the right one below before ' +
+      'relying on any number here.';
   // Divided by the PRICE, not by max(1, price). The floor was there to avoid a
   // divide by zero and quietly broke the test on cheap cards: on a $0.35
   // Victini a $0.05 gap is 14% of the card's value but scored as 5% against a
@@ -6635,17 +6607,20 @@ function renderSummary(result, chosen) {
   } else if (value && paid &&
              Math.abs(paid.amount - value.amount) / Math.max(0.01, value.amount) > 0.1) {
     worth = 'Sellers are asking about <b>' + money(value.amount, value.currency) +
-      '</b> for a Near Mint copy; the last price actually paid was <b>' +
+      '</b> for a Near Mint ' + subject + '; the last price actually paid was <b>' +
       money(paid.amount, paid.currency) + '</b>' +
       (chosen ? ' — the chart below shows how that has moved.' : '.');
   } else if (value) {
-    worth = 'A Near Mint copy is asking about <b>' + money(value.amount, value.currency) + '</b>' +
+    worth = 'A Near Mint ' + subject + ' is asking about <b>' +
+      money(value.amount, value.currency) + '</b>' +
       (chosen ? ' — the chart below shows how that has moved.'
               : '. Tap it below for the full price breakdown and chart.');
   } else if (paid) {
-    worth = 'The last price actually paid was <b>' + money(paid.amount, paid.currency) + '</b>.';
+    worth = 'The last price actually paid for ' + subject + ' was <b>' +
+      money(paid.amount, paid.currency) + '</b>.';
   } else {
-    worth = 'No price is baked in for this card, so there is nothing reliable to quote.';
+    worth = 'This is ' + subject + ', but no price is baked in for it, so there is nothing ' +
+      'reliable to quote.';
   }
   $('sum-worth').innerHTML = worth;
 
@@ -6742,7 +6717,6 @@ function renderSingle(result) {
   }
   drawRectified($('rectified'), result.rectified);
   renderSummary(result, null);
-  renderCardText(result, null);
   renderReport(result.report);
   renderQuality(result);
 
@@ -6843,6 +6817,19 @@ function renderSingle(result) {
   $('sec-price').hidden = true;
   $('sec-history').hidden = true;
   $('sec-centering').hidden = true;
+
+  // The working shown, folded away — unless there is nothing above it to read.
+  // With no price and no settled identity the two answers a customer came for
+  // are both missing, and the candidate list stops being machinery: it is the
+  // only thing on the page they can act on.
+  const details = $('report-details');
+  if (details) {
+    const settled = !!(top && namePick(candidates));
+    details.open = !settled;
+    $('report-details-summary').textContent = settled
+      ? 'How this was worked out'
+      : 'Pick the card below — this could not be settled automatically';
+  }
 
   renderVariantNotes(result);
 }
@@ -9636,10 +9623,25 @@ function renderVisionState() {
   $('btn-vision-clear').hidden = !has;
 }
 
+/**
+ * Reveal a section that now lives inside the folded-away half.
+ *
+ * scrollIntoView on a node inside a closed <details> scrolls to nothing and
+ * reports no error, so every button that sends a reader down there has to open
+ * the fold first. One helper rather than each caller remembering.
+ */
+function revealSection(id) {
+  const details = $('report-details');
+  if (details && details.contains($(id))) details.open = true;
+  $(id).scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 $('btn-goto-vision').addEventListener('click', () => {
-  $('sec-vision').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  revealSection('sec-vision');
   $('vision-key').focus();
 });
+
+$('btn-not-this').addEventListener('click', () => revealSection('sec-identify'));
 
 $('btn-vision-save').addEventListener('click', async () => {
   const v = $('vision-key').value.trim();

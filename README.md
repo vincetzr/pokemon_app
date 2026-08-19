@@ -39,12 +39,12 @@ signal cannot run, and the report will say so and lower its own confidence.
 perspective, reads its name and collector number, and resolves it to a specific
 printing.
 
-**Read the card's own words** — the name line, the artwork and the bottom strip
-are cut out of your photograph at the card's own resolution and enlarged, beside
-what the matched card should say. Deliberately not OCR: you are holding the
-card, and comparing four characters by eye beats any recogniser a single-file
-page could carry. It is also the only part of the report that is evidence rather
-than inference — if the strip disagrees with the match, the strip is right.
+The report answers two questions — what is it worth, and is it real — and puts
+the price, its chart and the authenticity checks first. Everything else (the
+capture, the candidate list, the individual signals and their limits) is folded
+away behind one disclosure, which opens by itself when the card could not be
+identified. The price names the card it is for, with a "not this card?" control
+beside it, because a price for the wrong printing is worse than no price.
 
 **Price by condition** — real per-condition prices read from live TCGplayer
 listings: cheapest and typical asking price for Near Mint through Damaged, with
@@ -194,6 +194,37 @@ large name text reliably and cheaply, while vision handles the small collector
 line and stylised full-art fonts. Agreement between them raises confidence above
 either alone; disagreement takes the vision reading but caps confidence, so a
 conflict never produces a confident answer.
+
+### Matching in the standalone scanner
+
+The single-file scanner has no OCR and no network, so it identifies a card by
+correlating it against descriptors for every card baked into the page. Six terms
+compare the card as a picture (two difference hashes, a colour signature, and
+masked rank correlations over the whole card, the art window and a coarse grid);
+three more compare it as a **document** — the name line, the attack block, and
+the bottom strip carrying the set symbol, number and rarity.
+
+Those three cost nothing extra: the baked `gr` descriptor is already a 16×22
+rank grid over the whole card, so each band is a slice of rows both sides
+already have. They matter because averaged into one whole-card correlation the
+written bands are a minority of the cells and are outvoted by artwork — which is
+exactly backwards for the case that matters most, two printings that share
+artwork and differ only in what is printed on them.
+
+Measured over 47 cards under seven degradations — perspective, crop error,
+colour cast, gamma, JPEG, blur, and specular glare in four different *places*:
+
+| | right | asserted right | asserted wrong |
+|---|---|---|---|
+| picture terms only | 278/329 | 82 | 0 |
+| with the written bands | **300/329** | **95** | **0** |
+
+All three bands rather than the best one, because a single band wins on paper
+only until the lamp lands on it: weighting the attack block alone scored best
+while the glare sat over the artwork and began asserting falsehoods as soon as
+the glare was moved onto the text. Three bands in different parts of the card
+mean a highlight can erase one and the others still speak, which is why the
+worst case — a wide lamp across the whole card — improves most, 23/47 to 34/47.
 
 ### Layout
 
