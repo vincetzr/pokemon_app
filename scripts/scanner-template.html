@@ -2126,6 +2126,19 @@ function rectifyCard(source, corners, outWidth, outHeight) {
    Thresholds are the app's measured ones, unchanged.
    =================================================================== */
 
+/**
+ * Fraction of the frame a card covers before "get closer" stops being advice
+ * and starts being the cause of the problem.
+ *
+ * A card is 63mm across. A tablet's rear lens stops focusing at roughly 10cm,
+ * and at that distance a 63mm card already covers most of the frame — so a
+ * soft photo of a card filling half the frame or more is far more likely to be
+ * too CLOSE than too far. Deliberately generous: telling someone to back off
+ * when they were merely close costs one retake, while telling someone already
+ * past the focus limit to get closer costs every retake they attempt.
+ */
+const QUALITY_CROWDED_FILL = 0.45;
+
 const QUALITY_THRESHOLDS = {
   sharpness: 30,
   glareFraction: 0.06,
@@ -2149,7 +2162,17 @@ function laplacianVariance(lum, width, height) {
   return sumSq / n - mean * mean;
 }
 
-function assessQuality(img) {
+/**
+ * @param img       the rectified card
+ * @param fillFrac  how much of the ORIGINAL frame the card covered, if known.
+ *                  Advice about a soft photo turns on this: "make sure the card
+ *                  fills the frame" is the right instruction at arm's length
+ *                  and the wrong one when the card already fills it, because
+ *                  the reason it is soft is then the opposite — it is inside
+ *                  the lens's minimum focus distance and moving closer is what
+ *                  caused the blur.
+ */
+function assessQuality(img, fillFrac) {
   const { data, width, height } = img;
   const lum = new Float32Array(width * height);
   let sum = 0, glare = 0, shadow = 0;
@@ -2176,10 +2199,19 @@ function assessQuality(img) {
 
   const warnings = [];
   if (tooBlurry) {
-    warnings.push(
-      'The photo is soft. Hold steady, tap to focus, and make sure the card fills the frame — ' +
-      'sharpness limits how much can be checked.'
-    );
+    // A tablet's rear lens stops focusing at roughly a hand's width. Past that
+    // no amount of holding steady or tapping to focus helps, and every one of
+    // those instructions reads as "you did it wrong" to someone who did it
+    // exactly as told.
+    const crowding = typeof fillFrac === 'number' && fillFrac >= QUALITY_CROWDED_FILL;
+    warnings.push(crowding
+      ? 'The photo is soft, and the card covers about ' + Math.round(fillFrac * 100) +
+        '% of the frame — close enough that the lens probably could not focus on it. Move the ' +
+        'card about a hand\'s width away and take it again; filling the frame is not worth a ' +
+        'photo nothing can be read from.'
+      : 'The photo is soft. Hold steady, tap to focus, and bring the card closer until it fills ' +
+        'more of the frame — but no closer than about a hand\'s width, or the lens cannot focus ' +
+        'at all. Sharpness limits how much can be checked.');
   }
   if (hasGlare) {
     warnings.push(
@@ -4477,6 +4509,34 @@ const MATCH_WEIGHTS = [0.22, 0.18, 0.18, 0.16, 0.08, 0.18];
  * still speak, which is why the worst case — a wide lamp across the whole
  * card — improves most, 23/47 to 34/47.
  */
+/**
+ * Temperature converting match similarity into a probability.
+ *
+ * Fitted, not chosen. Over 336 readings — 48 cards under seven degradations,
+ * with ground truth — the matcher is right 91.4% of the time, and this is the
+ * softmax temperature at which the stated confidence means what it says.
+ *
+ * Expected calibration error is flattest between 0.0008 and 0.005 (Brier 0.076
+ * to 0.085, so calibration barely distinguishes them). What distinguishes them
+ * is whether the number is any USE:
+ *
+ *     T        warns on a wrong answer    when it says >=90% it is right
+ *     0.0016     13 of 29                   94%      <- lowest calibration error
+ *     0.0035     22 of 29                   97%      <- this
+ *     0.008      28 of 29                   99%      (but hedges on 55% of correct reads)
+ *
+ * The lowest-error setting displays 100.0% on essentially every scan, because
+ * expected calibration error is minimised by a degenerate always-certain
+ * predictor whenever accuracy is high — which is the display this replaces,
+ * not an improvement on it. 0.0035 keeps calibration within 0.006 Brier of the
+ * optimum while still telling the reader when it is unsure, and a wrong card
+ * silently priced is far more expensive here than an extra second look.
+ */
+const MATCH_TEMPERATURE = 0.0035;
+
+/** Never print certainty. Even at its best this is right 97 times in 100. */
+const MATCH_MAX_SHOWN = 0.99;
+
 const REGION_BANDS = [
   { rows: [0, 3],   weight: 0.20 },   // border, name, stage, HP
   { rows: [13, 19], weight: 0.15 },   // the attack block
@@ -4711,6 +4771,28 @@ function matchCard(desc, limit) {
   out.baseline = scored.length ? scored[Math.floor(scored.length / 2)].score : 0;
   out.floor = scored.length ? scored[scored.length - 1].score : 0;
   out.field = scored.length;
+
+  // Similarity is not confidence, and showing it as a percentage invites it to
+  // be read as one. "75% match" beside "68% match" looks like two thirds of an
+  // answer and is nothing of the kind: two Pokemon cards are never dissimilar,
+  // so the whole corpus lives between about 32% and 96% and those figures
+  // cannot sum to anything.
+  //
+  // A softmax over the WHOLE field is the honest conversion — it says how much
+  // of the total evidence sits on each card, and it does sum to one. Over all
+  // 5,577 rather than over the handful displayed, so the mass that belongs to
+  // no listed card stays visible instead of being quietly redistributed to the
+  // ones that are.
+  const T = MATCH_TEMPERATURE;
+  const peak = scored.length ? scored[0].score : 0;
+  let mass = 0;
+  for (const s of scored) mass += Math.exp((s.score - peak) / T);
+  if (mass > 0) {
+    for (const entry of out) entry.probability = Math.exp((entry.score - peak) / T) / mass;
+    let shown = 0;
+    for (const entry of out) shown += entry.probability;
+    out.otherProbability = Math.max(0, 1 - shown);
+  }
   return out;
 }
 
@@ -4749,8 +4831,22 @@ function rotate180(img) {
  * the orientation shown to the user was then decided by a coin toss. That is
  * where the upside-down reports come from: not from orientation spoiling the
  * match, but from a weak match failing to pin the orientation.
+ *
+ * SCALED BY REGION_NORM, and it has to be. 0.15 was calibrated against scores
+ * that summed the picture terms alone; adding the written bands renormalises
+ * every score, which compresses every DIFFERENCE by the same factor. Left at a
+ * bare 0.15 the threshold silently became 1.55x stricter, and cards whose
+ * readings separate perfectly well — one measured at 0.131, which is 0.203 on
+ * the scale the figure was chosen on — stopped clearing it and fell through to
+ * the layout rule, or past it to "leave it as photographed". Over 48 cards read
+ * both ways up that is 95/96 correct against 96/96 once rescaled, and real
+ * photographs separate less cleanly than these do, so it costs more in a hand
+ * than the one case in ninety-six suggests.
+ *
+ * Note this does NOT apply to LAYOUT_MARGIN below, which compares inkiness
+ * fractions rather than match scores and is on no such scale.
  */
-const CONFIDENT_MATCH_MARGIN = 0.15;
+const CONFIDENT_MATCH_MARGIN = 0.15 * REGION_NORM;
 
 /**
  * How decisively the card's own layout must speak before it overrules a match
@@ -4838,6 +4934,7 @@ function identify(rect, limit) {
     baseline: better.baseline,
     floor: better.floor,
     field: better.field,
+    other: better.otherProbability,
     image: turn ? flipped : rect,
     // The reading NOT chosen, kept rather than recomputed. Comparing the card
     // against its own official image settles the orientation better than
@@ -5079,7 +5176,17 @@ function candidateButton(entry, onPick) {
   who.appendChild(mt);
   btn.appendChild(who);
 
-  if (entry.score != null) {
+  if (entry.probability != null) {
+    const sc = document.createElement('div');
+    sc.className = 'score';
+    sc.innerHTML = '<b></b><span></span>';
+    // Below a tenth of a percent, "0%" beside a card that is nonetheless on the
+    // list reads as a contradiction; the honest rendering is "under 1".
+    const pct = Math.min(MATCH_MAX_SHOWN, entry.probability) * 100;
+    sc.firstChild.textContent = pct < 1 ? '<1%' : Math.round(pct) + '%';
+    sc.lastChild.textContent = 'sure';
+    btn.appendChild(sc);
+  } else if (entry.score != null) {
     const sc = document.createElement('div');
     sc.className = 'score';
     sc.innerHTML = '<b></b><span></span>';
@@ -5931,9 +6038,25 @@ async function loadImage(file) {
 const CONFIDENT_MATCH = 0.80;
 const CONFIDENT_MARGIN = 0.030;
 
+/**
+ * The bar at which this page is willing to assert a printing.
+ *
+ * The same 90% quoted to the reader, and for the same reason: measured over
+ * 336 readings of known cards, a stated confidence at or above this is right
+ * about 97 times in 100. Using the displayed number as the threshold is not a
+ * convenience — it is what stops the panel saying "98% sure" while the summary
+ * says the printing is unsettled, which is a contradiction the reader has no
+ * way to resolve.
+ */
+const CONFIDENT_PROBABILITY = 0.90;
+
 function confidentPick(candidates) {
   const top = candidates && candidates[0];
+  // Score still guards a different question — whether this artwork is in the
+  // corpus at all. Probability only ever says which of the cards present is
+  // the best fit, and would happily read 99% for the closest wrong card.
   if (!top || top.score < CONFIDENT_MATCH) return false;
+  if (top.probability != null) return top.probability >= CONFIDENT_PROBABILITY;
   const second = candidates[1];
   return !second || top.score - second.score >= CONFIDENT_MARGIN;
 }
@@ -6109,7 +6232,13 @@ async function analyzeSource(source, onStep, opts) {
 
   step(3);
   await yieldToPaint();
-  const quality = assessQuality(rectified);
+  // How much of the frame the card covered, which is what separates "too far
+  // to resolve" from "too close to focus" — opposite faults with opposite fixes.
+  const sourceArea = source.width * source.height;
+  const cardArea = Math.abs(
+    (tl.x * (tr.y - bl.y) + tr.x * (br.y - tl.y) + br.x * (bl.y - tr.y) + bl.x * (tl.y - br.y)) / 2);
+  const frameFill = sourceArea > 0 ? Math.min(1, cardArea / sourceArea) : 0;
+  const quality = assessQuality(rectified, frameFill);
 
   step(4);
   await yieldToPaint();
@@ -6215,6 +6344,7 @@ async function analyzeSource(source, onStep, opts) {
     halfTurned,
     candidates: id.candidates,
     matchBaseline: id.baseline, matchFloor: id.floor, matchField: id.field,
+    matchOther: id.other,
     // Kept so the report can be rebuilt without re-analysing the photo — the
     // visual comparison being switched on after the fact is exactly that case.
     contextLimitations,
@@ -6565,8 +6695,9 @@ function renderSummary(result, chosen) {
   // doubt instead of hiding it. Suppressed once the reader has chosen: at that
   // point the printing is their call, and they have made it.
   const runnerUp = result.candidates && result.candidates[1];
-  const printingUnsure = !chosen && !!named && !!runnerUp &&
-    (top.score - runnerUp.score) < CONFIDENT_MARGIN;
+  const printingUnsure = !chosen && !!named && !!runnerUp && (top.probability != null
+    ? top.probability < CONFIDENT_PROBABILITY
+    : (top.score - runnerUp.score) < CONFIDENT_MARGIN);
 
   /* --- what is it worth --- */
   //
@@ -6740,7 +6871,14 @@ function renderSingle(result) {
   const top = candidates[0];
   const runnerUp = candidates[1];
   let nothingClose = !top || top.score < CONFIDENT_MATCH;
-  const tooAlike = !nothingClose && runnerUp && top.score - runnerUp.score < CONFIDENT_MARGIN;
+  // Same source of truth as the summary and the candidate list, or the page
+  // contradicts itself: this panel said two printings were "within a whisker of
+  // each other" on exactly the reads where the list now prints 98% and 2% and
+  // the summary asserts one of them. Whichever answer is right, all three have
+  // to give it.
+  const tooAlike = !nothingClose && runnerUp && (top.probability != null
+    ? top.probability < CONFIDENT_PROBABILITY
+    : top.score - runnerUp.score < CONFIDENT_MARGIN);
 
   // A second opinion that outranks the match score, when there is one.
   //
@@ -6781,28 +6919,33 @@ function renderSingle(result) {
           'can be worth very different money. Pick the one your card actually is — the set and ' +
           'number under each name are what separate them. Its prices and chart open below.'
         : 'Tap the card that matches to see its prices and its price chart.';
-  // Then, always, what the numbers actually are — because "75% match" reads as
-  // "probably right" and it is not. The figures come from THIS photo, not from
-  // a note written once: every card in the build was scored against it, and
-  // these are where those scores landed.
+  // Then what the percentages are. They are now shares of one whole — every
+  // card in the build scored against THIS photo, converted to a probability —
+  // so they sum to 100 across the list plus whatever belongs to no card on it.
   const scale = $('id-scale');
   if (scale) {
-    const b = result.matchBaseline, fl = result.matchFloor, n = result.matchField;
-    if (b && n) {
-      const pc = (v) => Math.round(v * 100) + '%';
-      const lead = runnerUp ? Math.round((top.score - runnerUp.score) * 100) : null;
-      scale.textContent =
-        'About those percentages: they are similarities, not odds, and they do not start at ' +
-        'zero. Every Pokemon card shares a frame, a back and the same proportions, so against ' +
-        'this photo the least similar of ' + n.toLocaleString() + ' cards still scored ' +
-        pc(fl) + ', and a typical one scored ' + pc(b) + '. The runners-up above are simply ' +
-        'the closest wrong cards in the build. What settles it is the LEAD' +
-        (lead !== null
-          ? ': ' + top.card.name + ' is ' + lead + ' point' + (lead === 1 ? '' : 's') +
-            ' clear of the next, and ' + (lead >= 3
-              ? 'that is a decisive gap.'
-              : 'that is too close to call — which is why the printing has to be your choice.')
-          : '.');
+    const n = result.matchField;
+    const other = result.matchOther;
+    if (n && top && top.probability != null) {
+      const sure = Math.round(Math.min(MATCH_MAX_SHOWN, top.probability) * 100);
+      const bits = ['These add up to 100%. Every one of the ' + n.toLocaleString() +
+        ' cards in this build was scored against your photo, and the percentage beside each ' +
+        'name is its share of the total — so ' + sure + '% beside ' + top.card.name +
+        ' means what it sounds like.'];
+      if (other != null && other >= 0.005) {
+        bits.push('A further ' + Math.round(other * 100) + '% sits on cards not listed here, ' +
+          'which is the chance that none of these is yours.');
+      }
+      // Calibration is a property of the number and belongs beside it. Stated
+      // as measured, including the part that is not flattering.
+      bits.push('Checked against 336 readings of known cards: when this says 90% or more it is ' +
+        'right about 97 times in 100, and it never prints more than 99% because it is never ' +
+        'certain.');
+      if (top.probability < 0.9) {
+        bits.push('This one is below that bar, so treat the list as a shortlist rather than an ' +
+          'answer — the set and number under each name are what tell them apart.');
+      }
+      scale.textContent = bits.join(' ');
     } else {
       scale.textContent = '';
     }
@@ -7166,6 +7309,7 @@ const CAM = {
   heldRing: [],
   clipRing: [],
   lastFill: 0,
+  softCrowded: 0,
   lastLiveScore: 0,
   lastFrame: null,
   cardCheckAt: -999,
@@ -7236,6 +7380,31 @@ const STILL_BEFORE_FOCUS = 4;
  * feature.
  */
 const PATIENCE_TICKS = 20;
+
+/**
+ * When the viewfinder should stop saying "move back a little" and start saying
+ * the lens cannot focus this close.
+ *
+ * Read from CAPTURES, not from the live gate. The obvious rule — the card is
+ * big and the focus state will not settle — was built first and does not work,
+ * and why is worth keeping. The live focus gate is deliberately RELATIVE: it
+ * asks whether the reading has settled against its own recent best, which a
+ * uniformly soft image does perfectly well. Measured on a feed blurred
+ * throughout, the gate reported "focusing" for four ticks and then locked, so
+ * a rule waiting for it to stay open never fires on the one case it exists for.
+ *
+ * Absolute sharpness is only measured after rectification, against a threshold
+ * calibrated on real cards. So the honest signal is a capture that came back
+ * too soft to use WHILE the card was overfilling the guide — both facts known
+ * at the same moment, in fireCapture. Two of those is not a coincidence.
+ *
+ * Fill is an AREA ratio against the guide, so 1.0 is a card exactly filling the
+ * target it was asked to fill. Not 0.72, which is what a first attempt reaches
+ * for because fillMin already uses it — at 0.72 every correctly framed card
+ * qualifies.
+ */
+const LIVE_TOO_CLOSE_FILL = 1.00;
+const TOO_CLOSE_SOFT_CAPTURES = 2;
 
 /** Window the above is counted over, so an odd dropped frame does not restart it. */
 const PATIENCE_WINDOW = 26;
@@ -8189,6 +8358,16 @@ function tick() {
     if (!CAM.autoDisabled) setHint('tooclose');
     CAM.zoomGaveUpShown = (CAM.zoomGaveUpShown || 0) + 1;
     if (CAM.zoomGaveUpShown > 25) CAM.zoomGaveUp = false;
+  // No 'locked' exemption, unlike the zoom note above. That one is a transient
+  // remark and yielding to "Hold it — capturing" is right; this is a standing
+  // diagnosis after two captures already came back unusable, and the reader is
+  // about to be handed a third. Telling them to hold still for it is the least
+  // useful sentence available.
+  } else if (CAM.softCrowded >= TOO_CLOSE_SOFT_CAPTURES) {
+    // Measured, not guessed: this many captures have come back BOTH too soft
+    // to use AND with the card overfilling the guide. Recorded in fireCapture,
+    // which is the only place both facts are known at once.
+    if (!CAM.autoDisabled) setHint('tooclose');
   } else if (!CAM.autoDisabled) setHint(state);
 
   // Magnify toward filling the guide, before the capture rather than after.
@@ -8359,6 +8538,12 @@ function focusNow() {
 
 async function maybeAutoZoom() {
   if (!CAM.zoomRange || CAM.zooming || CAM.firing) return;
+
+  // Never magnify a card the lens has already failed to focus on. Zoom does
+  // not change the subject distance, so at the near limit it magnifies the
+  // blur and nothing else — and the reading it would be chasing, "the card
+  // does not fill the guide", is at that point a symptom of the wrong problem.
+  if (CAM.softCrowded >= TOO_CLOSE_SOFT_CAPTURES) return;
 
   // Did the last magnification cost more than it bought?
   const probe = CAM.zoomProbe;
@@ -8635,6 +8820,11 @@ async function fireCapture(how) {
   const hopeless = result.quality.sharpness < QUALITY_THRESHOLDS.sharpness * PATIENCE_SHARPNESS_FLOOR;
   if ((how === 'auto' || (how === 'patience' && hopeless)) && result.quality.tooBlurry) {
     CAM.retries++;
+    // Soft AND overfilling the guide is the near-limit signature, and this is
+    // the only place both are known together: absolute sharpness exists only
+    // after rectification, and the fill that produced this frame is still on
+    // CAM. Counted rather than latched, so one unlucky frame says nothing.
+    if (CAM.lastFill >= LIVE_TOO_CLOSE_FILL) CAM.softCrowded++;
     CAM.goodFrames = 0;
     CAM.window = [];
     CAM.focusRing = [];
@@ -8650,11 +8840,18 @@ async function fireCapture(how) {
     // auto-capture stands down and says what is wrong, leaving the shutter.
     if (CAM.retries >= MAX_AUTO_RETRIES) {
       CAM.autoDisabled = true;
-      $('cam-note').textContent =
-        'Every automatic attempt came back too soft to analyse. That is usually the lens being ' +
-        'closer than it can focus, a smeared lens, or too little light — try backing off a few ' +
-        'centimetres, wiping the lens, and adding light. Automatic capture has stopped; the ' +
-        'shutter below still works if you want to capture anyway.';
+      // Name the cause when it is known rather than listing three of them. If
+      // every soft attempt also had the card overfilling the guide, this is not
+      // a dirty lens, and sending the reader for a cloth wastes their time.
+      $('cam-note').textContent = CAM.softCrowded >= TOO_CLOSE_SOFT_CAPTURES
+        ? 'Every automatic attempt came back too soft, and each time the card was filling more ' +
+          'than the whole guide — it is closer than this lens can focus. Move the card about a ' +
+          'hand\'s width away and it will sharpen. Automatic capture has stopped; the shutter ' +
+          'below still works if you want to capture anyway.'
+        : 'Every automatic attempt came back too soft to analyse. That is usually the lens being ' +
+          'closer than it can focus, a smeared lens, or too little light — try backing off a few ' +
+          'centimetres, wiping the lens, and adding light. Automatic capture has stopped; the ' +
+          'shutter below still works if you want to capture anyway.';
     }
 
     const el = $('cam-hint');
@@ -8736,6 +8933,7 @@ function stopCamera() {
   CAM.cardHeld = 0;
   CAM.clipRing = [];
   CAM.lastFill = 0;
+  CAM.softCrowded = 0;
   CAM.lastBox = null;
   CAM.guide = null;
   $('sec-camera').hidden = true;
@@ -9473,6 +9671,8 @@ const SURF = {
 };
 
 const SURFACE_TIMEOUT_MS = 30000;
+/** How long a camera may stay silent before it is called broken rather than slow. */
+const SURFACE_NO_FRAME_MS = 4000;
 const SURFACE_SCOUT_MAX = 900;
 
 function setSurfaceHint(text) { $('surface-hint').textContent = text; }
@@ -9480,6 +9680,19 @@ function setSurfaceHint(text) { $('surface-hint').textContent = text; }
 function stopSurfaceCapture() {
   SURF.running = false;
   if (SURF.timer) { clearInterval(SURF.timer); SURF.timer = null; }
+  // Put the light out explicitly before dropping the track. Stopping a track is
+  // supposed to release the torch and usually does, but a light left burning is
+  // the most alarming way for this to fail and costs one line to prevent.
+  if (SURF.track) {
+    // applyConstraints REJECTS rather than throwing, so a synchronous catch
+    // here catches nothing and a camera without a torch raises an unhandled
+    // "Unsupported constraint" on every stop. Not awaited either: this runs on
+    // the way out and must not hold the teardown up.
+    try {
+      const p = SURF.track.applyConstraints({ advanced: [{ torch: false }] });
+      if (p && p.catch) p.catch(() => { /* no torch on this camera */ });
+    } catch { /* nor any constraint support at all */ }
+  }
   if (SURF.stream) { SURF.stream.getTracks().forEach((t) => t.stop()); SURF.stream = null; }
   SURF.track = null;
   $('surface-view').hidden = true;
@@ -9516,9 +9729,25 @@ function renderSurfaceState(signal) {
 function surfaceTick() {
   if (!SURF.running) return;
   const video = $('surface-video');
-  if (!video.videoWidth) return;
+  const waited = Date.now() - SURF.started;
 
-  if (Date.now() - SURF.started > SURFACE_TIMEOUT_MS) { finishSurfaceCapture(); return; }
+  // A camera that never produces a frame is a different failure from a card
+  // that was never held still enough, and it used to look identical: both ran
+  // the clock down and abstained. Say which one happened.
+  if (!video.videoWidth) {
+    if (waited > SURFACE_NO_FRAME_MS) {
+      stopSurfaceCapture();
+      $('surface-state').textContent =
+        'The camera opened but never sent a picture, so nothing could be measured. ' +
+        'Close any other tab or app using the camera and try again.';
+      return;
+    }
+    setSurfaceHint('Starting the camera…');
+    return;
+  }
+  SURF.sawFrame = true;
+
+  if (waited > SURFACE_TIMEOUT_MS) { finishSurfaceCapture(); return; }
 
   const scale = Math.min(1, SURFACE_SCOUT_MAX / video.videoWidth);
   const w = Math.round(video.videoWidth * scale), h = Math.round(video.videoHeight * scale);
@@ -9556,8 +9785,18 @@ async function startSurfaceCapture() {
     $('surface-state').textContent = 'This browser has no camera API, so the surface cannot be measured here.';
     return;
   }
+  // The live viewfinder deliberately stays running after a scan, so the rear
+  // camera is still held when this is tapped. A second getUserMedia on a camera
+  // that is already open does not fail on iOS — it returns a track that never
+  // delivers a frame, so videoWidth stays 0, every tick returns early, and
+  // thirty seconds later this gives up having measured nothing. The torch
+  // constraint applies to that dead track perfectly well, which is why the
+  // symptom was "it turns the light on and does nothing".
+  stopCamera();
+
   SURF.frames = [];
   SURF.started = Date.now();
+  SURF.sawFrame = false;
   if (!SURF.canvas) {
     SURF.canvas = document.createElement('canvas');
     SURF.ctx = SURF.canvas.getContext('2d', { willReadFrequently: true });
@@ -9588,6 +9827,10 @@ async function startSurfaceCapture() {
   $('btn-surface-cancel').hidden = false;
   $('surface-state').textContent = 'Tilt the card slowly under a light while this records.';
   setSurfaceHint('Hold the whole card in view');
+  // The preview is small and the button that opened it may be the last thing
+  // on screen, so without this the capture runs somewhere the reader cannot
+  // see — which reads as nothing happening.
+  $('surface-view').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   SURF.running = true;
   SURF.timer = setInterval(surfaceTick, 180);

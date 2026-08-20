@@ -226,6 +226,32 @@ the glare was moved onto the text. Three bands in different parts of the card
 mean a highlight can erase one and the others still speak, which is why the
 worst case — a wide lamp across the whole card — improves most, 23/47 to 34/47.
 
+### What the percentage means
+
+The candidate list shows a probability, not a similarity, and the figures sum
+to 100% across the list plus whatever mass belongs to cards not on it. They are
+a softmax over all 5,577 scores, and its temperature is **fitted, not chosen** —
+over 336 readings of known cards, at `MATCH_TEMPERATURE = 0.0035` a stated
+confidence of 90% or more is right about 97 times in 100, and 22 of the 29
+wrong reads are shown below that bar. It never prints more than 99%.
+
+Expected calibration error alone would pick a much lower temperature, which
+displays 100.0% on essentially every scan — ECE is minimised by a degenerate
+always-certain predictor whenever accuracy is high, and that is the display
+this replaced rather than an improvement on it. 0.0035 stays within 0.006 Brier
+of the optimum while still saying when it is unsure.
+
+The same 90% is the bar the rest of the page uses to decide whether to assert a
+printing, so the candidate list and the summary cannot contradict each other.
+
+Two thresholds are scaled by `REGION_NORM` because they compare match scores,
+which the renormalisation compresses: `CONFIDENT_MATCH_MARGIN`, which decides
+whether the match may settle which way up the card is. `LAYOUT_MARGIN` is not,
+because it compares inkiness fractions and is on no such scale. Getting that
+wrong shows the card upside down: over 48 cards read both ways up, the unscaled
+threshold was right 95/96 and the scaled one 96/96, and real photographs
+separate less cleanly than fixtures do.
+
 ### Layout
 
 ```
@@ -267,6 +293,20 @@ one era would hide that.
 
 ## Known limitations
 
+- **A card held too close cannot be detected as too close, only diagnosed
+  afterwards.** The live focus gate is relative — it asks whether the reading
+  has settled against its own recent best — and a uniformly soft image settles
+  perfectly well. Measured on a feed blurred throughout, the gate reported
+  "focusing" for four ticks and then locked. So the viewfinder cannot tell
+  "soft because the lens is past its near limit" from "soft"; only the
+  calibrated sharpness check after rectification can, which is why the warning
+  is raised from captures that came back unusable rather than from the frame.
+- **Detection loses a card that fills almost the whole frame.** Measured on a
+  1080×1440 feed, fill against the guide reads 1.11 at 0.86 of the frame height
+  and 1.22 at 0.90, then collapses to 0.48 at 0.93: with no background margin
+  the contour search locks onto the art box instead of the card. Anything keyed
+  on a high fill therefore stops working in the very regime it is meant to
+  catch.
 - **The upstream card API is unreliable.** Measured during a bad spell it
   succeeded on about 3 requests in 10, and `pageSize=250` returns 404 despite
   being the documented maximum. The app retries with jitter, caches every
