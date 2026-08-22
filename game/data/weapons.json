@@ -1,0 +1,7 @@
+{
+  "fists":   { "name": "Fists",    "damage": 8,  "rpm": 120, "mag": 999, "reload": 0.0, "spread": 0.06, "range": 4,   "auto": true,  "pellets": 1, "color": "#8d8d8d" },
+  "smg":     { "name": "Vector-9", "damage": 13, "rpm": 780, "mag": 30,  "reload": 1.9, "spread": 0.030, "range": 90,  "auto": true,  "pellets": 1, "color": "#5ac8fa" },
+  "rifle":   { "name": "AKM-74",   "damage": 26, "rpm": 600, "mag": 30,  "reload": 2.4, "spread": 0.016, "range": 220, "auto": true,  "pellets": 1, "color": "#ffb347" },
+  "dmr":     { "name": "SKS-M",    "damage": 48, "rpm": 180, "mag": 10,  "reload": 2.8, "spread": 0.004, "range": 400, "auto": false, "pellets": 1, "color": "#c780ff" },
+  "shotgun": { "name": "S12-Bore", "damage": 12, "rpm": 105, "mag": 8,   "reload": 3.0, "spread": 0.075, "range": 32,  "auto": false, "pellets": 8, "color": "#ff6b6b" }
+}
