@@ -291,6 +291,64 @@ one era would hide that.
 
 ---
 
+## Grading readiness
+
+The app measures two of the four things a grader scores, and refuses to add
+them up into a grade.
+
+**Centering** gives a *ceiling*, which is a different and much safer claim than
+a prediction. PSA publishes its front tolerances (55/45 for a 10, then 60/40,
+65/35, 70/30), so a card measured at 62/38 **cannot** be a 10 no matter what
+else is true of it. That is arithmetic on a published rule, and every other
+attribute can only pull the grade down from there. The panel says "on centering
+alone this card could still be a PSA 9", never "this card will grade 9".
+
+**Edge and corner wear** is measured as ink density lost at the outer border,
+referenced against the same border where it meets the artwork. The card is its
+own reference, so exposure, white balance and the colour of the border all
+cancel. Distance from paper white is the measure — not chroma, because a black
+border has none to lose, and not luminance, because a pale border is already
+light without being damaged.
+
+Three things can fake it, and each one broke a draft of this before the
+measurement was tightened:
+
+| what fakes wear | why | what stops it |
+|---|---|---|
+| a uniformly pale border | pale ink looks like lost ink | wear is a **gradient**, a pale border is **flat** |
+| the rounded corner | the band isn't full width inside the ~3mm die-cut radius | corner scans start 7% along the edge and inherit the band width from the adjacent edge |
+| a pale background | cloth carries *less* ink than a yellow border, so leaving the card looks like losing it | the cut edge is a **step** (~30 ink units per pixel); wear is a **slope** (~5) |
+
+Measured over six synthetic cards, the three readings that must stay quiet — a
+clean card, a pale-bordered card, and a blurred card — peak at 0.188, while
+light wear reads 0.58 and heavy wear 0.82. The reporting threshold sits at 0.30,
+in the middle of that gap and nearer the quiet end: a false accusation against
+an intact card costs a submission fee, a missed one costs a second look. Before
+the fixes above, an intact pale-bordered card read 0.56 at three corners and an
+intact Charizard on cloth read 0.48.
+
+### Why it stops there
+
+Not because of resolution, which is the intuitive answer and the wrong one:
+
+| | µm per pixel | px across a card |
+|---|---|---|
+| TAG (patent US10146841B2, ~1200 ppi) | 21.2 | 2,976 |
+| AGS (13,440,000 px per face) | 20.3 | 3,102 |
+| a phone, card filling a 4032px frame | 21.8 | 2,887 |
+
+A phone resolves a card as finely as the machines do. What it lacks is
+*control of the light*. TAG photographs a card under seven to nine separate
+lighting conditions inside a closed housing and reads defects from how light
+diffracts off them; AGS scans with a laser for the height of every point on the
+surface. Scratches, dents, creases and soft corners are all changes in **shape**,
+and one photograph under whatever light was in the room cannot see shape. PSA,
+for its part, bought Genamint in 2021 and stated plainly that it was *assisting*
+human graders, not replacing them.
+
+Which is why surface, creases and the back of the card are named as unmeasured
+rather than estimated, and why nothing here is summed into a number.
+
 ## Known limitations
 
 - **A card held too close cannot be detected as too close, only diagnosed

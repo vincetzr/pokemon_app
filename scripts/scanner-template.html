@@ -1042,12 +1042,23 @@
       </div>
     </section>
 
+    <!-- The two things a grader scores that a photograph can actually reach.
+         Everything a grading company measures with a rig is here or is named
+         as absent; nothing here is turned into a predicted grade. -->
     <section id="sec-centering" hidden>
-      <div class="eyebrow">Centering</div>
+      <div class="eyebrow">Grading readiness</div>
       <div class="panel">
+        <p class="lede" id="grading-ceiling" style="margin:0 0 12px" hidden></p>
         <p class="note" id="centering-intro" style="margin:0 0 12px"></p>
         <div id="centering-chart"></div>
         <ul class="plain" id="centering-notes"></ul>
+        <div id="whitening-block" hidden style="margin-top:18px;border-top:1px solid var(--ink-800);padding-top:16px">
+          <div class="k" style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-400);margin:0 0 8px">Edge and corner wear</div>
+          <p class="note" id="whitening-intro" style="margin:0 0 10px"></p>
+          <div id="whitening-chart"></div>
+          <ul class="plain" id="whitening-notes"></ul>
+        </div>
+        <p class="note" id="grading-limits" style="margin:16px 0 0;color:var(--ink-400)"></p>
       </div>
     </section>
 
@@ -4356,6 +4367,305 @@ function measureCentering(rect, ctx) {
   };
 }
 
+/**
+ * The highest grade a measurement still ALLOWS.
+ *
+ * This is the whole difference between what this does and what a grade
+ * predictor does. Centering has published tolerances, and a card measured at
+ * 62/38 cannot be a PSA 10 no matter what the rest of it looks like — that is
+ * a ceiling, derived from a published rule, and it is checkable. It is not a
+ * prediction that the card WILL grade 9: everything else about the card can
+ * only pull the grade down from here.
+ *
+ * Reported against the confidence interval the centering measurement already
+ * carries, because a ceiling quoted from a number that could be two points
+ * either way is a ceiling with a hole in it.
+ */
+function centeringCeiling(worstRatio) {
+  for (const band of CENTERING_BANDS) {
+    if (worstRatio <= band.ratio) return band.label;
+  }
+  return null;
+}
+
+/* ===================================================================
+   Edge and corner whitening.
+
+   The second of the four things a grader scores, and the first one that is
+   about DAMAGE rather than geometry. A card's border is ink laid on a white
+   core; handling abrades the ink at the edges and corners and the core shows
+   through as a pale fringe. That is "whitening", and after centering it is
+   what most often keeps a card off a 10.
+
+   MEASURED INSIDE THE CARD, never at its outline. The obvious approach --
+   find the card's boundary and look for a bright fringe just inside it -- has
+   a confound it cannot escape: the card core is off-white, and so is a great
+   many desks. Against a pale background the boundary itself is the weakest
+   edge in the picture, and any measurement anchored to it inherits that
+   weakness as a BIAS, reading whitening off a table. So the reference here is
+   the card's own border ink, and the measurement is how much of the OUTER
+   band has lost it relative to the INNER band of the same border. Both bands
+   are unambiguously inside the card, and comparing one against the other
+   cancels exposure, white balance and the colour of the border itself.
+
+   What it cannot do is the other half of the grader's judgement. A grader
+   distinguishes whitening from a nick, a ding and a soft corner by looking at
+   the card in relief; this sees only ink that is missing. It reports a
+   measurement, never a grade.
+   =================================================================== */
+
+/**
+ * Fraction of the border band treated as "outer".
+ *
+ * The band is only about 3% of the card across (measured: 44px of 1500 on a
+ * Base Set card), so the outer 45% of it is roughly 0.6mm in from the cut --
+ * where handling wear actually lands. Taking more reaches the design edge and
+ * starts counting the artwork's own light pixels.
+ */
+const WHITENING_OUTER = 0.45;
+
+/**
+ * How much scanline-to-scanline disagreement marks the end of the border.
+ *
+ * The band is one flat colour along its whole length, so at any depth inside
+ * it the lines agree closely; the artwork does not. Measured on a Base Set
+ * card the band holds a spread near 2 and the design jumps past 25 within a
+ * couple of pixels, so this sits well clear of both.
+ */
+const WHITENING_DESIGN_SPREAD = 14;
+
+/**
+ * Ink the intact band must carry before wear can be expressed as a fraction
+ * of it. A border already this close to paper white has nothing measurable to
+ * lose, and dividing by it would turn sensor noise into a large reading.
+ */
+const WHITENING_MIN_INK = 60;
+
+/**
+ * How much the profile may rise again before the walk outward is called
+ * finished. Wear is monotone toward white; a rise means the samples have left
+ * the card onto something DARKER than the border, which happens because
+ * rectification overshoots the true edge.
+ */
+const WHITENING_TURN_TOL = 4;
+
+/**
+ * The largest one-pixel fall in ink that can still be wear.
+ *
+ * The turn rule above only catches a background darker than the border. A
+ * PALE background is the dangerous one: it carries less ink than the border,
+ * so leaving the card looks exactly like losing ink, and the walk runs happily
+ * out onto the table. Measured on a real photograph of a clean card lying on
+ * cloth, the border-to-cloth transition falls about 30 ink units in a single
+ * pixel, while wear on the synthetic cards ramps at 5 to 8. A card's cut edge
+ * is a step; abrasion is a slope, and that is what tells them apart.
+ *
+ * Without this an intact Charizard on a pale cloth read 48% wear at a corner,
+ * which is the worst thing this measurement can do.
+ */
+const WHITENING_STEP = 12;
+
+/**
+ * Ink loss worth reporting, as a fraction of the intact band's ink.
+ *
+ * Set from the measured separation, not from taste. Over six synthetic cards
+ * the three that must never register — a clean card, a card whose border is
+ * uniformly pale but undamaged, and a card blurred until its edges smear —
+ * peak at 0.188, while light wear reads 0.49 and heavy wear 0.82. The gap
+ * between them is 0.30 wide and this sits in the middle of it, nearer the
+ * quiet end: a false accusation against an intact card costs a submission
+ * fee, a missed one costs nothing but a second look.
+ */
+const WHITENING_NOTABLE = 0.30;
+
+/**
+ * Scan one stretch of one side, counting exposed core in the outer band
+ * against the inner band of the same border.
+ *
+ * The band is FOUND per scanline rather than assumed, for the same reason
+ * centering finds it: rectification is derived at a low working resolution and
+ * overshoots the true edge by tens of pixels, so anything measured at a fixed
+ * inset is measuring a different part of the card on every line.
+ */
+function whiteningScan(rect, side, a0frac, a1frac, forcedBand) {
+  const w = edgeWalker(rect, side);
+  const along = (side === 'left' || side === 'right') ? rect.height : rect.width;
+  const a0 = Math.round(along * a0frac);
+  const a1 = Math.round(along * a1frac);
+  const step = Math.max(1, Math.floor((a1 - a0) / 90));
+  const maxD = Math.max(12, Math.round(w.across * 0.06));
+
+  // A depth profile ACROSS scanlines, which is what makes the design edge
+  // findable without knowing anything about the card. At a given depth the
+  // border band is one flat colour along its whole length, while the design is
+  // artwork and differs from line to line. So the spread between scanlines at
+  // each depth separates band from design — and it is blind to wear, which is
+  // uniform along an edge and therefore lowers every scanline together.
+  const med = [], spread = [], lines = [];
+  for (let a = a0; a < a1; a += step) lines.push(a);
+  if (lines.length < 6) return null;
+
+  for (let d = 0; d < maxD; d++) {
+    const px = lines.map((a) => w.sample(a, d));
+    const m = [0, 1, 2].map((c) => medianOf(px.map((p) => p[c])));
+    med.push(m);
+    spread.push(medianOf(px.map((p) => Math.hypot(p[0] - m[0], p[1] - m[1], p[2] - m[2]))));
+  }
+
+  // Near a corner the design edge cannot be found this way, and must not be
+  // guessed at. The artwork within a few percent of a corner is locally flat,
+  // so the scanline spread stays low well past the border and the detector
+  // runs on into the design: measured on a clean card the edges found a band
+  // of 40-51px while the corners "found" 60-69, put the plateau inside the
+  // artwork, and reported the border-to-artwork colour step as ink loss —
+  // 0.56 on a card with an intact but pale border, which is the worst reading
+  // this can produce because it accuses an undamaged card.
+  //
+  // The band is a constant-width design element, so a corner has no business
+  // measuring its own. It inherits the width from the adjacent edge, where the
+  // detector works.
+  let design = forcedBand || -1;
+  if (!forcedBand) {
+    let run = 0;
+    for (let d = 2; d < maxD; d++) {
+      if (spread[d] > WHITENING_DESIGN_SPREAD) { run++; if (run >= 3) { design = d - 2; break; } }
+      else run = 0;
+    }
+  }
+  if (design < 8 || design >= maxD) return null;   // no band worth measuring
+
+  // How much ink a colour carries: distance from paper white. Not chroma —
+  // a black border has none to lose and whitens by lightening alone, and not
+  // luminance — a pale border is already light without being damaged. Distance
+  // from white falls under either kind of wear and under no other cause.
+  const ink = (m) => Math.hypot(255 - m[0], 255 - m[1], 255 - m[2]);
+
+  // The intact reference: the deepest quarter of the band, just outside the
+  // artwork, which is the part of the border handling never reaches.
+  let plateau = -1, best = -1;
+  for (let d = Math.round(design * 0.55); d < design; d++) {
+    if (ink(med[d]) > best) { best = ink(med[d]); plateau = d; }
+  }
+  if (plateau < 0 || best < WHITENING_MIN_INK) return null;
+
+  // Walk outward from the intact band. Wear is a MONOTONE ramp toward white,
+  // so it is the run that keeps getting lighter; the moment the profile turns
+  // and starts carrying more ink again, that is no longer the card — it is
+  // whatever the card was photographed on, reached through a rectification
+  // that overshoots the true edge by tens of pixels.
+  let outer = plateau;
+  for (let d = plateau - 1; d >= 0; d--) {
+    const here = ink(med[d]), prev = ink(med[d + 1]);
+    if (here > prev + WHITENING_TURN_TOL) break;      // darker: off the card
+    if (prev - here > WHITENING_STEP) break;          // a step, not a slope: the cut edge
+    outer = d;
+  }
+
+  const lost = 1 - ink(med[outer]) / best;
+  return {
+    lines: lines.length,
+    loss: Math.max(0, Math.min(1, lost)),
+    depth: plateau - outer,
+    band: design,
+    plateauInk: best,
+  };
+}
+
+/**
+ * The stretches read for each corner, as fractions along each adjacent edge.
+ *
+ * Starting at 7% rather than at the corner itself, and that margin is the
+ * whole difference between a reading and a fiction. The die-cut radius is
+ * about 3mm, which is 4.8% of the card's width and 3.4% of its height, and
+ * inside it the border band is not at full width and the scan crosses
+ * background on its way in. Measured with the scans starting at 2%, a card
+ * with a uniformly pale but undamaged border read 0.56 at three corners out of
+ * four — the single worst false positive this measurement can produce, since
+ * it accuses an intact card. Outside the radius the same card reads 0.03.
+ */
+const CORNERS = [
+  { key: 'top-left', a: ['top', 0.07, 0.19], b: ['left', 0.07, 0.19] },
+  { key: 'top-right', a: ['top', 0.81, 0.93], b: ['right', 0.07, 0.19] },
+  { key: 'bottom-left', a: ['bottom', 0.07, 0.19], b: ['left', 0.81, 0.93] },
+  { key: 'bottom-right', a: ['bottom', 0.81, 0.93], b: ['right', 0.81, 0.93] },
+];
+
+/**
+ * Whitening on all four edges and all four corners.
+ *
+ * Corners are scanned separately and over the stretch the centering walk
+ * deliberately SKIPS -- centering avoids the rounded corner because the band
+ * is not at full width there, which is exactly where a grader looks first.
+ */
+function measureWhitening(rect, ctx, borders) {
+  const reasons = [];
+  if (ctx.subject !== 'card') {
+    reasons.push('The card is behind plastic. A sleeve or holder scatters light at exactly the ' +
+      'edges this reads, and its own edge can look like a pale fringe on the card.');
+  }
+  if (!ctx.card) {
+    reasons.push('The card was not identified, so there is no way to know whether it has a plain ' +
+      'border to lose ink from.');
+  } else if (!MEASURABLE_RARITIES.has(String(ctx.card.rarity || '').toLowerCase())) {
+    reasons.push('This card\'s layout (' + (ctx.card.rarity || 'unknown rarity') + ') has no ' +
+      'plain border band. Ink loss is measured against the border\'s own colour, and a textured ' +
+      'or full-art edge has no single colour to lose.');
+  }
+  if (ctx.tooBlurry) {
+    reasons.push('The photo is too soft. Blur spreads a dark border into its lighter surroundings ' +
+      'and manufactures a pale fringe that is not on the card.');
+  }
+  if (ctx.hasGlare) {
+    reasons.push('Glare covers part of the card. A specular highlight is bright and colourless, ' +
+      'which is precisely what exposed core looks like to this measurement.');
+  }
+  if (reasons.length > 0) return { status: 'abstained', reasons };
+
+  if (!borders || !borders.ok) {
+    return { status: 'abstained', reasons: ['The border band could not be read: ' +
+      ((borders && borders.why) || 'unknown') + '.'] };
+  }
+
+  const edgeList = [];
+  for (const side of SIDES) {
+    const scan = whiteningScan(rect, side, 0.20, 0.80);
+    if (scan) edgeList.push({ where: side, value: scan.loss, depth: scan.depth, band: scan.band });
+  }
+  const bandOf = {};
+  for (const e of edgeList) bandOf[e.where] = e.band;
+
+  const cornerList = [];
+  for (const c of CORNERS) {
+    // Both arms of the corner, kept as the WORSE of the two rather than their
+    // mean: a grader scores the corner, and a corner is damaged if either side
+    // of it is. Averaging halves the reading on the common case where wear runs
+    // along one edge and stops at the turn.
+    const parts = [
+      bandOf[c.a[0]] ? whiteningScan(rect, c.a[0], c.a[1], c.a[2], bandOf[c.a[0]]) : null,
+      bandOf[c.b[0]] ? whiteningScan(rect, c.b[0], c.b[1], c.b[2], bandOf[c.b[0]]) : null,
+    ].filter(Boolean);
+    if (!parts.length) continue;
+    const worstArm = parts.reduce((m, x) => (x.loss > m.loss ? x : m), parts[0]);
+    cornerList.push({ where: c.key, value: worstArm.loss, depth: worstArm.depth, band: worstArm.band });
+  }
+
+  if (edgeList.length < 3) {
+    return { status: 'abstained', reasons: ['The border band could not be separated from the ' +
+      'artwork on enough sides to measure ink loss against it.'] };
+  }
+
+  const all = edgeList.concat(cornerList);
+  const worst = all.reduce((m, x) => (x.value > m.value ? x : m), all[0]);
+
+  return {
+    status: 'ok',
+    edges: edgeList,
+    corners: cornerList,
+    worst,
+    notable: all.filter((x) => x.value >= WHITENING_NOTABLE),
+  };
+}
+
 /* ===================================================================
    Identification: perceptual hashing against the baked corpus.
 
@@ -5226,6 +5536,11 @@ function renderCentering(card) {
   const notes = $('centering-notes');
   chart.innerHTML = '';
   notes.innerHTML = '';
+  $('grading-ceiling').hidden = true;
+  $('whitening-block').hidden = true;
+  $('whitening-chart').innerHTML = '';
+  $('whitening-notes').innerHTML = '';
+  $('grading-limits').textContent = '';
 
   const state = LAST_RESULT;
   if (!state || !state.rectifiedRaw) { sec.hidden = true; return; }
@@ -5265,6 +5580,25 @@ function renderCentering(card) {
 
   chart.appendChild(centeringChart(measured));
 
+  // The ceiling. A published tolerance plus a measurement is a CAP, which is a
+  // different kind of claim from a predicted grade and a much safer one: every
+  // other thing about the card can only pull the grade down from here.
+  const cap = centeringCeiling(measured.worst);
+  const capOptimistic = centeringCeiling(Math.max(0, measured.worst - measured.worstInterval));
+  const ceilEl = $('grading-ceiling');
+  ceilEl.hidden = false;
+  ceilEl.innerHTML = cap
+    ? 'On centering alone this card could still be a <b>' + escapeHtml(cap) + '</b>' +
+      (capOptimistic && capOptimistic !== cap
+        ? ', and possibly a <b>' + escapeHtml(capOptimistic) + '</b> if the measurement is running ' +
+          'slightly pessimistic.'
+        : '.') +
+      ' That is a ceiling, not a prediction — it is the best this card can do on this one ' +
+      'attribute, and the three below can only take it lower.'
+    : 'Centering alone puts this outside the published tolerance for a <b>PSA 7</b>, which is the ' +
+      'lowest line PSA publishes a front figure for. That is a ceiling on this attribute, not a ' +
+      'prediction of the grade.';
+
   const spans = CENTERING_BANDS.filter((b) =>
     measured.worst - measured.worstInterval < b.ratio &&
     measured.worst + measured.worstInterval > b.ratio);
@@ -5282,9 +5616,6 @@ function renderCentering(card) {
   for (const text of [
     'This is FRONT centering only. Graders measure the back as well, and their back tolerance ' +
     'is a separate gate — a card can pass the front and fail on the back.',
-    'Centering is one of four inputs to a grade. Surface, corners and edges are the others, and ' +
-    'none of them is measurable from a single photograph of the front. No grade is predicted ' +
-    'here for that reason.',
     'A card that is badly off-centre is not damaged, and a significant miscut is often worth ' +
     'MORE rather than less — collectors seek them out. Nothing here lowers the prices above.',
   ]) {
@@ -5292,6 +5623,116 @@ function renderCentering(card) {
     li.textContent = text;
     notes.appendChild(li);
   }
+
+  renderWhitening(card, state, measured);
+}
+
+/**
+ * Edge and corner wear, drawn beneath the centering it shares a panel with.
+ *
+ * Deliberately NOT converted into a grade contribution. Centering can be,
+ * because PSA publishes the tolerance; nobody publishes "this much whitening
+ * costs you a point", and inventing the mapping would undo the one thing that
+ * makes the ceiling above worth reading.
+ */
+function renderWhitening(card, state, centering) {
+  const block = $('whitening-block');
+  const chart = $('whitening-chart');
+  const notes = $('whitening-notes');
+
+  let w;
+  try {
+    const borders = measureBorders(state.rectifiedRaw);
+    w = measureWhitening(state.rectifiedRaw, Object.assign({ card }, state.centeringContext), borders);
+  } catch { return; }
+
+  block.hidden = false;
+
+  if (w.status !== 'ok') {
+    $('whitening-intro').textContent =
+      'Wear at the edges and corners was not measured on this photo.';
+    for (const r of w.reasons) {
+      const li = document.createElement('li');
+      li.textContent = r;
+      notes.appendChild(li);
+    }
+    setGradingLimits(centering, null);
+    return;
+  }
+
+  const pct = (v) => Math.round(v * 100);
+  $('whitening-intro').textContent = w.notable.length === 0
+    ? 'No ink loss found at any edge or corner. The border carries the same density at its outer ' +
+      'edge as it does against the artwork, which is what an unhandled card looks like.'
+    : 'Ink loss found at ' + w.notable.map((x) => x.where.replace('-', ' ')).join(', ') +
+      '. The worst reads ' + pct(w.worst.value) + '% of the border\'s density gone at the ' +
+      w.worst.where.replace('-', ' ') + '.';
+
+  const rows = w.edges.concat(w.corners);
+  for (const r of rows) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;margin:0 0 6px';
+    const label = document.createElement('span');
+    label.style.cssText = 'width:96px;flex:none;font-size:12px;color:var(--ink-300)';
+    label.textContent = r.where.replace('-', ' ');
+    const meter = document.createElement('div');
+    meter.className = 'meter';
+    meter.style.cssText = 'flex:1;margin:0';
+    const bar = document.createElement('i');
+    bar.style.width = Math.min(100, pct(r.value)) + '%';
+    bar.style.background = r.value >= WHITENING_NOTABLE ? 'var(--warn)' : 'var(--good)';
+    meter.appendChild(bar);
+    const val = document.createElement('span');
+    val.style.cssText = 'width:40px;flex:none;text-align:right;font-family:ui-monospace,monospace;' +
+      'font-size:12px;color:' + (r.value >= WHITENING_NOTABLE ? 'var(--warn)' : 'var(--ink-400)');
+    val.textContent = pct(r.value) + '%';
+    row.appendChild(label); row.appendChild(meter); row.appendChild(val);
+    chart.appendChild(row);
+  }
+
+  for (const text of [
+    'Measured as ink density lost at the outer border against the same border where it meets the ' +
+    'artwork — the card is its own reference, so the exposure, the white balance and the colour ' +
+    'of the border all cancel. A border that is simply pale is not wear: it is pale all the way ' +
+    'through, and reads near zero here.',
+    'This finds ink that is MISSING. It does not see a corner that is soft, dinged or bent while ' +
+    'still carrying its colour, and a grader scores those too — under a light held at an angle, ' +
+    'which is what the rest of this panel cannot do.',
+  ]) {
+    const li = document.createElement('li');
+    li.textContent = text;
+    notes.appendChild(li);
+  }
+
+  setGradingLimits(centering, w);
+}
+
+/**
+ * What a grading company measures that this does not, named rather than
+ * implied.
+ *
+ * The resolution is not the gap, which is the surprising part and the reason
+ * this is worth stating: TAG's patent specifies about 1200 pixels per inch and
+ * AGS publishes 13.44 million pixels per face, which work out at 21.2 and 20.3
+ * microns per pixel. A phone photograph of a card filling the frame at 4032
+ * pixels reaches 21.8. The difference is not what they can see, it is what
+ * they can light and what they can measure in depth.
+ */
+function setGradingLimits(centering, whitening) {
+  const missing = [];
+  if (!whitening || whitening.status !== 'ok') missing.push('edge and corner wear');
+  missing.push('surface scratches and print lines');
+  missing.push('creases, dents and soft corners');
+  missing.push('the back of the card');
+
+  $('grading-limits').textContent =
+    'Not measured here: ' + missing.join(', ') + '. This is not a resolution problem — a phone ' +
+    'photograph of a card filling the frame resolves about 22 microns per pixel, which is what ' +
+    'the grading machines work at too. It is a lighting problem. TAG photographs a card under ' +
+    'seven to nine separate lighting conditions inside a closed housing, and AGS scans it with a ' +
+    'laser to get the height of every point on its surface. A scratch, a dent and a soft corner ' +
+    'are all changes in SHAPE, and one photograph under whatever light was in the room cannot ' +
+    'see shape. That is why nothing here is added up into a grade.';
 }
 
 /**
@@ -6338,6 +6779,9 @@ async function analyzeSource(source, onStep, opts) {
       subject,
       userPlaced: !!options.userPlaced,
       tooBlurry: quality.tooBlurry,
+      // Whitening needs this and centering does not: a specular highlight is
+      // bright and colourless, which is exactly what exposed core looks like.
+      hasGlare: quality.hasGlare,
       fill,
     },
     rectified: uprightImage,
