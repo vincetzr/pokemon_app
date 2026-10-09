@@ -142,6 +142,10 @@ export function mergeReadings(ocr: OcrResult | null, vision: VisionResult | null
     setTotal,
     setHint: vision?.extracted.setHint ?? null,
     nameConfidence,
+    collectorConfidence: Math.min(
+      vision?.extracted.number ? vision.confidence : ocr?.collectorConfidence ?? 0,
+      vision?.extracted.setTotal || !setTotal ? vision?.confidence ?? 1 : ocr?.collectorConfidence ?? 0,
+    ),
     language: vision?.language ?? null,
     requiresConfirmation: Boolean(
       (ocrName && visionName && normalise(ocrName) !== normalise(visionName)) ||

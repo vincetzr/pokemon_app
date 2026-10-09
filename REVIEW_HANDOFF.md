@@ -30,34 +30,44 @@ that work before further review; it is not a declaration that all checks pass.
   browser regression script and documentation. Fixtures are reference images,
   not an independent camera-photo accuracy benchmark.
 
+## Current status
+
+All reviewed source files are now saved on GitHub. The large generated scanner
+and daily price snapshot were regenerated directly on the review branch by
+GitHub Actions, avoiding a stalled multi-megabyte connector upload.
+
+- Generated checkpoint: `c98cfe5408e7accf45858966d559685e3803650d`.
+- Successful workflow: https://github.com/vincetzr/pokemon_app/actions/runs/37961922683
+- That workflow passed fixture download, all 130 tests, TypeScript, the Next.js
+  production build, browser installation and the real Chromium UI regression.
+- Additional review fixes require a matching set hint even when the denominator
+  matches, retain collector OCR confidence, and exclude suspected foreign
+  printings and graded holders from automatic bulk subtotals.
+- Latest local test run after the set/collector fixes: 132 passed; typecheck passed.
+- Price snapshot: TCGCSV export dated 2026-10-08; 5,197 verified catalogue identities
+  out of 5,577, with 380 unavailable. Missing mappings are not guessed.
+
 ## Continue here
 
-1. Read this file, `git status`, recent commits, and current branch/PR state.
-2. Run `npm test`, `npm run typecheck`, `npm run build`, and
-   `npm run test:scanner:browser`; record actual outcomes below.
-3. Audit recognition acceptance through scan/bulk/manual correction and pricing
-   selection through snapshots/listings/history/collection. Add focused
-   regressions for substantive defects, then fix them.
-4. Edit scanner sources under `scripts/`; regenerate with
-   `npm run build:scanner:reuse`. Do not rebake or recompress the corpus casually.
-5. Update this handoff with defects, tests, limitations and next actions; commit
-   and push the review branch before ending. A clean local commit alone is not
-   durable enough. Verify the remote head through GitHub.
+1. Check current GitHub review-branch head and any open PR; do not overwrite a
+   newer commit. Local changes may await the final source checkpoint.
+2. Save the additional fixes, let `review-checks.yml` regenerate the scanner and
+   verify the resulting commit, and confirm the run succeeds.
+3. Open a reviewable pull request to `claude/pokemon-card-auth-pricing-rpx6ib`.
+   Do not merge or deploy without a subsequent instruction.
+4. Record the final PR URL and validation result here, then report them to the user.
 
-## Validation log
+## Important limits
 
-- Initial recovery: remote branch still at `6004218`, default still `03e5b29`.
-- Local verification completed: 130 tests passed (including all downloaded image fixtures), typecheck passed, Next.js production build passed.
-- Browser checks remain pending: Playwright browser download returned a truncated/invalid archive; no browser executable is installed.
-- Two connector attempts to upload the 9 MB generated scanner ended without confirmation. Source files are being checkpointed first; `review-checks.yml` regenerates the large files on the review branch and then runs full verification on that generated commit.
-- GitHub upload is not yet confirmed beyond `6004218`; verify the remote head rather than assuming local commits are pushed.
-- Camera accuracy, condition-specific live prices and freshness must not be
-  claimed solely on the basis of mock tests or catalogue-image fixtures.
-
-## Open limitations
-
-- The initial conversation-history lookup failed. Recovered the actual checkout
-  and compared its branch against GitHub instead.
-- Hosted default-branch code has not received the review changes yet.
-- Any external network or provider failure must be recorded, not presented as a
-  successful live-data validation.
+- Catalogue image fixtures are not a camera-photo accuracy benchmark. The scanner
+  cannot guarantee correct identification of every unknown card or printing.
+- The standalone UI requires confirmation of card identity and printing before
+  its price summary. Aggregate quotes have unspecified condition, not Near Mint.
+- The reviewed UI tests use local captured catalogue data. Availability of the
+  unofficial live listing endpoint is separate; a failed or mismatched listing
+  request leaves condition prices unavailable.
+- Local Chromium download failed with an invalid archive; GitHub's Chromium
+  validation succeeded. Do not confuse the failed local attempt with a UI failure.
+- Hosted default-branch code has not received the review changes yet. Daily price
+  refresh becomes scheduled on the default branch after merging; independently
+  deployed server copies must receive the updated snapshot file.

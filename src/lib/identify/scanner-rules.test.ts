@@ -27,6 +27,9 @@ describe('standalone price and identity safeguards', () => {
   it('excludes weak matches, unusable photos and stale quotes from bulk totals', () => {
     expect(rules.bulkValue(card, data, candidates, {}, now)?.amount).toBe(10);
     expect(rules.bulkValue(card, data, candidates, { tooBlurry: true }, now)).toBeNull();
+    expect(rules.bulkValue(card, data, candidates, { foreign: true }, now)).toBeNull();
+    expect(rules.bulkValue(card, data, candidates, { graded: true }, now)).toBeNull();
+    expect(rules.bulkValue({ ...card, id: 'y' }, data, candidates, {}, now)).toBeNull();
     expect(rules.bulkValue(card, data, candidates, {}, now + 3 * 86400000)).toBeNull();
     expect(rules.bulkValue(card, data, [{ score: 0.7, probability: 1 }], {}, now)).toBeNull();
   });

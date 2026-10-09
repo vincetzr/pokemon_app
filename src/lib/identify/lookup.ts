@@ -32,6 +32,7 @@ export interface ExtractedText {
    */
   nameConfidence?: number;
   language?: string | null;
+  collectorConfidence?: number;
   requiresConfirmation?: boolean;
 }
 
@@ -226,9 +227,10 @@ export function shouldAutoSelect(candidates: IdentifyCandidate[], threshold = 0.
     // One matching field can score 1.0 without identifying an exact printing.
     if (!extracted.name || !extracted.number || (!extracted.setTotal && !extracted.setHint)) return false;
     if ((extracted.nameConfidence ?? 1) < 0.75 || nameSimilarity(extracted.name, first.card.name) < 0.93) return false;
+    if ((extracted.collectorConfidence ?? 1) < 0.75) return false;
     if (normaliseNumber(extracted.number.toUpperCase()) !== normaliseNumber(first.card.number.toUpperCase())) return false;
     if (extracted.setTotal && Number(extracted.setTotal) !== first.card.set.printedTotal) return false;
-    if (!extracted.setTotal && nameSimilarity(extracted.setHint!, first.card.set.name) < 0.93) return false;
+    if (extracted.setHint && nameSimilarity(extracted.setHint, first.card.set.name) < 0.93) return false;
   }
   // A high score is not enough — it must also be clearly better than the
   // runner-up, or we are guessing between near-identical printings.

@@ -7357,7 +7357,8 @@ async function runBulk(files) {
         file: files[i].name,
         card,
         match: top ? top.score : 0,
-        value: card ? ScannerRules.bulkValue(card, MARKET_SNAPSHOT, result.candidates, result.quality) : null,
+        value: card ? ScannerRules.bulkValue(card, MARKET_SNAPSHOT, result.candidates,
+          { ...result.quality, foreign: !!result.foreign, graded: !!result.slab }) : null,
         // Named, but the runner-up is close enough that the printing — and so
         // the price — is a guess. Said on the row rather than folded into the
         // total silently.

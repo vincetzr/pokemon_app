@@ -27,7 +27,7 @@
       stale: now - Date.parse(entry.asOf) > 2 * 86400000 } : null;
   }
   function bulkValue(card, snapshot, candidates, quality, now = Date.now()) {
-    if (!confidentPick(candidates) || quality?.tooBlurry || quality?.tooDark) return null;
+    if (!confidentPick(candidates) || candidates[0].card?.id !== card?.id || quality?.tooBlurry || quality?.tooDark || quality?.foreign || quality?.graded) return null;
     const quote = selectedQuote(card, snapshot, undefined, now);
     return quote && !quote.stale ? quote : null;
   }

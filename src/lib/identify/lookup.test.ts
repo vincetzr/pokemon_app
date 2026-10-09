@@ -40,6 +40,7 @@ describe('identity evidence required before automatic pricing', () => {
   it.each([
     { number: null }, { name: null }, { setTotal: null }, { setTotal: '130' },
     { language: 'Japanese' }, { requiresConfirmation: true }, { nameConfidence: 0.3 }, { number: '5' },
+    { setHint: 'Base Set (Shadowless)' }, { collectorConfidence: 0.2 },
   ])('abstains despite a perfect normalized score when evidence is %j', change => {
     expect(shouldAutoSelect([candidate], 0.8, { ...complete, ...change })).toBe(false);
   });
