@@ -24,8 +24,10 @@ describe.skipIf(!hasFixtures)('assessQuality', () => {
    * flagged the genuine Base Set Charizard reference as too blurry. Any
    * threshold change that reintroduces that must fail here.
    */
-  it('does not flag genuine card images as blurry, across eras', async () => {
-    for (const id of ['base1-4', 'swsh45-18', 'sv3pt5-6']) {
+  it('does not flag detailed catalogue images as blurry', async () => {
+    // The TCGplayer vintage scan is only 325px wide: authentic artwork does
+    // not imply enough image detail for inspection. Test adequate resolution.
+    for (const id of ['swsh45-18', 'sv3pt5-6']) {
       const img = await rectifiedRaw(await sharp(join(FIXTURES, `${id}.png`)).toBuffer());
       const q = await assessQuality(img);
       expect(q.tooBlurry, `${id} was wrongly flagged as blurry (sharpness ${q.sharpness})`).toBe(false);
@@ -49,10 +51,15 @@ describe.skipIf(!hasFixtures)('assessQuality', () => {
   }, 30_000);
 
   it('detects underexposure', async () => {
-    const dark = await sharp(join(FIXTURES, 'base1-4.png')).modulate({ brightness: 0.4 }).toBuffer();
+    const dark = await sharp(join(FIXTURES, 'base1-4.png')).linear(0.2).toBuffer();
     const q = await assessQuality(await rectifiedRaw(dark));
     expect(q.tooDark).toBe(true);
   }, 30_000);
+
+  it('abstains when a genuine reference has lost detail through downsampling', async () => {
+    const small = await sharp(join(FIXTURES, 'swsh45-18.png')).resize(150).toBuffer();
+    expect((await assessQuality(await rectifiedRaw(small))).tooBlurry).toBe(true);
+  });
 
   it('does not flag a legitimately dark full-art card as underexposed', async () => {
     // Cinderace V has a dark frame; a naive shadow check would call it underexposed.

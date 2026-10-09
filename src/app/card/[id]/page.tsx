@@ -1,31 +1,37 @@
 import Image from 'next/image';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCardCached } from '@/lib/tcg-cache';
 import { toCard } from '@/lib/tcg-api';
 import { buildPricing, fetchConditions } from '@/lib/pricing/engine';
+import { headlineQuote } from '@/lib/pricing/quotes';
 import { seriesStats } from '@/lib/pricing/history';
 import { historyStats } from '@/lib/db';
 import { PriceChart } from '@/components/PriceChart';
 import { ConditionPrices } from '@/components/ConditionPrices';
 import { SaveToCollection } from '@/components/SaveToCollection';
-import { conditionLabel, type Money, type PriceQuote } from '@/lib/types';
+import { conditionLabel, type Money, type PriceQuote, type PrintVariant } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export default async function CardPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CardPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ variant?: string }> }) {
   const { id } = await params;
   const cached = await getCardCached(id);
   if (!cached) notFound();
 
   const card = toCard(cached.data);
-  const pricing = buildPricing(cached.data);
+  const requested = (await searchParams).variant;
+  const allPricing = buildPricing(cached.data);
+  const variants = [...new Set([...card.variants, ...allPricing.quotes.map(q => q.variant)])];
+  const selected = variants.includes(requested as PrintVariant) ? requested as PrintVariant : variants.length === 1 ? variants[0] : undefined;
+  const pricing = { ...allPricing, headline: selected ? headlineQuote(allPricing.quotes, { variant: selected }) : null };
   const accrued = historyStats(id);
 
   // Real per-condition prices from live listings. Awaited here rather than
   // streamed because it is the answer to "what is my card worth" — the whole
   // point of the page — and it resolves in about a second from cache.
-  const conditions = await fetchConditions(card, card.variants[0] ?? 'normal');
+  const conditions = selected ? await fetchConditions(card, selected) : null;
 
   const usdQuotes = pricing.quotes.filter((q) => q.price.currency === 'USD');
   const eurQuotes = pricing.quotes.filter((q) => q.price.currency === 'EUR');
@@ -42,7 +48,9 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
   const usdSeries = pricing.series.filter((s) => countIn(s, 'USD') >= 2);
   const eurSeries = pricing.series.filter((s) => countIn(s, 'EUR') >= 2);
 
-  const stats = eurSeries[0] ? seriesStats(eurSeries[0]) : usdSeries[0] ? seriesStats(usdSeries[0]) : null;
+  const headlineSeries = pricing.headline && pricing.series.find(s => s.variant === pricing.headline!.variant);
+  const stats = headlineSeries && pricing.headline ? seriesStats({ ...headlineSeries,
+    points: headlineSeries.points.filter(p => p.price.currency === pricing.headline!.price.currency) }) : null;
 
   return (
     <div className="px-4 pt-6">
@@ -67,10 +75,16 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
         </div>
       </div>
 
+      {variants.length > 1 && <div className="mt-4 text-sm">
+        <p>Confirm your printing to select its price:</p>
+        <div className="mt-2 flex flex-wrap gap-2">{variants.map(v =>
+          <Link key={v} href={`/card/${card.id}?variant=${v}`} aria-current={selected === v ? 'true' : undefined}
+            className={`rounded border px-3 py-2 ${selected === v ? 'border-bolt-500' : 'border-ink-700'}`}>{variantLabel(v)}</Link>)}</div>
+      </div>}
       {pricing.headline && (
         <div className="mt-5 rounded-xl border border-ink-800 bg-ink-900/60 p-4">
           <div className="text-[11px] uppercase tracking-wide text-ink-400">
-            Market price · Near Mint
+            {pricing.headline.basis ?? 'Market'} · {variantLabel(pricing.headline.variant)} · {conditionLabel(pricing.headline.condition)}
           </div>
           <div className="mt-1 flex items-baseline gap-3">
             <span className="font-mono text-3xl font-semibold text-ink-100">
@@ -105,7 +119,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
         </p>
       )}
 
-      <SaveToCollection cardId={card.id} variants={card.variants} />
+      <SaveToCollection key={selected ?? 'unselected'} cardId={card.id} variants={variants} selectedVariant={selected} />
 
       {conditions && <ConditionPrices pricing={conditions} />}
 
@@ -114,15 +128,15 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
 
       {pricing.spreads.length > 0 && (
         <section className="mt-4 rounded-xl border border-ink-800 bg-ink-900/60 p-4">
-          <h2 className="text-[13px] font-semibold text-ink-100">Current listing spread</h2>
+          <h2 className="text-[13px] font-semibold text-ink-100">Listing spread</h2>
           <p className="mt-1 text-[11px] leading-relaxed text-ink-400">
-            The range of live listings. This mixes conditions and sellers, so it is context rather
+            The range reported on the date below. This mixes conditions and sellers, so it is context rather
             than a price for any one condition.
           </p>
           <ul className="mt-3 space-y-3">
             {pricing.spreads.map((s) => (
               <li key={s.variant}>
-                <div className="text-[12px] font-medium text-ink-200">{variantLabel(s.variant)}</div>
+                <div className="text-[12px] font-medium text-ink-200">{variantLabel(s.variant)} · {s.asOf}</div>
                 <dl className="mt-1.5 grid grid-cols-4 gap-2">
                   {(['low', 'mid', 'high', 'directLow'] as const).map((k) => (
                     <div key={k}>
@@ -183,7 +197,7 @@ function QuoteTable({ title, quotes }: { title: string; quotes: PriceQuote[] }) 
                   </span>
                 )}
               </td>
-              <td className="py-1.5 text-right font-mono text-ink-100">{formatMoney(q.price)}</td>
+              <td className="py-1.5 text-right font-mono text-ink-100">{formatMoney(q.price)}<div className="text-[10px] text-ink-400">{q.basis} · {q.asOf}</div></td>
             </tr>
           ))}
         </tbody>

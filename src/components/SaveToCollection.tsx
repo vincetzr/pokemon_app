@@ -13,17 +13,20 @@ import { RAW_CONDITIONS, RAW_CONDITION_LABELS, type PrintVariant, type RawCondit
 export function SaveToCollection({
   cardId,
   variants,
+  selectedVariant,
 }: {
   cardId: string;
   variants: PrintVariant[];
+  selectedVariant?: PrintVariant;
 }) {
   const [open, setOpen] = useState(false);
   const [condition, setCondition] = useState<RawCondition>('NM');
-  const [variant, setVariant] = useState<PrintVariant>(variants[0] ?? 'normal');
+  const [variant, setVariant] = useState<PrintVariant | ''>(selectedVariant ?? (variants.length === 1 ? variants[0]! : ''));
   const [quantity, setQuantity] = useState(1);
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   async function save() {
+    if (!variant) return;
     setState('saving');
     try {
       const res = await fetch('/api/collection', {
@@ -85,6 +88,7 @@ export function SaveToCollection({
             onChange={(e) => setVariant(e.target.value as PrintVariant)}
             className="mt-1 w-full rounded-lg border border-ink-700 bg-ink-950 px-3 py-2 text-ink-100"
           >
+            <option value="" disabled>Choose your printing</option>
             {variants.map((v) => (
               <option key={v} value={v}>
                 {v.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())}
@@ -114,7 +118,7 @@ export function SaveToCollection({
         <button
           type="button"
           onClick={save}
-          disabled={state === 'saving'}
+          disabled={state === 'saving' || !variant}
           className="flex-1 rounded-lg bg-bolt-500 px-4 py-2.5 text-[13px] font-semibold text-ink-950 hover:bg-bolt-400 disabled:bg-ink-700 disabled:text-ink-400"
         >
           {state === 'saving' ? 'Saving…' : 'Save'}

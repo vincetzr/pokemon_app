@@ -47,9 +47,9 @@ identified. The price names the card it is for, with a "not this card?" control
 beside it, because a price for the wrong printing is worse than no price.
 
 **Price by condition** — real per-condition prices read from live TCGplayer
-listings: cheapest and typical asking price for Near Mint through Damaged, with
-the number of listings behind each figure. Plus current market price, history
-charted over time, and the listing spread.
+listings: lowest and median sampled asking price for Near Mint through Damaged,
+with printing, language, sample count and capture date. Market aggregates and
+historical observations are labelled separately.
 
 **Check authenticity** — a set of signals scored individually, combined into a
 verdict that is explicit about its own confidence and about what it could not
@@ -58,9 +58,8 @@ determine.
 **Bulk scan** — work through a pile; cards are ranked by value so you can see
 what deserves a closer look.
 
-**Collection** — save cards with their condition. The collection page prices
-everything each time it loads, which is also how the app accrues real price
-history for the cards you care about.
+**Collection** — save the printing and condition. The page includes only matching,
+fresh listing samples in its USD subtotal and excludes unavailable entries.
 
 ---
 
@@ -197,60 +196,59 @@ conflict never produces a confident answer.
 
 ### Matching in the standalone scanner
 
-The single-file scanner has no OCR and no network, so it identifies a card by
-correlating it against descriptors for every card baked into the page. Six terms
-compare the card as a picture (two difference hashes, a colour signature, and
-masked rank correlations over the whole card, the art window and a coarse grid);
-three more compare it as a **document** — the name line, the attack block, and
-the bottom strip carrying the set symbol, number and rarity.
+The static scanner compares hashes, colour signatures and masked rank descriptors
+against the loaded catalogue. Text-region descriptors help distinguish similar
+artwork, but do not read the printed collector number. It contains 2,148 entries
+and loads nine additional shards for 5,577 entries when served with the corpus folder.
 
-Those three cost nothing extra: the baked `gr` descriptor is already a 16×22
-rank grid over the whole card, so each band is a slice of rows both sides
-already have. They matter because averaged into one whole-card correlation the
-written bands are a minority of the cells and are outvoted by artwork — which is
-exactly backwards for the case that matters most, two printings that share
-artwork and differ only in what is printed on them.
+Candidate percentages are **relative match shares among loaded entries**, not
+probabilities of a correct identity. An out-of-catalogue card can still rank first.
+Automatic bulk pricing requires a score of at least 0.80, a share of at least 0.90
+when available, and a score margin of at least 0.030. The single-card summary waits
+for confirmation of the card; multiple printings require a separate selection.
 
-Measured over 47 cards under seven degradations — perspective, crop error,
-colour cast, gamma, JPEG, blur, and specular glare in four different *places*:
+Regression tests cover exact name/number/set evidence, competing printings,
+language conflicts, empty/blank input, and five independent catalogue images after
+JPEG compression. These fixtures are not a camera-photo accuracy benchmark and do
+not establish performance on unseen cards, glare, sleeves or worn copies.
 
-| | right | asserted right | asserted wrong |
-|---|---|---|---|
-| picture terms only | 278/329 | 82 | 0 |
-| with the written bands | **300/329** | **95** | **0** |
+### Verified, dated prices
 
-All three bands rather than the best one, because a single band wins on paper
-only until the lamp lands on it: weighting the attack block alone scored best
-while the glare sat over the artwork and began asserting falsehoods as soon as
-the glare was moved onto the text. Three bands in different parts of the card
-mean a highlight can erase one and the others still speak, which is why the
-worst case — a wide lamp across the whole card — improves most, 23/47 to 34/47.
+`npm run refresh:prices` ingests TCGplayer market prices through the TCGCSV daily
+export. It maps API cards by exact normalized set name, card name and collector
+number; native catalogue entries retain their stable category/group/product IDs.
+Quotes remain separate by printing. Missing mappings are unavailable, never zero
+or a guess based on a similarly named card. The file is `docs/prices/latest.json`.
 
-### What the percentage means
+The app displays source, currency and observation date. Aggregate market prices
+have **unspecified condition**; they are neither Near Mint quotes, individual
+completed sales nor graded-card values. More than one known printing means no
+automatic headline. Quotes older than 48 hours are historical and excluded from
+bulk subtotals. Cardmarket's Excellent-or-better category retains its native label.
 
-The candidate list shows a probability, not a similarity, and the figures sum
-to 100% across the list plus whatever mass belongs to cards not on it. They are
-a softmax over all 5,577 scores, and its temperature is **fitted, not chosen** —
-over 336 readings of known cards, at `MATCH_TEMPERATURE = 0.0035` a stated
-confidence of 90% or more is right about 97 times in 100, and 22 of the 29
-wrong reads are shown below that bar. It never prints more than 99%.
+Condition tables use only returned listings whose language, printing and condition
+match the request, with a median of up to 25 sampled offers. Amounts exclude
+shipping and tax. Saved holdings require their exact condition and printing, and
+samples older than 24 hours are excluded from collection subtotals. Old unverified
+baked condition tables are withheld. The daily workflow refreshes the price file
+on the default branch once merged; a separately deployed server must receive the
+updated file too. Hosting/cache delays remain visible through the quote date.
 
-Expected calibration error alone would pick a much lower temperature, which
-displays 100.0% on essentially every scan — ECE is minimised by a degenerate
-always-certain predictor whenever accuracy is high, and that is the display
-this replaced rather than an improvement on it. 0.0035 stays within 0.006 Brier
-of the optimum while still saying when it is unsure.
+```bash
+npm run refresh:prices
+npm run build:scanner:reuse  # reuse descriptors; no rebake or thumbnail recompression
+npm run fixtures:catalogue  # download five mapped reference images, ignored by git
+npm test
+npm run typecheck
+npm run build
+npx playwright install chromium
+npm run test:scanner:browser
+```
 
-The same 90% is the bar the rest of the page uses to decide whether to assert a
-printing, so the candidate list and the summary cannot contradict each other.
-
-Two thresholds are scaled by `REGION_NORM` because they compare match scores,
-which the renormalisation compresses: `CONFIDENT_MATCH_MARGIN`, which decides
-whether the match may settle which way up the card is. `LAYOUT_MARGIN` is not,
-because it compares inkiness fractions and is on no such scale. Getting that
-wrong shows the card upside down: over 48 cards read both ways up, the unscaled
-threshold was right 95/96 and the scaled one 96/96, and real photographs
-separate less cleanly than fixtures do.
+Image tests skip when reference images are absent. The browser suite uses an
+intercepted local fixture origin, so it checks UI logic without a live marketplace.
+Price ingestion is atomic: failed requests or a changing export leave the previous
+snapshot intact. Source policy: <https://tcgcsv.com/docs>.
 
 ### Layout
 
@@ -392,3 +390,11 @@ rather than estimated, and why nothing here is summed into a number.
 - **Cardmarket figures lag.** Measured on this app's own snapshots, Cardmarket
   data was 40–50 days old while TCGplayer was 2 days old. Both are labelled with
   the date they refer to, and a stale source is called out in the UI.
+
+
+## Condition and slab scanning
+
+Scan front/back photographs to review a raw condition, or scan a slab label and barcode
+for PSA, Beckett, CGC or PCG. Condition-specific offers, estimate limits, certificate
+lookup and optional authenticated graded offers are documented in [docs/GRADING.md](docs/GRADING.md).
+Run `npm run build:preview` after rebuilding the scanner to produce one portable HTML preview.

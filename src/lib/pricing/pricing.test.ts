@@ -73,7 +73,7 @@ describe('quotesForCard', () => {
     // lowPriceExPlus is a genuine condition-segmented observation, not an
     // estimate — it must not be dropped or relabelled as modeled.
     const lp = quotesForCard(card()).find(
-      (q) => q.source === 'cardmarket' && q.condition.kind === 'raw' && q.condition.condition === 'LP',
+      (q) => q.source === 'cardmarket' && q.condition.kind === 'cardmarket-ex-plus',
     );
 
     expect(lp).toBeDefined();

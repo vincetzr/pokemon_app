@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { CameraCapture, type CaptureResult } from '@/components/CameraCapture';
 import { AuthReportCard } from '@/components/AuthReportCard';
 import { ConditionPrices } from '@/components/ConditionPrices';
+import { GradingPanel } from '@/components/GradingPanel';
 import type { ConditionPricing } from '@/lib/pricing/sources/tcgplayer-listings';
 import type { Card, IdentifyCandidate, ScanResult } from '@/lib/types';
 
@@ -19,17 +20,21 @@ export default function ScanPage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ScanResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'raw' | 'slab'>('raw');
+  const [photo, setPhoto] = useState<string | null>(null);
 
   const onCapture = useCallback(async (capture: CaptureResult) => {
     setBusy(true);
     setError(null);
     setResult(null);
+    setPhoto(capture.dataUrl);
 
     try {
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: capture.dataUrl, guide: capture.guide }),
+        body: JSON.stringify({ image: capture.dataUrl, guide: capture.guide, mode }),
+        signal: AbortSignal.timeout(115_000),
       });
 
       const body = await res.json();
@@ -43,13 +48,13 @@ export default function ScanPage() {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [mode]);
 
   return (
     <div className="px-4 pt-6">
       <h1 className="mb-4 text-xl font-semibold tracking-tight">Scan a card</h1>
 
-      {!result && <CameraCapture onCapture={onCapture} busy={busy} />}
+      {!result && <><div className="mb-3 flex gap-2" role="group" aria-label="Scan subject">{(['raw', 'slab'] as const).map(m => <button key={m} aria-pressed={mode === m} disabled={busy} onClick={() => setMode(m)} className="rounded-lg border border-ink-700 px-3 py-2 text-sm text-ink-200">{m === 'raw' ? 'Raw card' : 'Graded slab'}</button>)}</div><CameraCapture onCapture={onCapture} busy={busy} subject={mode} /></>}
 
       {error && (
         <div className="mt-4 rounded-lg border border-bad-500/40 bg-bad-500/10 p-3 text-[13px] text-bad-400">
@@ -93,22 +98,32 @@ export default function ScanPage() {
           {result.pricing?.headline && (
             <div className="rounded-xl border border-ink-800 bg-ink-900/60 p-4">
               <div className="text-[11px] uppercase tracking-wide text-ink-400">
-                Market price (Near Mint)
+                Market reference · condition unspecified
               </div>
               <div className="mt-1 font-mono text-2xl font-semibold text-ink-100">
                 {formatMoney(result.pricing.headline.price)}
               </div>
               <div className="mt-1 text-[12px] text-ink-400">
                 {result.pricing.headline.source === 'tcgplayer' ? 'TCGplayer' : 'Cardmarket'} ·{' '}
-                {result.pricing.headline.asOf}
+                {result.pricing.headline.variant} · {result.pricing.headline.asOf}
               </div>
             </div>
           )}
 
           {result.conditions && <ConditionPrices pricing={result.conditions} />}
+          {photo && <GradingPanel key={result.scanId} frontPhoto={photo} card={result.card} slabRead={result.slab} throughHolder={Boolean(result.throughHolder)} frontUsable={!result.quality.warnings.length} />}
 
-          {result.identify.candidates.length > 1 && !result.identify.autoSelected && (
-            <CandidateList candidates={result.identify.candidates} />
+          {result.identify.candidates.length > 0 && !result.identify.autoSelected && (
+            <CandidateList candidates={result.identify.candidates} onSelect={async card => {
+              setBusy(true); setError(null);
+              try {
+                const response = await fetch('/api/cards/' + encodeURIComponent(card.id));
+                const body = await response.json();
+                if (!response.ok) throw new Error(body.error ?? 'Card could not be loaded.');
+                setResult(previous => previous ? { ...previous, card: body.card, pricing: previous.throughHolder ? null : body.pricing, conditions: null, auth: null, identify: { ...previous.identify, autoSelected: true, warnings: [...previous.identify.warnings, 'Card identity was confirmed manually. The earlier authenticity report was cleared.'] } } : previous);
+              } catch (e) { setError(e instanceof Error ? e.message : 'Card could not be loaded.'); }
+              finally { setBusy(false); }
+            }} />
           )}
 
           {result.identify.warnings.length > 0 && (
@@ -136,7 +151,7 @@ export default function ScanPage() {
   );
 }
 
-function CandidateList({ candidates }: { candidates: IdentifyCandidate[] }) {
+function CandidateList({ candidates, onSelect }: { candidates: IdentifyCandidate[]; onSelect: (card: Card) => void }) {
   return (
     <div className="rounded-xl border border-warn-500/40 bg-warn-500/10 p-4">
       <h3 className="text-[13px] font-semibold text-warn-400">Which printing is it?</h3>
@@ -146,9 +161,9 @@ function CandidateList({ candidates }: { candidates: IdentifyCandidate[] }) {
       <ul className="mt-3 space-y-2">
         {candidates.slice(0, 5).map((c) => (
           <li key={c.card.id}>
-            <Link
-              href={`/card/${c.card.id}`}
-              className="flex items-center gap-3 rounded-lg border border-ink-800 bg-ink-950/50 p-2.5 hover:bg-ink-850"
+            <button type="button"
+              onClick={() => onSelect(c.card)}
+              className="flex w-full items-center gap-3 rounded-lg border border-ink-800 bg-ink-950/50 p-2.5 text-left hover:bg-ink-850"
             >
               <CardThumb card={c.card} />
               <div className="min-w-0 flex-1">
@@ -158,9 +173,9 @@ function CandidateList({ candidates }: { candidates: IdentifyCandidate[] }) {
                 </div>
               </div>
               <span className="shrink-0 font-mono text-[11px] text-ink-400">
-                {Math.round(c.confidence * 100)}%
+                Match score {Math.round(c.confidence * 100)}/100
               </span>
-            </Link>
+            </button>
           </li>
         ))}
       </ul>

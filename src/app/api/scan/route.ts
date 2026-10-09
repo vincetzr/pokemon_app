@@ -17,10 +17,11 @@ import { toCard } from '@/lib/tcg-api';
 import { buildPricing, fetchConditions } from '@/lib/pricing/engine';
 import { buildReport } from '@/lib/auth/engine';
 import { geometrySignal } from '@/lib/auth/signals/geometry';
-import { printSignal } from '@/lib/auth/signals/print';
+import { printSignal, WEIGHT as PRINT_WEIGHT } from '@/lib/auth/signals/print';
 import { visionSignal } from '@/lib/auth/signals/vision';
 import { abstain } from '@/lib/auth/engine';
 import type { ScanResult } from '@/lib/types';
+import { readSlabImage } from '@/lib/grading/server';
 
 // Heavy image work needs the Node runtime, not edge.
 export const runtime = 'nodejs';
@@ -34,6 +35,8 @@ const Body = z.object({
   /** Bulk scans skip the vision pass to stay fast and cheap. */
   fast: z.boolean().optional(),
   scanId: z.string().optional(),
+  mode: z.enum(['raw', 'slab']).optional(),
+  barcodes: z.array(z.object({ text: z.string().max(500), format: z.string().max(40) })).max(12).optional(),
 });
 
 export async function POST(request: Request) {
@@ -60,6 +63,16 @@ export async function POST(request: Request) {
     if (detection.confidence < 0.35 && parsed.guide) {
       detection = detectionFromGuide(parsed.guide);
     }
+    const holderAspect = detection.measuredAspect > .58 && detection.measuredAspect < .67;
+    const slab = await readSlabImage(photo, parsed.barcodes, !parsed.fast && (holderAspect || parsed.mode === 'slab'));
+    const throughHolder = holderAspect || parsed.mode === 'slab' || slab.detected;
+    // Crop the card inside the holder. The outline of the plastic is never
+    // scored as a miscut card, and the label stays in the original photo.
+    if (holderAspect) {
+      const [tl, tr, br, bl] = detection.corners;
+      const point = (u: number, v: number) => ({ x: (1 - v) * (tl.x + u * (tr.x - tl.x)) + v * (bl.x + u * (br.x - bl.x)), y: (1 - v) * (tl.y + u * (tr.y - tl.y)) + v * (bl.y + u * (br.y - bl.y)) });
+      detection = { ...detection, corners: [point(.1205, .180), point(.8795, .180), point(.8795, .839), point(.1205, .839)] };
+    }
     const rectified = await rectifyCard(photo, detection.corners);
     const quality = await assessQuality(rectified);
 
@@ -69,6 +82,10 @@ export async function POST(request: Request) {
 
     // --- Identify ---------------------------------------------------------
     const identify = await identifyCard(rectified, { skipVision: parsed.fast });
+    if (quality.tooBlurry || quality.tooDark) {
+      identify.autoSelected = false;
+      identify.warnings.push('Retake a sharper, well-lit photo and confirm the card before using a price.');
+    }
     const chosen = identify.autoSelected ? identify.candidates[0] : undefined;
 
     // --- Price ------------------------------------------------------------
@@ -81,9 +98,10 @@ export async function POST(request: Request) {
       if (cached) {
         card = toCard(cached.data);
         pricing = buildPricing(cached.data);
+        if (throughHolder) pricing.headline = null;
         // Real per-condition prices. Skipped in bulk mode, where the user wants
         // a fast value ranking rather than a full breakdown per card.
-        if (!parsed.fast) {
+        if (!parsed.fast && !throughHolder && card.variants.length === 1) {
           conditions = await fetchConditions(card, card.variants[0] ?? 'normal');
         }
         if (cached.degraded) {
@@ -113,16 +131,16 @@ export async function POST(request: Request) {
         );
 
     const signals = [
-      geometrySignal({
+      throughHolder ? abstain('geometry', 'Card proportions', .8, 'not_applicable', 'The outline is a holder; its dimensions cannot establish the card’s cut.') : geometrySignal({
         measuredAspect: detection.measuredAspect,
         detectionConfidence: detection.confidence,
         method: detection.method,
       }),
-      quality.tooBlurry
+      throughHolder ? abstain('print', 'Print pattern', PRINT_WEIGHT, 'not_applicable', 'Plastic hides the fine print; this check cannot authenticate a slab.') : quality.tooBlurry
         ? abstain(
             'print',
             'Print pattern',
-            1.4,
+            PRINT_WEIGHT,
             'insufficient_data',
             'The photo is too soft to analyse the print pattern. Retake it with the card flat and in focus.',
           )
@@ -143,6 +161,7 @@ export async function POST(request: Request) {
       );
     }
     contextLimitations.push(...quality.warnings);
+    if (throughHolder) contextLimitations.push('A decoded barcode and printed grade do not authenticate a slab. Compare the card, label and images on the official certification site.');
 
     const auth = buildReport({ cardId: card?.id ?? null, signals, contextLimitations });
 
@@ -161,6 +180,8 @@ export async function POST(request: Request) {
       quality,
       detection: { method: detection.method, confidence: detection.confidence },
       conditions,
+      slab: throughHolder || slab.detected || slab.barcodes.length ? slab : null,
+      throughHolder,
     };
 
     return NextResponse.json(result);
