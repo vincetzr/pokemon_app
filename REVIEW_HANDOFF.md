@@ -76,23 +76,52 @@ source branch, and verify the automated generated commit and CI before finishing
   deployed server copies must receive the updated snapshot file.
 
 
-## Condition / slab extension — new user request (2026-10-10 Asia/Shanghai)
+## Completed condition / slab extension (2026-10-09 UTC)
 
 User asked for a preview artifact, condition screening similar to PSA/PCG/Beckett,
 condition-specific values, slab detection, official verification links and barcode scans.
-Implementation is in progress on the same review branch; do not merge or deploy.
+The implementation and preview are complete on the same review branch. Do not merge
+or deploy unless requested.
 
-- New shared grading rules and bundled QR/1D decoders; photo/back whitening review,
-  optional server vision of both sides, and raw vs slab UI in both apps.
-- PSA, BGS, CGC and PCG labels/certificates; leading zeroes, half grades,
-  distinct designations, unknown brands and conflicting reads are handled.
-- Exact condition offers; optional EBAY_APP_TOKEN server adapter for exact graded
-  asks. No token is configured locally, so live authenticated graded values are not verified.
+- Final verified implementation commit: `62beb57d9aca7d1e1b34738901a1ffb61f9398c3`.
+- Successful workflow: https://github.com/vincetzr/pokemon_app/actions/runs/37972902505
+- All 165 unit/image tests passed on GitHub, including actual QR, Code128, Code39,
+  ITF, DataMatrix and PDF417 image decoding. TypeScript and production build passed.
+- Both Chromium suites passed: standalone printing/condition prices, price invalidation,
+  QR/Code128/PCG links and mobile layout; production scan upload, back review, exact
+  raw condition pricing, PSA certificate links and graded/raw price separation.
+- GitHub artifact `pokemon-scanner-preview` (ID 11637856520) contains the portable
+  HTML and UI screenshots. It is downloadable from the successful workflow run.
+  A durable HTML copy was also delivered in the ChatGPT conversation.
+- Preview filename: `pokemon-scanner-preview.html`. It embeds all 5,577 cards,
+  the dated market snapshot, and bundled barcode readers. OCR assets and live
+  offers need internet; camera access depends on browser permissions.
+- Shared grading rules are in `src/lib/grading/`; both apps use the same rules.
+  The production app has optional two-photo server vision and a back-whitening
+  heuristic. The preview screens the back photo and requires review of all attributes.
+- Raw price eligibility requires usable front/back photos, reviewed corners/edges,
+  surface and creases, and user confirmation. Changes invalidate the previous quote.
+- PSA, BGS, CGC and PCG slab labels/certificates support leading zeroes, valid grade
+  steps and separate designations. Conflicting companies/certificates/grades require
+  correction before a lookup link is shown. Beckett BVG/BCCG are not treated as BGS.
+- PCG's current direct route is https://pcgpopreport.com/report/{nine-digit-certificate};
+  other formats link to the official report homepage for manual review.
+- Matching fresh raw offers are asking-price samples. An optional server-only
+  `EBAY_APP_TOKEN` adapter filters graded asks by exact card/printing/language,
+  grader, grade and designation. No token was configured here; authenticated live
+  graded values were tested with fixtures rather than live requests. Standalone
+  graded prices provide a sold-listings search for manual review.
 - Phone estimates are broad screening ranges, not calibrated professional grades.
-  Slab label review and a matching certificate do not authenticate the holder.
-- Portable preview builder embeds all 5,577 cards and the dated market snapshot.
-  OCR assets and live offers still need internet; docs/GRADING.md documents limits.
-- 165 unit/image tests passed locally, including six actual barcode image formats.
-  The production build and expanded browser suites still need final verification.
-- Local Chromium is unavailable; use the existing GitHub workflow for browser checks.
-  It also builds the portable preview and saves screenshots as a workflow artifact.
+  No raw-price multipliers are used for graded values. Missing or mismatched data
+  stays unavailable. A label read and matching certificate do not authenticate a slab.
+- Setup, supported formats and limitations: `docs/GRADING.md`.
+- The initial artifact upload rejected a parent-directory path after all functional
+  checks passed. The workflow now creates the preview inside its workspace; artifact
+  upload and the full workflow both pass.
+- Final handoff-only commit is excluded from the workflow trigger. No further
+  application changes are pending, and the PR remains open, not merged or deployed.
+
+For later edits, preserve newer changes and continue from the current remote branch.
+Rebuild generated scanner sources through the existing workflow rather than uploading
+the 9 MB generated HTML through one connector request. Use `npm run build:preview`
+to recreate the standalone deliverable; `PREVIEW_OUT` selects the output path.
