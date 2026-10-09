@@ -235,13 +235,14 @@ export function toCard(raw: RawCard): Card {
 
 /** Convert the API's "YYYY/MM/DD" timestamps into ISO dates. */
 export function parseApiDate(value: string | undefined): string | null {
-  if (!value) return null;
-  const m = /^(\d{4})\/(\d{2})\/(\d{2})$/.exec(value.trim());
-  if (!m) {
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
-  }
-  return `${m[1]}-${m[2]}-${m[3]}`;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const normalized = value.trim().replace(/\//g, '-');
+  const day = normalized.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  const midnight = new Date(`${day}T00:00:00Z`);
+  if (!Number.isFinite(midnight.getTime()) || midnight.toISOString().slice(0, 10) !== day) return null;
+  const parsed = new Date(normalized);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString().slice(0, 10) : null;
 }
 
 // ---------------------------------------------------------------------------

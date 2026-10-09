@@ -69,6 +69,10 @@ export async function POST(request: Request) {
 
     // --- Identify ---------------------------------------------------------
     const identify = await identifyCard(rectified, { skipVision: parsed.fast });
+    if (quality.tooBlurry || quality.tooDark) {
+      identify.autoSelected = false;
+      identify.warnings.push('Retake a sharper, well-lit photo and confirm the card before using a price.');
+    }
     const chosen = identify.autoSelected ? identify.candidates[0] : undefined;
 
     // --- Price ------------------------------------------------------------

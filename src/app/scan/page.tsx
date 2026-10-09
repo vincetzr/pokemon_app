@@ -100,7 +100,7 @@ export default function ScanPage() {
               </div>
               <div className="mt-1 text-[12px] text-ink-400">
                 {result.pricing.headline.source === 'tcgplayer' ? 'TCGplayer' : 'Cardmarket'} ·{' '}
-                {result.pricing.headline.asOf}
+                {result.pricing.headline.variant} · {result.pricing.headline.asOf}
               </div>
             </div>
           )}

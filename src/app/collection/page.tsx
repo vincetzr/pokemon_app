@@ -2,7 +2,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { listCollection } from '@/lib/db';
 import { getCardsCached } from '@/lib/tcg-cache';
-import { buildPricing } from '@/lib/pricing/engine';
+import { fetchConditions } from '@/lib/pricing/engine';
+import { holdingPrice } from '@/lib/pricing/holding-price';
+import type { ConditionPricing } from '@/lib/pricing/sources/tcgplayer-listings';
 import { toCard } from '@/lib/tcg-api';
 import type { Money } from '@/lib/types';
 
@@ -19,8 +21,7 @@ export default async function CollectionPage() {
         <div className="mt-6 rounded-xl border border-ink-800 bg-ink-900/60 p-6 text-center">
           <p className="text-[13px] text-ink-300">No cards saved yet.</p>
           <p className="mt-1.5 text-[12px] leading-relaxed text-ink-400">
-            Cards you save are priced every time you open this page, which is also how the app
-            builds real price history for them.
+            Save the exact printing and condition so matching listing samples can be shown.
           </p>
           <Link
             href="/scan"
@@ -35,14 +36,21 @@ export default async function CollectionPage() {
 
   const { cards, failed } = await getCardsCached(entries.map((e) => e.cardId));
 
+  const samples = new Map<string, ConditionPricing | null>();
+  for (const entry of entries) {
+    const raw = cards.get(entry.cardId);
+    const key = `${entry.cardId}:${entry.variant}`;
+    if (raw && entry.conditionKey.startsWith('raw:') && !samples.has(key)) {
+      samples.set(key, await fetchConditions(toCard(raw), entry.variant));
+    }
+  }
   const rows = entries.map((entry) => {
     const raw = cards.get(entry.cardId);
     if (!raw) return { entry, card: null, value: null as Money | null };
-    const pricing = buildPricing(raw);
     return {
       entry,
       card: toCard(raw),
-      value: pricing.headline?.price ?? null,
+      value: holdingPrice(entry, samples.get(`${entry.cardId}:${entry.variant}`) ?? null),
     };
   });
 
@@ -64,14 +72,15 @@ export default async function CollectionPage() {
       {total && (
         <div className="mt-4 rounded-xl border border-ink-800 bg-ink-900/60 p-4">
           <div className="text-[11px] uppercase tracking-wide text-ink-400">
-            Estimated value (Near Mint, USD holdings)
+            Matching listing samples (USD subtotal)
           </div>
           <div className="mt-1 font-mono text-2xl font-semibold text-ink-100">
             {formatMoney(total)}
           </div>
           <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
-            Sums current market prices at Near Mint. Your cards&rsquo; actual condition will move
-            this, usually downward.
+            Sums sample medians for the saved printing and condition, multiplied by quantity.
+            Only verified English samples from the past 24 hours are included. This is an asking-price
+            comparison, excluding shipping and tax. {rows.length - usd.length} entries have no matching fresh price and are excluded.
           </p>
         </div>
       )}
@@ -87,7 +96,7 @@ export default async function CollectionPage() {
         {rows.map(({ entry, card, value }) => (
           <li key={entry.id}>
             <Link
-              href={card ? `/card/${card.id}` : '#'}
+              href={card ? `/card/${card.id}?variant=${entry.variant}` : '#'}
               className="flex items-center gap-3 rounded-lg border border-ink-800 bg-ink-900/60 p-2.5 hover:bg-ink-850"
             >
               {card ? (
@@ -108,6 +117,7 @@ export default async function CollectionPage() {
                 </div>
                 <div className="truncate text-[11px] text-ink-400">
                   {card ? card.set.name : 'Unavailable'}
+                  {` · ${entry.variant} · ${entry.conditionKey.replace('raw:', '')}`}
                   {entry.quantity > 1 && ` · ×${entry.quantity}`}
                 </div>
               </div>

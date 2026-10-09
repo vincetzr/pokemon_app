@@ -24,12 +24,11 @@ export function ConditionPrices({ pricing }: { pricing: ConditionPricing }) {
     <section className="mt-4 rounded-xl border border-ink-800 bg-ink-900/60 p-4">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-[13px] font-semibold text-ink-100">Price by condition</h2>
-        <span className="text-[10px] uppercase tracking-wide text-ink-500">live listings</span>
+        <span className="text-[10px] uppercase tracking-wide text-ink-500">{Date.now() - Date.parse(pricing.fetchedAt) > 86_400_000 ? 'saved listing sample' : 'listing sample'}</span>
       </div>
       <p className="mt-1 text-[11px] leading-relaxed text-ink-400">
-        What sellers are currently asking on TCGplayer, per condition. These are asking prices,
-        not completed sales — cards usually sell below the asking price, and the gap widens as
-        condition falls.
+        English · {pricing.variant}. Up to {pricing.sampleLimit} listings per condition, sorted by price plus shipping.
+        Amounts exclude shipping and tax. These are sampled asking prices, not completed sales or a median of the whole market.
       </p>
 
       <table className="mt-3 w-full text-left text-[12px]">
@@ -37,7 +36,7 @@ export function ConditionPrices({ pricing }: { pricing: ConditionPricing }) {
           <tr className="border-b border-ink-800 text-[10px] uppercase tracking-wide text-ink-500">
             <th scope="col" className="pb-1.5 font-medium">Condition</th>
             <th scope="col" className="pb-1.5 text-right font-medium">Cheapest</th>
-            <th scope="col" className="pb-1.5 text-right font-medium">Typical</th>
+            <th scope="col" className="pb-1.5 text-right font-medium">Sample median</th>
             <th scope="col" className="pb-1.5 text-right font-medium">Listings</th>
           </tr>
         </thead>

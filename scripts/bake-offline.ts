@@ -58,6 +58,7 @@ interface BakedCard {
   headline: { amount: number; currency: string; source: string; asOf: string } | null;
   conditions: {
     productId: number;
+    verifiedFilters?: boolean;
     variant: PrintVariant;
     rows: { condition: string; low: number; median: number; listingCount: number }[];
     fetchedAt: string;
@@ -249,6 +250,7 @@ async function bakeCard(raw: RawCard): Promise<BakedCard | null> {
     if (cp) {
       conditions = {
         productId: cp.productId,
+        verifiedFilters: cp.verifiedFilters,
         variant: cp.variant,
         rows: cp.prices.map((p) => ({
           condition: p.condition,

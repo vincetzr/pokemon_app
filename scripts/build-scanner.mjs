@@ -90,8 +90,11 @@ async function describeThumb(b64) {
 const template = readFileSync(TEMPLATE, 'utf8');
 
 let corpus;
+const reuseCorpus = process.argv.includes('--reuse-corpus');
 try {
-  corpus = JSON.parse(readFileSync(`${BAKE}/corpus.json`, 'utf8'));
+  corpus = reuseCorpus
+    ? JSON.parse(readFileSync(resolve(ROOT, 'docs/index.html'), 'utf8').match(/<script[^>]*id="corpus-data"[^>]*>([\s\S]*?)<\/script>/)[1])
+    : JSON.parse(readFileSync(`${BAKE}/corpus.json`, 'utf8'));
 } catch {
   console.error(
     `No corpus at ${BAKE}/corpus.json.\n` +
@@ -106,7 +109,7 @@ try {
  * The descriptors are computed with identical maths in both bakes, so the two
  * mix without the matcher knowing or caring which produced a given card.
  */
-try {
+if (!reuseCorpus) try {
   const extra = JSON.parse(readFileSync(`${BAKE}/tcgcsv.json`, 'utf8'));
   const have = new Set(corpus.cards.map((c) => c.id));
   let added = 0;
@@ -154,7 +157,7 @@ corpus.cards.sort((a, b) => {
 // the thumbnails to pay for them. The thumbnails were the bulk of the file;
 // at 68px they still identify a card at a glance, and the space buys a
 // descriptor that is two orders of magnitude richer than the 64-bit hash.
-{
+if (!reuseCorpus) {
   let done = 0;
   const CONCURRENCY = 8;
   const queue = corpus.cards.slice();
@@ -197,6 +200,8 @@ const servedAt = process.env.SCANNER_URL
   ?? 'https://raw.githack.com/vincetzr/pokemon_app/claude/pokemon-card-auth-pricing-rpx6ib/docs/index.html';
 
 const out = template
+  .replace('__SCANNER_RULES__', () => readFileSync(resolve(ROOT, 'scripts/scanner-rules.cjs'), 'utf8'))
+  .replace('__SCANNER_PRICES__', () => readFileSync(resolve(ROOT, 'scripts/scanner-prices.js'), 'utf8'))
   .replace('__CORPUS__', () => json)
   .replace(/__CARDCOUNT__/g, String(corpus.cards.length))
   .replace(/__BAKEDATE__/g, bakedAt)

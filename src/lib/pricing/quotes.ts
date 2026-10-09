@@ -160,13 +160,13 @@ export function quotesForCard(raw: RawCard): PriceQuote[] {
 
   const tcgDate = parseApiDate(raw.tcgplayer?.updatedAt);
   for (const [variant, prices] of Object.entries(raw.tcgplayer?.prices ?? {})) {
-    if (!prices || !tcgDate) continue;
+    if (!prices || !tcgDate || tcgDate > new Date().toISOString().slice(0, 10)) continue;
     quotes.push(...quotesFromTcgPlayer(raw.id, variant as PrintVariant, prices, tcgDate));
   }
 
   const cmDate = parseApiDate(raw.cardmarket?.updatedAt);
   const cmPrices = raw.cardmarket?.prices;
-  if (cmPrices && cmDate) {
+  if (cmPrices && cmDate && cmDate <= new Date().toISOString().slice(0, 10)) {
     // Cardmarket does not break its main fields out by printing, so attribute
     // them to the card's primary variant, plus reverse holo when that exists.
     const variants = Object.keys(raw.tcgplayer?.prices ?? {}) as PrintVariant[];
@@ -184,7 +184,8 @@ export function quotesForCard(raw: RawCard): PriceQuote[] {
 
 /** All listing spreads for a card. */
 export function spreadsForCard(raw: RawCard): ListingSpread[] {
-  const asOf = parseApiDate(raw.tcgplayer?.updatedAt) ?? today();
+  const asOf = parseApiDate(raw.tcgplayer?.updatedAt);
+  if (!asOf || asOf > new Date().toISOString().slice(0, 10)) return [];
   return Object.entries(raw.tcgplayer?.prices ?? {})
     .filter((entry): entry is [string, RawTcgPlayerPrices] => Boolean(entry[1]))
     .map(([variant, prices]) => spreadFromTcgPlayer(variant as PrintVariant, prices, asOf));
@@ -205,8 +206,4 @@ export function headlineQuote(
     (q.provenance === 'observed' || q.provenance === 'recorded' ? 100 : 50) +
     (q.source === 'tcgplayer' ? 10 : 0) + (q.basis !== 'asking' ? 2 : 0);
   return matching.sort((a, b) => rank(b) - rank(a) || b.asOf.localeCompare(a.asOf))[0] ?? null;
-}
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
 }

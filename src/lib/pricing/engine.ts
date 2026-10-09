@@ -14,9 +14,10 @@ import { buildRealSeries } from './history';
 import { recordSnapshots } from '../db';
 import { fetchConditionPricing, type ConditionPricing } from './sources/tcgplayer-listings';
 import { parseApiDate } from '../tcg-api';
+import { readMarketSnapshot, snapshotQuotes } from './market-snapshot';
 
 /** Beyond this, a source's figures are old enough that the user should be told. */
-const STALE_AFTER_DAYS = 21;
+const STALE_AFTER_DAYS = 2;
 
 function ageInDays(isoDate: string | null): number | null {
   if (!isoDate) return null;
@@ -55,11 +56,15 @@ export async function fetchConditions(
  * browses builds genuine history without any scheduled job running at all.
  */
 export function buildPricing(raw: RawCard, opts: { record?: boolean; variant?: PrintVariant } = {}): PricingResult {
-  const quotes = quotesForCard(raw);
-  const spreads = spreadsForCard(raw);
+  let quotes = quotesForCard(raw);
+  const snapshot = readMarketSnapshot();
+  const fresh = snapshotQuotes(raw, snapshot);
+  const useSnapshot = fresh !== null && snapshot!.asOf.slice(0, 10) >= (parseApiDate(raw.tcgplayer?.updatedAt) ?? '');
+  if (useSnapshot) quotes = [...quotes.filter(q => q.source !== 'tcgplayer'), ...fresh!];
+  const spreads = useSnapshot ? [] : spreadsForCard(raw);
   const caveats: string[] = [];
 
-  const variants = variantList(raw);
+  const variants = [...new Set([...variantList(raw), ...quotes.map(q => q.variant)])];
   const series: PriceSeries[] = [];
 
   for (const variant of variants) {
@@ -103,7 +108,7 @@ export function buildPricing(raw: RawCard, opts: { record?: boolean; variant?: P
   // at around 8 months. Showing a months-old figure beside a 2-day-old one
   // without saying which is which invites the user to trust the wrong number.
   for (const [source, updatedAt] of [
-    ['TCGplayer', raw.tcgplayer?.updatedAt],
+    ['TCGplayer', useSnapshot ? snapshot!.asOf.slice(0, 10) : raw.tcgplayer?.updatedAt],
     ['Cardmarket', raw.cardmarket?.updatedAt],
   ] as const) {
     const age = ageInDays(parseApiDate(updatedAt));
@@ -122,12 +127,14 @@ export function buildPricing(raw: RawCard, opts: { record?: boolean; variant?: P
     );
   }
 
+  if (useSnapshot) caveats.push('TCGplayer market aggregates from the dated TCGCSV daily export. Condition is unspecified; this is not an individual completed sale or a graded-card valuation.');
+
   return {
     cardId: raw.id,
     quotes,
     series,
     spreads,
-    headline: headlineQuote(quotes, { variant: opts.variant }),
+    headline: !opts.variant && variants.length > 1 ? null : headlineQuote(quotes, { variant: opts.variant }),
     caveats,
     fetchedAt: new Date().toISOString(),
   };
@@ -163,6 +170,6 @@ export function rankByValue(pricings: CardPricing[]): RankedCard[] {
       if (a.sortValue === null && b.sortValue === null) return 0;
       if (a.sortValue === null) return 1;
       if (b.sortValue === null) return -1;
-      return b.sortValue - a.sortValue;
+      return a.headline!.price.currency.localeCompare(b.headline!.price.currency) || b.sortValue - a.sortValue;
     });
 }

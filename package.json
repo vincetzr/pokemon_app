@@ -16,7 +16,11 @@
     "bake:catalogue": "tsx scripts/bake-tcgcsv.ts",
     "build:scanner": "node scripts/build-scanner.mjs",
     "dev:phone": "next dev --experimental-https -H 0.0.0.0",
-    "backfill:history": "node scripts/backfill-tcgcsv-history.mjs"
+    "backfill:history": "node scripts/backfill-tcgcsv-history.mjs",
+    "refresh:prices": "node --import tsx scripts/refresh-prices.mts",
+    "build:scanner:reuse": "node scripts/build-scanner.mjs --reuse-corpus",
+    "test:scanner:browser": "node scripts/test-scanner-browser.mjs",
+    "fixtures:catalogue": "node --import tsx scripts/fetch-fixtures.ts --catalogue"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
@@ -38,6 +42,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3",
