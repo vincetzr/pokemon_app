@@ -1,0 +1,60 @@
+name: Verify recognition and pricing review
+on:
+  push:
+    branches: [codex/recognition-pricing-correctness]
+    paths-ignore: [docs/index.html, docs/prices/latest.json, REVIEW_HANDOFF.md]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: recognition-pricing-review
+  cancel-in-progress: false
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.checkpoint.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/recognition-pricing-correctness
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run build:scanner:reuse
+      - run: npm run refresh:prices
+      - name: Save generated assets on the review branch
+        id: checkpoint
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/prices/latest.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Regenerate reviewed scanner and dated market prices'
+            git push origin HEAD:codex/recognition-pricing-correctness
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  verify:
+    needs: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.generate.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run fixtures:catalogue
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:scanner:browser

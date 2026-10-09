@@ -828,7 +828,7 @@
     </section>
 
     <section id="sec-price" hidden>
-      <div class="eyebrow">Price by condition</div>
+      <div class="eyebrow">Price for the selected printing</div>
       <div class="panel">
         <!-- Which card these prices are FOR, with the way to change it.
              Identification lives in the folded-away half now, and a price for
@@ -839,11 +839,12 @@
           <button id="btn-not-this" type="button" class="inline-link">Not this card?</button>
         </p>
         <p class="note" id="price-intro" style="margin:0 0 10px"></p>
+        <div id="market-prices" style="margin:12px 0"></div>
         <div id="price-chart"></div>
         <div class="scroll-x">
           <table id="price-table">
             <thead>
-              <tr><th>Condition</th><th>Cheapest</th><th>Typical</th><th>Listings</th></tr>
+              <tr><th>Condition</th><th>Cheapest</th><th>Sample median</th><th>Listings</th></tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -1108,6 +1109,7 @@
 </div>
 
 <script type="application/json" id="corpus-data">__CORPUS__</script>
+<script>__SCANNER_RULES__</script>
 <script>
 'use strict';
 
@@ -4819,32 +4821,11 @@ const MATCH_WEIGHTS = [0.22, 0.18, 0.18, 0.16, 0.08, 0.18];
  * still speak, which is why the worst case — a wide lamp across the whole
  * card — improves most, 23/47 to 34/47.
  */
-/**
- * Temperature converting match similarity into a probability.
- *
- * Fitted, not chosen. Over 336 readings — 48 cards under seven degradations,
- * with ground truth — the matcher is right 91.4% of the time, and this is the
- * softmax temperature at which the stated confidence means what it says.
- *
- * Expected calibration error is flattest between 0.0008 and 0.005 (Brier 0.076
- * to 0.085, so calibration barely distinguishes them). What distinguishes them
- * is whether the number is any USE:
- *
- *     T        warns on a wrong answer    when it says >=90% it is right
- *     0.0016     13 of 29                   94%      <- lowest calibration error
- *     0.0035     22 of 29                   97%      <- this
- *     0.008      28 of 29                   99%      (but hedges on 55% of correct reads)
- *
- * The lowest-error setting displays 100.0% on essentially every scan, because
- * expected calibration error is minimised by a degenerate always-certain
- * predictor whenever accuracy is high — which is the display this replaces,
- * not an improvement on it. 0.0035 keeps calibration within 0.006 Brier of the
- * optimum while still telling the reader when it is unsure, and a wrong card
- * silently priced is far more expensive here than an extra second look.
- */
+/** Softmax sharpness for relative match shares among loaded cards.
+ * This is not calibrated confidence and does not model unknown cards. */
 const MATCH_TEMPERATURE = 0.0035;
 
-/** Never print certainty. Even at its best this is right 97 times in 100. */
+/** Match shares are relative rankings, not calibrated confidence. */
 const MATCH_MAX_SHOWN = 0.99;
 
 const REGION_BANDS = [
@@ -5212,6 +5193,7 @@ function uprightByLayout(rect) {
 }
 
 function identify(rect, limit) {
+  if (!CARDS.length) return { candidates: [], image: rect, baseline: 0, floor: 0, field: 0, other: 0 };
   const upright = matchCard(describeRectified(rect), limit);
   const flipped = rotate180(rect);
   const inverted = matchCard(describeRectified(flipped), limit);
@@ -5494,7 +5476,7 @@ function candidateButton(entry, onPick) {
     // list reads as a contradiction; the honest rendering is "under 1".
     const pct = Math.min(MATCH_MAX_SHOWN, entry.probability) * 100;
     sc.firstChild.textContent = pct < 1 ? '<1%' : Math.round(pct) + '%';
-    sc.lastChild.textContent = 'sure';
+    sc.lastChild.textContent = 'match share';
     btn.appendChild(sc);
   } else if (entry.score != null) {
     const sc = document.createElement('div');
@@ -5510,6 +5492,7 @@ function candidateButton(entry, onPick) {
 }
 
 async function selectCard(card, btn) {
+  PRICE_CARD_ID = card.id;
   document.querySelectorAll('.cand[aria-pressed=true]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
   if (btn) btn.setAttribute('aria-pressed', 'true');
   renderPrices(card);
@@ -5520,8 +5503,11 @@ async function selectCard(card, btn) {
   // after the history lands, because only then can it quote what the card
   // actually SOLD for beside what sellers are asking.
   if (LAST_RESULT) renderSummary(LAST_RESULT, card);
+  await loadMarketPrices();
+  if (PRICE_CARD_ID !== card.id) return;
+  renderPrices(card);
   await renderHistory(card);
-  if (LAST_RESULT) renderSummary(LAST_RESULT, card);
+  if (PRICE_CARD_ID === card.id && LAST_RESULT) renderSummary(LAST_RESULT, card);
 }
 
 /**
@@ -5801,123 +5787,8 @@ function centeringChart(m) {
   return svg;
 }
 
-function renderPrices(card) {
-  const sec = $('sec-price');
-  if (!card.conditions || card.conditions.rows.length === 0) {
-    sec.hidden = true;
-    return;
-  }
-  sec.hidden = false;
+__SCANNER_PRICES__
 
-  // Named the way the card is catalogued, so a reader who disagrees can see
-  // WHAT to disagree with — a name alone is not enough when the difference
-  // between two printings is the set and the number, and the price.
-  $('price-as-card').textContent = 'Priced as ' + card.name +
-    (card.setName ? ' — ' + card.setName : '') +
-    (card.number ? ' #' + card.number + (card.printedTotal ? '/' + card.printedTotal : '') : '') +
-    (card.language && card.language !== 'English' ? ' (' + card.language + ')' : '') + '.';
-
-  $('price-intro').textContent =
-    'What sellers were asking on TCGplayer for ' + card.name + ' (' + card.conditions.variant +
-    '), per condition. These are asking prices, not completed sales — cards usually sell below ' +
-    'the asking price, and the gap widens as condition falls.' +
-    (card.language === 'Japanese'
-      ? ' This is the JAPANESE printing, priced in US dollars on TCGplayer\'s US marketplace — ' +
-        'which is a different market from Japan itself, where the same card can trade at a very ' +
-        'different price.'
-      : '');
-
-  const chartSlot = $('price-chart');
-  chartSlot.innerHTML = '';
-  chartSlot.appendChild(conditionChart(card.conditions.rows));
-
-  const tbody = $('price-table').querySelector('tbody');
-  tbody.innerHTML = '';
-  let thin = 0;
-  let saturated = false;
-
-  for (const r of card.conditions.rows) {
-    const tr = document.createElement('tr');
-    const weak = r.listingCount < 5;
-    if (weak) thin++;
-    if (r.listingCount >= 25) saturated = true;
-
-    const cells = [
-      [CONDITION_LABELS[r.condition] || r.condition, ''],
-      [money(r.low, 'USD'), 'num'],
-      [money(r.median, 'USD'), 'num'],
-      [r.listingCount >= 25 ? '25+' : String(r.listingCount), 'num' + (weak ? ' thin' : '')],
-    ];
-    for (const [text, cls] of cells) {
-      const td = document.createElement('td');
-      if (cls) td.className = cls;
-      td.textContent = text;
-      tr.appendChild(td);
-    }
-    tbody.appendChild(tr);
-  }
-
-  const notes = [];
-  if (thin > 0) {
-    notes.push(
-      (thin === 1 ? 'One condition is' : thin + ' conditions are') +
-      ' backed by fewer than five listings. With that little supply the figures move a lot, and ' +
-      'a played card can even list above a mint one — read those rows as rough.'
-    );
-  }
-  if (saturated) {
-    notes.push(
-      'Rows marked 25+ hit the page size of the listings request, which returns the 25 cheapest ' +
-      'listings for that condition. The typical figure is therefore the median of those, not of ' +
-      'every listing on the market.'
-    );
-  }
-  // Printing is a bigger lever on price than condition, and it is the one
-  // thing a photo cannot settle. A 1st Edition stamp is a 4mm glyph sitting on
-  // the foil, exactly where a phone photo is most likely to be blown out — so
-  // detecting one is possible but NOT detecting one proves nothing. Inferring
-  // "no stamp, therefore Unlimited" would silently value a 1st Edition copy at
-  // a fraction of its worth and give the owner no sign a measurement failed.
-  // So the page names the printing these figures describe and stops there.
-  const others = (card.variants || []).filter((v) => v !== card.conditions.variant);
-  if (others.length > 0) {
-    notes.push(
-      'These figures are for the ' + variantLabel(card.conditions.variant) + ' printing only. ' +
-      'This card also exists as ' + others.map(variantLabel).join(' and ') +
-      ', which trade at very different prices — a 1st Edition copy is routinely several times ' +
-      'an Unlimited one. Which you have is decided by the small stamp beside the artwork and by ' +
-      'the drop shadow around it, and this page will not guess: not seeing a stamp in a photo ' +
-      'is not evidence there is none, and guessing wrong here costs more than every other ' +
-      'figure on this page combined.'
-    );
-  }
-
-  notes.push('Captured ' + new Date(card.conditions.fetchedAt).toLocaleString() + '.');
-  // The product id was printed as a bare integer with nothing to do with it.
-  // These prices were read at a point in time and the listings behind them move,
-  // so the one thing a reader wants next is the page they came from.
-  $('price-foot').textContent = notes.join(' ') + ' ';
-  const pid = card.conditions.productId;
-  if (pid != null && /^\d+$/.test(String(pid))) {
-    const a = document.createElement('a');
-    a.href = 'https://www.tcgplayer.com/product/' + pid;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.textContent = 'See the current listings on TCGplayer';
-    $('price-foot').appendChild(a);
-    $('price-foot').appendChild(document.createTextNode('.'));
-  }
-}
-
-/**
- * The condition ladder as a chart.
- *
- * Each row is a RANGE, cheapest to typical, not a single number — that gap is
- * the honest shape of the data, and a bar chart of medians alone would hide
- * that the cheapest Near Mint listing can sit below the typical Lightly Played
- * one. Rows resting on very few listings are drawn hollow, so a figure backed
- * by three sellers never looks as solid as one backed by twenty-five.
- */
 function conditionChart(rows) {
   const ns = 'http://www.w3.org/2000/svg';
   const ROW = 30, PAD_T = 18, PAD_B = 22, LABEL_W = 132, VALUE_W = 84;
@@ -6107,6 +5978,7 @@ async function renderHistory(card) {
   // that beside a genuine two-year line would put a fabricated euro trend next
   // to a measured dollar one in the same panel.
   const series = (await loadHistory(card.id)).filter((s) => s.points.length >= 2);
+  if (PRICE_CARD_ID !== card.id) return;
   if (series.length === 0) return;
   sec.hidden = false;
 
@@ -6125,8 +5997,8 @@ async function renderHistory(card) {
     ' in ' + series[0].currency + ', across ' +
     (series.length === 1 ? 'one printing' : series.length + ' printings') +
     ', from ' + span[0].date + ' to ' + span[span.length - 1].date +
-    '. The bold line is the card\'s value; the faint line behind it is the daily readings it ' +
-    'was taken from; the shaded band is the range of asking prices that day.';
+    '. The bold line smooths daily market aggregates; the faint line shows the reported snapshots. ' +
+    'These are historical aggregates, not individual completed sales. The shaded band shows asking-price ranges.';
   panel.appendChild(intro);
   panel.appendChild(multiChart(series));
 
@@ -6479,27 +6351,11 @@ async function loadImage(file) {
 const CONFIDENT_MATCH = 0.80;
 const CONFIDENT_MARGIN = 0.030;
 
-/**
- * The bar at which this page is willing to assert a printing.
- *
- * The same 90% quoted to the reader, and for the same reason: measured over
- * 336 readings of known cards, a stated confidence at or above this is right
- * about 97 times in 100. Using the displayed number as the threshold is not a
- * convenience — it is what stops the panel saying "98% sure" while the summary
- * says the printing is unsettled, which is a contradiction the reader has no
- * way to resolve.
- */
+/** Relative share alone never settles identity; a score margin is also required. */
 const CONFIDENT_PROBABILITY = 0.90;
 
 function confidentPick(candidates) {
-  const top = candidates && candidates[0];
-  // Score still guards a different question — whether this artwork is in the
-  // corpus at all. Probability only ever says which of the cards present is
-  // the best fit, and would happily read 99% for the closest wrong card.
-  if (!top || top.score < CONFIDENT_MATCH) return false;
-  if (top.probability != null) return top.probability >= CONFIDENT_PROBABILITY;
-  const second = candidates[1];
-  return !second || top.score - second.score >= CONFIDENT_MARGIN;
+  return ScannerRules.confidentPick(candidates);
 }
 
 /**
@@ -7103,28 +6959,6 @@ function renderQuality(result) {
  * — which it does when a card is tapped — the summary is redrawn and this
  * answers.
  */
-function latestPaid(id) {
-  // A card with no id is a legitimate state — the pile scan and the aligner
-  // both build partial records — and it must not take the whole summary down
-  // with it, which is what hashing an undefined id did.
-  if (!id) return null;
-  const bucket = HISTORY_READY.get(historyBucket(String(id)));
-  const entry = bucket && bucket.cards && bucket.cards[id];
-  if (!entry) return null;
-  const dates = bucket.dates || [];
-  let best = null;
-  const printings = Array.isArray(entry) ? { x: entry } : entry;
-  for (const name of Object.keys(printings)) {
-    const pts = printings[name];
-    if (!pts || !pts.length) return null;
-    const last = pts[pts.length - 1];
-    const when = dates.length ? last[0] : -1;
-    const cents = dates.length ? last[1] : last[1];
-    if (!best || when > best.when) best = { when, amount: cents / 100, currency: bucket.currency || 'USD' };
-  }
-  return best;
-}
-
 function renderSummary(result, chosen) {
   const report = result.report;
   const top = result.candidates && result.candidates[0];
@@ -7138,64 +6972,22 @@ function renderSummary(result, chosen) {
   // expensive contradiction this page could print, so the summary carries the
   // doubt instead of hiding it. Suppressed once the reader has chosen: at that
   // point the printing is their call, and they have made it.
-  const runnerUp = result.candidates && result.candidates[1];
-  const printingUnsure = !chosen && !!named && !!runnerUp && (top.probability != null
-    ? top.probability < CONFIDENT_PROBABILITY
-    : (top.score - runnerUp.score) < CONFIDENT_MARGIN);
-
-  /* --- what is it worth --- */
-  //
-  // TWO numbers, named apart, because the page carries two and they differ.
-  // `bestValue` is the median NEAR MINT ASKING price from the condition table;
-  // the chart's last point is what the market actually PAID. On a Base Set
-  // Charizard those were $1,500 and $852 — both true, and printing one at the
-  // top while the chart showed the other read as the page contradicting
-  // itself. What a seller wants is the gap: asking is what you can list at,
-  // paid is what you can expect.
-  const value = named ? bestValue(named) : null;
-  const paid = named ? latestPaid(named.id) : null;
-
-  // The card names itself here now, because the sentence that used to do it is
-  // gone. A price with no subject is the one thing worse than no price: the
-  // reader cannot tell whether it is for the card in their hand.
-  const subject = named ? '<b>' + escapeHtml(named.name) + '</b>' +
-    (named.language && named.language !== 'English'
-      ? ' (the ' + escapeHtml(String(named.language)) + ' printing, which trades separately ' +
-        'from the English one)' : '') : '';
-
+  const printingUnsure = !chosen && !!named && !confidentPick(result.candidates);
+  const unusable = result.quality && (result.quality.tooBlurry || result.quality.tooDark);
+  const quote = chosen && !unusable ? selectedMarketQuote(chosen) : null;
+  const value = quote;
   let worth;
-  if (!named) {
-    worth = 'We could not settle which card this is, so there is no price to give. ' +
-      'The closest matches are listed below — tap the one you are holding and the price ' +
-      'and its chart open here.';
-  } else if (printingUnsure && value) {
-    worth = 'This is ' + subject + ', but not which PRINTING of it. If it is the ' +
-      escapeHtml(String(named.setName || 'top match')) + ' printing, a Near Mint copy is asking ' +
-      'about <b>' + money(value.amount, value.currency) + '</b> — but that figure belongs to that ' +
-      'printing alone, and they are worth very different money. Pick the right one below before ' +
-      'relying on any number here.';
-  // Divided by the PRICE, not by max(1, price). The floor was there to avoid a
-  // divide by zero and quietly broke the test on cheap cards: on a $0.35
-  // Victini a $0.05 gap is 14% of the card's value but scored as 5% against a
-  // floor of a dollar, so the summary printed $0.35 while the chart legend
-  // printed $0.30 and the reader saw two numbers with no explanation again.
-  } else if (value && paid &&
-             Math.abs(paid.amount - value.amount) / Math.max(0.01, value.amount) > 0.1) {
-    worth = 'Sellers are asking about <b>' + money(value.amount, value.currency) +
-      '</b> for a Near Mint ' + subject + '; the last price actually paid was <b>' +
-      money(paid.amount, paid.currency) + '</b>' +
-      (chosen ? ' — the chart below shows how that has moved.' : '.');
-  } else if (value) {
-    worth = 'A Near Mint ' + subject + ' is asking about <b>' +
-      money(value.amount, value.currency) + '</b>' +
-      (chosen ? ' — the chart below shows how that has moved.'
-              : '. Tap it below for the full price breakdown and chart.');
-  } else if (paid) {
-    worth = 'The last price actually paid for ' + subject + ' was <b>' +
-      money(paid.amount, paid.currency) + '</b>.';
+  if (!chosen || unusable) {
+    worth = 'Confirm the name, set, collector number and language below before using a price.' +
+      (unusable ? ' Retake a sharper, well-lit photo.' : ' Similar artwork can belong to different cards.');
+  } else if (quote) {
+    worth = '<b>' + escapeHtml(chosen.name) + '</b> · ' + escapeHtml(chosen.setName) +
+      ' · ' + escapeHtml(quote.variant) + ': <b>' + money(quote.amount, quote.currency) + '</b>' +
+      ' — ' + (quote.stale ? 'historical ' : '') + 'TCGplayer market aggregate, ' +
+      escapeHtml(quote.asOf.slice(0, 10)) + '. Ungraded; condition unspecified.';
   } else {
-    worth = 'This is ' + subject + ', but no price is baked in for it, so there is nothing ' +
-      'reliable to quote.';
+    worth = '<b>' + escapeHtml(chosen.name) + '</b> is selected. Choose its printing below; ' +
+      'if no verified quote is available, no price is shown.';
   }
   $('sum-worth').innerHTML = worth;
 
@@ -7261,6 +7053,7 @@ function escapeHtml(s) {
 }
 
 function renderSingle(result) {
+  PRICE_CARD_ID = null;
   LAST_RESULT = result;
 
   // A new card means the surface measurement from the previous one no longer
@@ -7371,25 +7164,9 @@ function renderSingle(result) {
     const n = result.matchField;
     const other = result.matchOther;
     if (n && top && top.probability != null) {
-      const sure = Math.round(Math.min(MATCH_MAX_SHOWN, top.probability) * 100);
-      const bits = ['These add up to 100%. Every one of the ' + n.toLocaleString() +
-        ' cards in this build was scored against your photo, and the percentage beside each ' +
-        'name is its share of the total — so ' + sure + '% beside ' + top.card.name +
-        ' means what it sounds like.'];
-      if (other != null && other >= 0.005) {
-        bits.push('A further ' + Math.round(other * 100) + '% sits on cards not listed here, ' +
-          'which is the chance that none of these is yours.');
-      }
-      // Calibration is a property of the number and belongs beside it. Stated
-      // as measured, including the part that is not flattering.
-      bits.push('Checked against 336 readings of known cards: when this says 90% or more it is ' +
-        'right about 97 times in 100, and it never prints more than 99% because it is never ' +
-        'certain.');
-      if (top.probability < 0.9) {
-        bits.push('This one is below that bar, so treat the list as a shortlist rather than an ' +
-          'answer — the set and number under each name are what tell them apart.');
-      }
-      scale.textContent = bits.join(' ');
+      scale.textContent = 'Match shares compare only the ' + n.toLocaleString() +
+        ' loaded catalogue entries. They are not the probability that a card is correctly identified. ' +
+        'A card outside this catalogue can still get a high share. Confirm the printed name, set, number and language.';
     } else {
       scale.textContent = '';
     }
@@ -7548,6 +7325,7 @@ async function scan(file) {
    =================================================================== */
 
 async function runBulk(files) {
+  await loadMarketPrices();
   // Same reason as the aligner: a viewfinder left running can fire its own
   // capture over the top of the files the user just picked.
   stopCamera();
@@ -7579,7 +7357,7 @@ async function runBulk(files) {
         file: files[i].name,
         card,
         match: top ? top.score : 0,
-        value: card ? bestValue(card) : null,
+        value: card ? ScannerRules.bulkValue(card, MARKET_SNAPSHOT, result.candidates, result.quality) : null,
         // Named, but the runner-up is close enough that the printing — and so
         // the price — is a guess. Said on the row rather than folded into the
         // total silently.
@@ -7608,17 +7386,6 @@ async function runBulk(files) {
 }
 
 /** Near Mint asking price where there is one, else the marketplace headline. */
-function bestValue(card) {
-  if (card.conditions) {
-    const nm = card.conditions.rows.find((r) => r.condition === 'NM');
-    if (nm) return { amount: nm.median, currency: 'USD', basis: 'NM asking, median' };
-  }
-  if (card.headline) {
-    return { amount: card.headline.amount, currency: card.headline.currency, basis: card.headline.source };
-  }
-  return null;
-}
-
 function renderBulkProgress(index, total) {
   const ol = $('steps');
   ol.innerHTML = '';
@@ -7633,17 +7400,9 @@ function renderBulk(rows) {
   const priced = rows.filter((r) => r.value !== null);
   const total = priced.reduce((sum, r) => sum + r.value.amount, 0);
 
-  const unsure = rows.filter((r) => r.printingUnsure).length;
-  $('bulk-intro').textContent =
-    rows.length + ' photos, ' + priced.length + ' matched to a card in this build. ' +
-    (priced.length > 0
-      ? 'Ranked by Near Mint asking price — the top of this list is what to look at first. ' +
-        (unsure > 0
-          ? unsure + ' of them matched an artwork that exists in more than one printing, and ' +
-            'those printings are far apart in price, so treat those figures as the roughest ' +
-            'of the lot and open the card to settle it.'
-          : '')
-      : 'None matched a card in this build, so none could be priced.');
+  $('bulk-intro').textContent = rows.length + ' photos; ' + priced.length +
+    ' have an unambiguous match and a verified USD market quote from the past 48 hours. ' +
+    'Ranked by that aggregate, with condition unspecified. Uncertain matches, multiple printings and unavailable or stale prices are excluded from the subtotal.';
 
   const list = $('bulk-list');
   list.innerHTML = '';
@@ -7700,9 +7459,8 @@ function renderBulk(rows) {
   });
 
   $('bulk-foot').textContent = priced.length > 0
-    ? 'Identified cards total ' + money(total, 'USD') + ' at Near Mint asking prices. Real cards ' +
-      'are rarely Near Mint and asking prices are not sale prices, so treat this as an upper ' +
-      'bound for triage rather than a valuation. Tap Scan another card to look at one properly.'
+    ? 'Fresh market-price subtotal: ' + money(total, 'USD') + '. Condition is unspecified. ' +
+      'Uncertain, unavailable and stale entries are excluded; this is not a valuation of the pile.'
     : 'Photograph each card straight on and filling the frame; the pile scan uses the same ' +
       'matching as a single scan and is just as sensitive to framing.';
 }
