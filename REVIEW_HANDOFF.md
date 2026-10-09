@@ -1,6 +1,6 @@
 # Pokémon app review — continuation checkpoint
 
-Updated: 2026-10-09. User: continue the previous review, especially correct card
+Updated: 2026-10-10 (Asia/Shanghai). User: continue the previous review, especially correct card
 recognition and pricing, and save all progress before session limits.
 
 ## Repository and branch
@@ -30,32 +30,35 @@ that work before further review; it is not a declaration that all checks pass.
   browser regression script and documentation. Fixtures are reference images,
   not an independent camera-photo accuracy benchmark.
 
-## Current status
+## Completed review
 
-All reviewed source files are now saved on GitHub. The large generated scanner
-and daily price snapshot were regenerated directly on the review branch by
-GitHub Actions, avoiding a stalled multi-megabyte connector upload.
-
-- Generated checkpoint: `c98cfe5408e7accf45858966d559685e3803650d`.
-- Successful workflow: https://github.com/vincetzr/pokemon_app/actions/runs/37961922683
-- That workflow passed fixture download, all 130 tests, TypeScript, the Next.js
-  production build, browser installation and the real Chromium UI regression.
-- Additional review fixes require a matching set hint even when the denominator
-  matches, retain collector OCR confidence, and exclude suspected foreign
-  printings and graded holders from automatic bulk subtotals.
-- Latest local test run after the set/collector fixes: 132 passed; typecheck passed.
+- Pull request: https://github.com/vincetzr/pokemon_app/pull/1
+- Status: open, ready for review, mergeable; not merged or deployed.
+- Verified generated code commit: `329cba3cc5fc63776f62541ef8e083009e9424f1`.
+- Final successful workflow: https://github.com/vincetzr/pokemon_app/actions/runs/37962502421
+- GitHub validation: all 132 tests passed with all five reference-image fixtures
+  downloaded; TypeScript, Next.js production build and real Chromium UI tests passed.
+- Browser checks cover printing selection, hiding unverified legacy prices, missing
+  quotes, asynchronous selection races, summary wording and mobile overflow.
+- The final fixes also reject conflicting set hints and weak collector-number
+  readings, and exclude suspected foreign printings and graded holders from bulk totals.
 - Price snapshot: TCGCSV export dated 2026-10-08; 5,197 verified catalogue identities
   out of 5,577, with 380 unavailable. Missing mappings are not guessed.
 
-## Continue here
+## Saving and continuing
 
-1. Check current GitHub review-branch head and any open PR; do not overwrite a
-   newer commit. Local changes may await the final source checkpoint.
-2. Save the additional fixes, let `review-checks.yml` regenerate the scanner and
-   verify the resulting commit, and confirm the run succeeds.
-3. Open a reviewable pull request to `claude/pokemon-card-auth-pricing-rpx6ib`.
-   Do not merge or deploy without a subsequent instruction.
-4. Record the final PR URL and validation result here, then report them to the user.
+All source and generated assets are saved on the GitHub review branch. Two large
+connector uploads previously ended without confirmation. Smaller source checkpoints
+succeeded, and `review-checks.yml` regenerated the 9 MB scanner and price snapshot
+inside GitHub before testing the resulting commit. This avoids relying on one large
+connector upload. The final follow-up commit changes this handoff only.
+
+For subsequent work, read this file, current git status, the remote branch head and
+PR state. Preserve any newer user changes. Do not restart the completed review or
+claim a universal recognition accuracy from the five image fixtures. Merge or deploy
+only when the user requests it. For a source edit, update scanner sources under
+`scripts/`, run the focused tests and `npm run build:scanner:reuse`, checkpoint the
+source branch, and verify the automated generated commit and CI before finishing.
 
 ## Important limits
 
