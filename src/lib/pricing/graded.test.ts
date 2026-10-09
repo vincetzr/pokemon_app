@@ -9,6 +9,7 @@ describe('exact graded asking comparables', () => {
   it('rejects a title-only match, wrong company and wrong grade', () => {
     expect(gradedComparableAmount({ ...item, localizedAspects: [] }, card, 'holofoil', graded)).toBe(null);
     expect(gradedComparableAmount(item, card, 'holofoil', { company: 'BGS', grade: 8 })).toBe(null);
+    expect(gradedComparableAmount({ ...item, conditionDescriptors: [{ name: 'Professional Grader', values: [{ content: 'Beckett Collectors Club Grading (BCCG)' }] }, { name: 'Grade', values: [{ content: '8' }] }] }, card, 'holofoil', { company: 'BGS', grade: 8 })).toBe(null);
     expect(gradedComparableAmount(item, card, 'holofoil', { company: 'PSA', grade: 9 })).toBe(null);
   });
   it('rejects language, printing, rare edition and designation mismatches', () => {

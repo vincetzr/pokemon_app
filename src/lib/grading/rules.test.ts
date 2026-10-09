@@ -41,6 +41,9 @@ describe('slab label and certificate parsing', () => {
   });
   it('rejects multiple graders or overall grades and preserves qualifiers', () => {
     expect(parseSlab('PSA BGS\nGrade 8').conflicts.length).toBeGreaterThan(0);
+    expect(parseSlab('CGC PCG\nGrade 8').conflicts.length).toBeGreaterThan(0);
+    expect(parseSlab('Beckett BCCG\nMINT 10\nCert 12345678').company).toBe(null);
+    expect(certificateFromBarcode({ text: 'https://www.beckett.com/grading/card-lookup?flag=2&item_id=12345678', format: 'QR_CODE' })).toBe(null);
     expect(parseSlab('PSA\nGrade 8\nOverall 9').grade).toBe(null);
     expect(parseSlab('PSA\nMINT 9 OC\nCert 12345678').designation).toBe('OC');
   });

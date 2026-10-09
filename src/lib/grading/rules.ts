@@ -2,6 +2,7 @@ import type { GradingCompany, RawCondition } from '../types';
 
 export const COMPANIES: readonly GradingCompany[] = ['PSA', 'BGS', 'CGC', 'PCG'];
 export const COMPANY_LABELS = { PSA: 'PSA', BGS: 'Beckett (BGS)', CGC: 'CGC Cards', PCG: 'Premier Card Grading (PCG)' } as const;
+const COMPANY_MARKERS: Record<GradingCompany, RegExp> = { PSA: /\bPSA\b|professional sports authenticator/i, BGS: /\bBGS\b|\bbeckett\b/i, CGC: /\bCGC\b|certified guaranty company/i, PCG: /\bPCG\b|premier card grading/i };
 export const STANDARDS = {
   PSA: 'https://www.psacard.com/gradingstandards',
   BGS: 'https://www.beckett.com/grading/scale',
@@ -23,12 +24,7 @@ export interface SlabRead {
 }
 
 export function companyFromText(text: string): GradingCompany | null {
-  const found = COMPANIES.filter(c => ({
-    PSA: /\bPSA\b|professional sports authenticator/i,
-    BGS: /\bBGS\b|\bbeckett\b/i,
-    CGC: /\bCGC\b|certified guaranty company/i,
-    PCG: /\bPCG\b|premier card grading/i,
-  })[c].test(text));
+  const found = COMPANIES.filter(c => COMPANY_MARKERS[c].test(text));
   return found.length === 1 ? found[0]! : null;
 }
 
@@ -59,7 +55,7 @@ export function certificateFromBarcode(read: BarcodeRead, hint?: GradingCompany 
       company = 'PSA'; cert = /^\/cert\/(\d{6,12})(?:\/|$)/i.exec(url.pathname)?.[1];
     } else if (['cgccards.com', 'www.cgccards.com'].includes(host)) {
       company = 'CGC'; cert = /^\/certlookup\/(\d{10})(?:\/|$)/i.exec(url.pathname)?.[1];
-    } else if (['beckett.com', 'www.beckett.com'].includes(host) && /^\/grading\/card-lookup\/?$/i.test(url.pathname)) {
+    } else if (['beckett.com', 'www.beckett.com'].includes(host) && /^\/grading\/card-lookup\/?$/i.test(url.pathname) && url.searchParams.get('flag') === '1') {
       company = 'BGS'; cert = url.searchParams.get('item_id') ?? undefined;
     }
     return company && cert && validCert(company, cert) ? { company, cert } : null;
@@ -79,12 +75,15 @@ function labelCerts(text: string, company: GradingCompany | null): string[] {
 
 export function parseSlab(labelText: string, barcodes: BarcodeRead[] = [], hint?: GradingCompany | null): SlabRead {
   const conflicts: string[] = [];
-  if (!companyFromText(labelText) && /\bPSA\b|authenticator/i.test(labelText) && /\bBGS\b|beckett|\bCGC\b|\bPCG\b/i.test(labelText)) conflicts.push('More than one grading company appears on the label. Check the original label.');
+  const labelCompanies = COMPANIES.filter(c => COMPANY_MARKERS[c].test(labelText));
+  if (labelCompanies.length > 1) conflicts.push('More than one grading company appears on the label. Check the original label.');
   const labelCompany = companyFromText(labelText);
   const reads = barcodes.slice(0, 12).filter(b => b.text.length <= 500);
   const certReads = reads.map(b => certificateFromBarcode(b, labelCompany ?? hint)).filter((r): r is NonNullable<typeof r> => r !== null);
-  const companies = [...new Set([labelCompany, hint, ...certReads.map(r => r.company)].filter((c): c is GradingCompany => Boolean(c)))];
-  const company = companies.length === 1 ? companies[0]! : null;
+  const companies = [...new Set([...labelCompanies, hint, ...certReads.map(r => r.company)].filter((c): c is GradingCompany => Boolean(c)))];
+  const unsupportedBeckett = /\bBCCG\b|\bBVG\b|beckett (?:collectors club|vintage)/i.test(labelText);
+  if (unsupportedBeckett) conflicts.push('BVG and BCCG use different Beckett services. They cannot be treated as BGS grades. Check the appropriate official lookup manually.');
+  const company = companies.length === 1 && !unsupportedBeckett ? companies[0]! : null;
   if (companies.length > 1) conflicts.push('The label, barcode or selected grader disagree. Rescan and check the label.');
   const certs = [...new Set([...labelCerts(labelText, company), ...certReads.filter(r => r.company === company).map(r => r.cert)])];
   if (certs.length > 1) conflicts.push('More than one certificate number was read. Check the original label.');
@@ -109,7 +108,7 @@ export function parseSlab(labelText: string, barcodes: BarcodeRead[] = [], hint?
   const designation = authenticOnly ? (/\baltered\b/i.test(labelText) ? 'Authentic Altered' : 'Authentic only')
     : /black label/i.test(labelText) ? 'Black Label' : /pristine/i.test(labelText) ? 'Pristine'
     : /gem[ -]?(mint|mt)/i.test(labelText) ? 'Gem Mint' : /\b(OC|MC|ST|MK|PD)\b/.exec(labelText)?.[1] ?? null;
-  return { detected: Boolean(labelCompany || certReads.length || hint), company, grade, designation, certNumber,
+  return { detected: Boolean(labelCompanies.length || certReads.length || hint), company, grade, designation, certNumber,
     verificationUrl: company && certNumber && !conflicts.length ? verificationUrl(company, certNumber) : null,
     labelText, barcodes: reads, conflicts, needsReview: true };
 }
@@ -153,7 +152,7 @@ export function estimateCondition(o: ConditionObservations): ConditionAssessment
       high = Math.min(high, limits.find(b => front <= b[0]!)?.[1] ?? 2);
     }
     if (back != null && Number.isFinite(back) && back > 90) high = Math.min(high, 3);
-    return { company, low: unknown ? 1 : Math.min(lowBands[company][severity]!, high), high };
+    return { company, low: unknown ? 1 : Math.min(lowBands[company][severity]!, Math.max(1, high - 1)), high };
   });
   reasons.push('Broad screening ranges use visible wear and optional centering. They are not calibrated PSA, Beckett, CGC or PCG predictions; hidden dents, restoration and grader judgment can change the result.');
   reasons.push('Gem Mint 10, Pristine and Black Label are not predicted from phone photos. A raw condition does not convert into an official slab grade.');

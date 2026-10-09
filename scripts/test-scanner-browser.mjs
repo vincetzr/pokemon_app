@@ -92,6 +92,7 @@ try {
   assert.equal(await page.locator('#grading-confirm-wear').isChecked(), false);
   assert.doesNotMatch(await page.locator('#grading-price').innerText(), /\$/);
   await page.locator('#grading-mode').selectOption('slab');
+  await page.getByText('Text read from the label', { exact: true }).click();
   await page.locator('#grading-label-text').fill('PSA\nMINT 9\nCert 00123456');
   await page.locator('#btn-parse-label').click();
   assert.equal(await page.locator('#grading-cert').inputValue(), '00123456');

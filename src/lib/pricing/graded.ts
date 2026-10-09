@@ -23,11 +23,12 @@ export function gradedComparableAmount(item: GradedItem, card: Card, variant: Pr
   if (item.estimatedAvailabilities?.some(a => a.estimatedAvailabilityStatus === 'OUT_OF_STOCK')) return null;
   const aspect = (name: string) => item.localizedAspects?.find(a => normalize(a.name) === normalize(name))?.value ?? '';
   const descriptor = (name: string) => { const values = item.conditionDescriptors?.find(d => normalize(d.name) === normalize(name))?.values; return values?.length === 1 ? values[0]!.content : ''; };
+  if (/\bBVG\b|\bBCCG\b|beckett (?:vintage|collectors club)/i.test(descriptor('Professional Grader'))) return null;
   if (companyFromText(descriptor('Professional Grader')) !== graded.company || Number(descriptor('Grade')) !== graded.grade || !validGrade(graded.company, graded.grade)) return null;
   if (normalize(aspect('Card Name')) !== normalize(card.name) || normalize(aspect('Set')) !== normalize(card.set.name) || aspect('Language') !== 'English') return null;
   const number = aspect('Card Number').replace(/^#/, '').split('/')[0]!;
   if (normalize(number.replace(/^0+(?=\d)/, '')) !== normalize(card.number.replace(/^0+(?=\d)/, ''))) return null;
-  const finish = normalize(aspect('Finish')), edition = normalize(aspect('Edition'));
+  const finish = normalize(aspect('Finish')), edition = normalize(aspect('Edition')).replace(/^firstedition/, '1stedition');
   const expected = normalize(PRINTING_LABELS[variant] ?? '');
   if (!expected || ![normalize(aspect('Printing')), finish, edition + finish].includes(expected)) return null;
   // Non-1st-edition variants must explicitly exclude rare edition premiums.
