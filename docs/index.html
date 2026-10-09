@@ -1138,7 +1138,7 @@
       stale: now - Date.parse(entry.asOf) > 2 * 86400000 } : null;
   }
   function bulkValue(card, snapshot, candidates, quality, now = Date.now()) {
-    if (!confidentPick(candidates) || quality?.tooBlurry || quality?.tooDark) return null;
+    if (!confidentPick(candidates) || candidates[0].card?.id !== card?.id || quality?.tooBlurry || quality?.tooDark || quality?.foreign || quality?.graded) return null;
     const quote = selectedQuote(card, snapshot, undefined, now);
     return quote && !quote.stale ? quote : null;
   }
@@ -7486,7 +7486,8 @@ async function runBulk(files) {
         file: files[i].name,
         card,
         match: top ? top.score : 0,
-        value: card ? ScannerRules.bulkValue(card, MARKET_SNAPSHOT, result.candidates, result.quality) : null,
+        value: card ? ScannerRules.bulkValue(card, MARKET_SNAPSHOT, result.candidates,
+          { ...result.quality, foreign: !!result.foreign, graded: !!result.slab }) : null,
         // Named, but the runner-up is close enough that the printing — and so
         // the price — is a guess. Said on the row rather than folded into the
         // total silently.
