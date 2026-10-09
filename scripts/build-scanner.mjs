@@ -21,6 +21,7 @@ import { readFileSync, writeFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { buildSync } from 'esbuild';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TEMPLATE = resolve(ROOT, 'scripts/scanner-template.html');
@@ -197,11 +198,17 @@ const setList = setNames.join(' · ');
 // case only: when it is embedded in another page, which refuses it a camera and
 // leaves it unable to work out its own address. Override with SCANNER_URL.
 const servedAt = process.env.SCANNER_URL
-  ?? 'https://raw.githack.com/vincetzr/pokemon_app/claude/pokemon-card-auth-pricing-rpx6ib/docs/index.html';
+  ?? 'https://raw.githack.com/vincetzr/pokemon_app/codex/recognition-pricing-correctness/docs/index.html';
+
+const gradingBundle = buildSync({ entryPoints: [resolve(ROOT, 'src/lib/grading/browser.ts')], bundle: true,
+  format: 'iife', globalName: 'CardGrading', platform: 'browser', target: 'es2020', minify: true,
+  write: false, define: { 'process.env.NODE_ENV': '"production"' } }).outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 
 const out = template
   .replace('__SCANNER_RULES__', () => readFileSync(resolve(ROOT, 'scripts/scanner-rules.cjs'), 'utf8'))
   .replace('__SCANNER_PRICES__', () => readFileSync(resolve(ROOT, 'scripts/scanner-prices.js'), 'utf8'))
+  .replace('__CARD_GRADING__', () => gradingBundle)
+  .replace('__SCANNER_GRADING__', () => readFileSync(resolve(ROOT, 'scripts/scanner-grading.js'), 'utf8'))
   .replace('__CORPUS__', () => json)
   .replace(/__CARDCOUNT__/g, String(corpus.cards.length))
   .replace(/__BAKEDATE__/g, bakedAt)

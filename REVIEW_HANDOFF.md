@@ -74,3 +74,25 @@ source branch, and verify the automated generated commit and CI before finishing
 - Hosted default-branch code has not received the review changes yet. Daily price
   refresh becomes scheduled on the default branch after merging; independently
   deployed server copies must receive the updated snapshot file.
+
+
+## Condition / slab extension — new user request (2026-10-10 Asia/Shanghai)
+
+User asked for a preview artifact, condition screening similar to PSA/PCG/Beckett,
+condition-specific values, slab detection, official verification links and barcode scans.
+Implementation is in progress on the same review branch; do not merge or deploy.
+
+- New shared grading rules and bundled QR/1D decoders; photo/back whitening review,
+  optional server vision of both sides, and raw vs slab UI in both apps.
+- PSA, BGS, CGC and PCG labels/certificates; leading zeroes, half grades,
+  distinct designations, unknown brands and conflicting reads are handled.
+- Exact condition offers; optional EBAY_APP_TOKEN server adapter for exact graded
+  asks. No token is configured locally, so live authenticated graded values are not verified.
+- Phone estimates are broad screening ranges, not calibrated professional grades.
+  Slab label review and a matching certificate do not authenticate the holder.
+- Portable preview builder embeds all 5,577 cards and the dated market snapshot.
+  OCR assets and live offers still need internet; docs/GRADING.md documents limits.
+- 165 unit/image tests passed locally, including six actual barcode image formats.
+  The production build and expanded browser suites still need final verification.
+- Local Chromium is unavailable; use the existing GitHub workflow for browser checks.
+  It also builds the portable preview and saves screenshots as a workflow artifact.

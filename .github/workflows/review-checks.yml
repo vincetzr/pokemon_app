@@ -58,3 +58,11 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:scanner:browser
+      - run: npm run test:grading:browser
+      - run: npm run build:preview
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pokemon-scanner-preview
+          path: |
+            ../pokemon-scanner-preview.html
+            screenshots/*.png

@@ -5,6 +5,10 @@ let PRICE_CARD_ID = null;
 const PRINTING_SELECTION = new Map();
 
 function loadMarketPrices() {
+  if (window.__PREVIEW_PRICE_SNAPSHOT__) {
+    MARKET_SNAPSHOT = window.__PREVIEW_PRICE_SNAPSHOT__;
+    return Promise.resolve();
+  }
   if (!MARKET_LOADING) MARKET_LOADING = fetch('prices/latest.json', { cache: 'no-cache' })
     .then(r => { if (!r.ok) throw new Error('Price snapshot unavailable'); return r.json(); })
     .then(data => { if (data.schema === 1 && data.cards) MARKET_SNAPSHOT = data; })
@@ -48,6 +52,7 @@ function renderPrices(card) {
       button.setAttribute('aria-pressed', String(ScannerRules.variantKey(PRINTING_SELECTION.get(card.id)) === ScannerRules.variantKey(variant) && PRINTING_SELECTION.has(card.id)));
       button.addEventListener('click', () => {
         PRINTING_SELECTION.set(card.id, variant); renderPrices(card);
+        renderGrading(); void gradingRefreshPrice();
         if (LAST_RESULT) renderSummary(LAST_RESULT, card);
       });
       controls.appendChild(button);
@@ -60,6 +65,9 @@ function renderPrices(card) {
     ' · ' + (quote.stale ? 'historical market price' : 'market price') :
     'Select a printing with a verified quote to see a price.';
   panel.appendChild(label);
+  if (GRADING.mode === 'slab') {
+    label.textContent = 'Ungraded market reference hidden for this slab. Use the reviewed printed grade and graded comparables in the Condition & slab panel.';
+  }
   $('price-foot').textContent = 'TCGplayer via TCGCSV daily export · ' + entry.asOf.slice(0, 10) +
     ' · USD · ungraded, condition unspecified. This aggregate is not an individual sale or the value of a graded card. ';
   if (Number.isSafeInteger(entry.productId) && entry.productId > 0) {

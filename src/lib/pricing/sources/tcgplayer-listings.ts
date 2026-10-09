@@ -203,12 +203,13 @@ async function fetchListings(
 export async function fetchConditionPricing(
   card: Card,
   variant: PrintVariant,
-  opts: { maxAgeSeconds?: number } = {},
+  opts: { maxAgeSeconds?: number; conditions?: RawCondition[] } = {},
 ): Promise<ConditionPricing | null> {
   const productId = await resolveProductId(card);
   if (productId === null) return null;
 
-  const cacheKey = `tcgp:conditions:v2:English:${productId}:${variant}`;
+  const requested = opts.conditions?.length ? [...new Set(opts.conditions)].sort() : null;
+  const cacheKey = `tcgp:conditions:v2:English:${productId}:${variant}${requested ? ':' + requested.join(',') : ''}`;
   const cached = readCache<ConditionPricing>(cacheKey);
   // Listings move slowly; six hours keeps figures fresh without hammering.
   if (cached && cached.ageSeconds < (opts.maxAgeSeconds ?? 6 * 3600)) return cached.payload;
@@ -218,6 +219,7 @@ export async function fetchConditionPricing(
   const prices: ConditionPrice[] = [];
 
   for (const [condition, label] of Object.entries(CONDITION_LABELS) as [RawCondition, string][]) {
+    if (requested && !requested.includes(condition)) continue;
     try {
       const listings = await fetchListings(productId, label, printing);
       const amounts = matchingAmounts(listings, label, printing, 'English');

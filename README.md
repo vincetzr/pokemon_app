@@ -390,3 +390,11 @@ rather than estimated, and why nothing here is summed into a number.
 - **Cardmarket figures lag.** Measured on this app's own snapshots, Cardmarket
   data was 40–50 days old while TCGplayer was 2 days old. Both are labelled with
   the date they refer to, and a stale source is called out in the UI.
+
+
+## Condition and slab scanning
+
+Scan front/back photographs to review a raw condition, or scan a slab label and barcode
+for PSA, Beckett, CGC or PCG. Condition-specific offers, estimate limits, certificate
+lookup and optional authenticated graded offers are documented in [docs/GRADING.md](docs/GRADING.md).
+Run `npm run build:preview` after rebuilding the scanner to produce one portable HTML preview.

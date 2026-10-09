@@ -678,12 +678,10 @@
     <div class="mark"><b>⚡</b> Pokémon card scanner</div>
     <h1>Photograph a card. Get a real reading.</h1>
     <p class="standfirst">
-      The recognition, the flattening and every measurement run on your device. The prices are
-      real figures captured from live TCGplayer listings and frozen into the file, so nothing is
-      invented to fill a gap. Point it at a card and it recognises the card by itself; hand it a
-      pile of photos and it ranks them by what each one is worth. Two things reach the network,
-      both off unless you turn them on: extra card data sitting beside this page, and the
-      detailed visual comparison, which goes to Anthropic with a key you supply.
+      Photograph a card, confirm its printing, then inspect its condition. Front and back photos
+      help screen visible wear; a slab scan reads the printed label and QR or barcode and links
+      to its grader’s certificate lookup. Market references are dated. Condition prices use
+      matching asking offers when available; no price is invented for a missing condition or grade.
     </p>
   </header>
 
@@ -736,6 +734,56 @@
     <input type="file" id="file-camera" accept="image/*" capture="environment">
     <input type="file" id="file-library" accept="image/*">
     <input type="file" id="file-bulk" accept="image/*" multiple>
+  </section>
+
+  <section id="sec-grading">
+    <div class="eyebrow">Condition &amp; slab</div>
+    <div class="panel">
+      <details id="grading-tools">
+        <summary style="cursor:pointer;font-weight:600">Estimate condition or scan a slab barcode</summary>
+        <label style="display:block;margin:12px 0">Scan type
+          <select id="grading-mode" style="width:100%;margin-top:5px"><option value="raw">Raw card · condition estimate</option><option value="slab">Graded slab · label and barcode</option></select>
+        </label>
+        <div id="grading-raw">
+          <p class="note">Photograph the front above and add the back below. Review corners, edges, surface and creases on both sides. Screening ranges are estimates, not an official PSA, Beckett, CGC or PCG grade.</p>
+          <div class="row"><button class="ghost" id="btn-back-photo" type="button">Add back photo</button></div>
+          <input type="file" id="file-back" accept="image/*" capture="environment">
+          <canvas id="grading-back-preview" width="150" height="209" hidden style="max-width:100%;border-radius:8px;margin-top:12px"></canvas>
+          <p class="note" id="grading-photo-note" role="status">Scan the bare card’s front first, then add a sharp back photo.</p>
+          <div id="grading-wear-fields"></div>
+          <label style="display:block;margin:12px 0">Creases, dents or structural damage
+            <select id="grading-creases" style="width:100%;margin-top:5px"><option value="unknown">Not inspected</option><option value="none">None visible on either side</option><option value="minor">Minor crease or dent</option><option value="major">Major crease, dent, water damage or tear</option></select>
+          </label>
+          <label class="note" style="display:flex;gap:8px;align-items:flex-start"><input id="grading-confirm-wear" type="checkbox" style="flex:none;margin-top:4px">I inspected both sides and confirm these observations.</label>
+          <p id="grading-condition" class="lede" style="margin-top:12px"></p>
+          <div id="grading-ranges" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
+          <p class="note" id="grading-limitations"></p>
+        </div>
+        <div id="grading-slab" hidden>
+          <p class="note">Include the whole slab and label in the front scan. For small or reverse codes, add a close label/barcode photo here. A decoded code does not authenticate a slab.</p>
+          <div class="row"><button class="ghost primary" id="btn-label-photo" type="button">Scan label / barcode photo</button></div>
+          <input type="file" id="file-slab-label" accept="image/*" capture="environment">
+          <p class="note" id="grading-label-status" role="status">QR, Code 128, Code 39, ITF, Data Matrix and PDF417 decoding is included. Label OCR loads its language model when used.</p>
+          <div id="grading-read-codes" class="note" style="overflow-wrap:anywhere"></div>
+          <p id="grading-conflicts" class="note" style="color:var(--warn)"></p>
+          <label style="display:block;margin:12px 0">Grading company<select id="grading-company" style="width:100%;margin-top:5px"><option value="">Choose the company printed on the label</option><option value="PSA">PSA</option><option value="BGS">Beckett (BGS)</option><option value="CGC">CGC Cards</option><option value="PCG">Premier Card Grading (PCG)</option></select></label>
+          <label style="display:block;margin:12px 0">Certificate number · keep leading zeros<input id="grading-cert" type="text" autocomplete="off" maxlength="24" style="width:100%;margin-top:5px" placeholder="Read or enter the certificate"></label>
+          <label style="display:block;margin:12px 0">Overall printed grade · exclude autograph and subgrades<select id="grading-printed-grade" style="width:100%;margin-top:5px"><option value="">Not readable / authentication only</option></select></label>
+          <label style="display:block;margin:12px 0">Printed designation / qualifier<select id="grading-designation" style="width:100%;margin-top:5px"><option value="">Standard numeric grade</option><option>Gem Mint</option><option>Pristine</option><option>Black Label</option><option>OC</option><option>MC</option><option>ST</option><option>MK</option><option>PD</option><option>Authentic only</option><option>Authentic Altered</option></select></label>
+          <p class="note" id="grading-cert-help"></p>
+          <div class="row"><a class="ghost primary" id="grading-cert-link" target="_blank" rel="noopener noreferrer" hidden>Open official certificate lookup ↗</a><button class="ghost" id="btn-copy-cert" type="button" hidden>Copy certificate</button></div>
+          <label class="note" style="display:flex;gap:8px;align-items:flex-start;margin-top:12px"><input id="grading-confirm-label" type="checkbox" style="flex:none;margin-top:4px">I checked the company, overall grade, designation and certificate against the label. This confirms a reading, not authenticity.</label>
+          <details style="margin-top:12px"><summary>Text read from the label</summary><textarea id="grading-label-text" rows="5" maxlength="4000" style="width:100%;margin-top:8px" placeholder="You can also paste the label text here."></textarea><button class="ghost" id="btn-parse-label" type="button">Read this label text</button></details>
+        </div>
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--ink-700)">
+          <label style="display:block">Printing for the condition price<select id="grading-printing" style="width:100%;margin-top:5px"><option value="">Confirm the card first</option></select></label>
+          <div class="eyebrow" style="margin-top:14px">Price for the reviewed condition</div>
+          <p id="grading-price" class="lede"></p>
+          <p id="grading-price-note" class="note" role="status">Confirm the card, printing and condition. A raw average does not value a slab.</p>
+          <div class="row"><button class="ghost" id="btn-refresh-condition" type="button">Refresh condition offers</button><a class="ghost" id="grading-sold-link" target="_blank" rel="noopener noreferrer" hidden>Review graded sold comparables ↗</a></div>
+        </div>
+      </details>
+    </div>
   </section>
 
   <section id="sec-align" hidden>
@@ -1094,12 +1142,12 @@
     </p>
     <p class="note" id="corpus-extra" hidden style="margin:-6px 0 0"></p>
     <p>
-      <b>What is frozen.</b> Prices and history were captured from live sources on
-      __BAKEDATE__ and cannot refresh, because they are baked into this file — that is what lets
-      it work with no server and no account, and it is also why
-      the figures age. Prices are asking prices from listings, not completed sales. The detailed
-      visual inspection needs an API key rather than a server, so it runs here only if you supply
-      one below; nothing is sent to a model until you do.
+      <b>Price sources.</b> Dated TCGplayer market aggregates have unspecified raw condition.
+      The condition panel requests exact printing, language and condition offers when available.
+      Offers are asking prices, not completed sales. Missing or stale condition prices are left
+      unavailable. Raw averages never value a slab. Label OCR downloads a language model when
+      used; certificate links open the grader’s own site. Detailed AI inspection runs only if
+      you enable it below; no photo is sent to a model before then.
     </p>
     <p>
       This is not an appraisal and not a certificate. A photograph cannot prove a card is
@@ -1110,6 +1158,7 @@
 
 <script type="application/json" id="corpus-data">__CORPUS__</script>
 <script>__SCANNER_RULES__</script>
+<script>__CARD_GRADING__</script>
 <script>
 'use strict';
 
@@ -5493,6 +5542,7 @@ function candidateButton(entry, onPick) {
 
 async function selectCard(card, btn) {
   PRICE_CARD_ID = card.id;
+  gradingSelectCard(card);
   document.querySelectorAll('.cand[aria-pressed=true]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
   if (btn) btn.setAttribute('aria-pressed', 'true');
   renderPrices(card);
@@ -5506,6 +5556,7 @@ async function selectCard(card, btn) {
   await loadMarketPrices();
   if (PRICE_CARD_ID !== card.id) return;
   renderPrices(card);
+  renderGrading();
   await renderHistory(card);
   if (PRICE_CARD_ID === card.id && LAST_RESULT) renderSummary(LAST_RESULT, card);
 }
@@ -5788,6 +5839,7 @@ function centeringChart(m) {
 }
 
 __SCANNER_PRICES__
+__SCANNER_GRADING__
 
 function conditionChart(rows) {
   const ns = 'http://www.w3.org/2000/svg';
@@ -6980,6 +7032,15 @@ function renderSummary(result, chosen) {
   if (!chosen || unusable) {
     worth = 'Confirm the name, set, collector number and language below before using a price.' +
       (unusable ? ' Retake a sharper, well-lit photo.' : ' Similar artwork can belong to different cards.');
+  } else if (GRADING.mode === 'slab') {
+    worth = '<b>' + escapeHtml(chosen.name) + '</b> is selected. Review the slab label and grade below. ' +
+      'The ungraded market aggregate does not value this slab; use exact graded comparables.';
+  } else if (gradingAssessment().raw) {
+    const conditionQuote = gradingSelectedQuote();
+    worth = '<b>' + escapeHtml(chosen.name) + '</b> · reviewed raw condition: ' +
+      escapeHtml(CONDITION_LABELS[gradingAssessment().raw]) + (conditionQuote
+        ? ' · <b>' + money(conditionQuote.median, 'USD') + '</b> sample median asking price, ' + escapeHtml(conditionQuote.asOf.slice(0, 10)) + '. This is not a completed sale.'
+        : '. No fresh verified offer is available for this printing and condition; no value is substituted.');
   } else if (quote) {
     worth = '<b>' + escapeHtml(chosen.name) + '</b> · ' + escapeHtml(chosen.setName) +
       ' · ' + escapeHtml(quote.variant) + ': <b>' + money(quote.amount, quote.currency) + '</b>' +
@@ -7055,6 +7116,7 @@ function escapeHtml(s) {
 function renderSingle(result) {
   PRICE_CARD_ID = null;
   LAST_RESULT = result;
+  gradingNewScan(result);
 
   // A new card means the surface measurement from the previous one no longer
   // applies. The panel reads its state from the report, so this just refreshes.
@@ -7234,9 +7296,9 @@ function renderVariantNotes(result) {
         'follow. The proportions check stands down, because a holder hides the card\'s own ' +
         'edges — so a graded card is never accused of being mis-cut here. And the prices below, ' +
         'if any, are for the RAW card: a graded copy is a different product and sells for a ' +
-        'different amount, often several times more at the top grades. This page cannot read ' +
-        'the grade off the label, and the price sources it uses carry no graded listings at ' +
-        'all, so it will not guess at a graded value.',
+        'different amount. The Condition & slab panel reads the label and barcode, and links ' +
+        'to the grader’s official certificate lookup. Review the overall grade and designation ' +
+        'there; raw prices do not value a slab. A certificate match alone does not authenticate the holder.',
     });
   }
 
@@ -9838,6 +9900,7 @@ $('btn-scan-next').addEventListener('click', () => {
 });
 
 $('btn-reset').addEventListener('click', async () => {
+  gradingReset();
   $('results').hidden = true;
   $('sec-bulk').hidden = true;
   $('sec-align').hidden = true;
