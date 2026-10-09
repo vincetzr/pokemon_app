@@ -26,6 +26,7 @@ export interface LookupOutcome {
   warnings: string[];
   /** True when at least one lookup fell back to stale cached data. */
   degraded: boolean;
+  complete: boolean;
 }
 
 /**
@@ -49,15 +50,18 @@ export async function findCandidates(
   let degraded = false;
   let attempted = 0;
   let failed = 0;
+  let complete = true;
 
   const collect = async (search: Parameters<typeof searchCardsCached>[0], pageSize: number) => {
     attempted++;
     const result = await searchCardsCached(search, { pageSize });
     if (!result) {
       failed++;
+      complete = false;
       return;
     }
     if (result.degraded) degraded = true;
+    if (result.data.totalCount > result.data.cards.length) complete = false;
     for (const raw of result.data.cards) {
       const card = toCard(raw);
       pool.set(card.id, card);
@@ -79,7 +83,7 @@ export async function findCandidates(
       'The card database could not be reached, so no matches could be looked up. ' +
         'This is usually temporary — try again in a moment.',
     );
-    return { candidates: [], warnings, degraded };
+    return { candidates: [], warnings, degraded, complete };
   }
 
   if (failed > 0) {
@@ -94,7 +98,7 @@ export async function findCandidates(
 
   if (pool.size === 0) {
     warnings.push('No cards matched the text read from this photo.');
-    return { candidates: [], warnings, degraded };
+    return { candidates: [], warnings, degraded, complete };
   }
 
   const scored = [...pool.values()]
@@ -106,13 +110,7 @@ export async function findCandidates(
     .sort((a, b) => b.confidence - a.confidence)
     .slice(0, maxCandidates);
 
-  // When printings tie, prefer the earliest release: it is the more commonly
-  // owned and more frequently asked-about version.
-  scored.sort((a, b) =>
-    Math.abs(a.confidence - b.confidence) < 0.02
-      ? a.card.set.releaseDate.localeCompare(b.card.set.releaseDate)
-      : b.confidence - a.confidence,
-  );
+  if (!complete) warnings.push('Only part of the catalogue was returned. Confirm the printing manually.');
 
   if (scored.length === 0) {
     warnings.push(
@@ -121,5 +119,5 @@ export async function findCandidates(
     );
   }
 
-  return { candidates: scored, warnings, degraded };
+  return { candidates: scored, warnings, degraded, complete };
 }

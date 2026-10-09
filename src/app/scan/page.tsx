@@ -93,7 +93,7 @@ export default function ScanPage() {
           {result.pricing?.headline && (
             <div className="rounded-xl border border-ink-800 bg-ink-900/60 p-4">
               <div className="text-[11px] uppercase tracking-wide text-ink-400">
-                Market price (Near Mint)
+                Market reference · condition unspecified
               </div>
               <div className="mt-1 font-mono text-2xl font-semibold text-ink-100">
                 {formatMoney(result.pricing.headline.price)}
@@ -107,7 +107,7 @@ export default function ScanPage() {
 
           {result.conditions && <ConditionPrices pricing={result.conditions} />}
 
-          {result.identify.candidates.length > 1 && !result.identify.autoSelected && (
+          {result.identify.candidates.length > 0 && !result.identify.autoSelected && (
             <CandidateList candidates={result.identify.candidates} />
           )}
 
@@ -158,7 +158,7 @@ function CandidateList({ candidates }: { candidates: IdentifyCandidate[] }) {
                 </div>
               </div>
               <span className="shrink-0 font-mono text-[11px] text-ink-400">
-                {Math.round(c.confidence * 100)}%
+                Match score {Math.round(c.confidence * 100)}/100
               </span>
             </Link>
           </li>

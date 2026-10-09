@@ -102,15 +102,20 @@ export interface GradedCondition {
 /** Either a raw condition or a graded slab. */
 export type Condition =
   | { kind: 'raw'; condition: RawCondition }
-  | { kind: 'graded'; graded: GradedCondition };
+  | { kind: 'graded'; graded: GradedCondition }
+  | { kind: 'ungraded' }
+  | { kind: 'cardmarket-ex-plus' };
 
 export function conditionKey(c: Condition): string {
-  return c.kind === 'raw' ? `raw:${c.condition}` : `graded:${c.graded.company}${c.graded.grade}`;
+  if (c.kind === 'raw') return `raw:${c.condition}`;
+  if (c.kind === 'graded') return `graded:${c.graded.company}${c.graded.grade}`;
+  return c.kind === 'ungraded' ? 'ungraded:any' : 'cardmarket:EX+';
 }
 
 export function conditionLabel(c: Condition): string {
   if (c.kind === 'raw') return RAW_CONDITION_LABELS[c.condition];
-  return `${c.graded.company} ${c.graded.grade}`;
+  if (c.kind === 'graded') return `${c.graded.company} ${c.graded.grade}`;
+  return c.kind === 'ungraded' ? 'Ungraded · condition unspecified' : 'Cardmarket Excellent or better';
 }
 
 export const RAW_CONDITION_LABELS: Record<RawCondition, string> = {
@@ -176,6 +181,7 @@ export interface PriceQuote {
   price: Money;
   provenance: Provenance;
   source: PriceSource;
+  basis?: 'market' | 'trend' | 'asking';
   /** ISO-8601. For `observed` this is the marketplace's own `updatedAt`. */
   asOf: string;
   /**

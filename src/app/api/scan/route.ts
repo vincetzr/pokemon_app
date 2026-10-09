@@ -17,7 +17,7 @@ import { toCard } from '@/lib/tcg-api';
 import { buildPricing, fetchConditions } from '@/lib/pricing/engine';
 import { buildReport } from '@/lib/auth/engine';
 import { geometrySignal } from '@/lib/auth/signals/geometry';
-import { printSignal } from '@/lib/auth/signals/print';
+import { printSignal, WEIGHT as PRINT_WEIGHT } from '@/lib/auth/signals/print';
 import { visionSignal } from '@/lib/auth/signals/vision';
 import { abstain } from '@/lib/auth/engine';
 import type { ScanResult } from '@/lib/types';
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
         pricing = buildPricing(cached.data);
         // Real per-condition prices. Skipped in bulk mode, where the user wants
         // a fast value ranking rather than a full breakdown per card.
-        if (!parsed.fast) {
+        if (!parsed.fast && card.variants.length === 1) {
           conditions = await fetchConditions(card, card.variants[0] ?? 'normal');
         }
         if (cached.degraded) {
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
         ? abstain(
             'print',
             'Print pattern',
-            1.4,
+            PRINT_WEIGHT,
             'insufficient_data',
             'The photo is too soft to analyse the print pattern. Retake it with the card flat and in focus.',
           )

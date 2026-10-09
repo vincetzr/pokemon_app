@@ -54,7 +54,7 @@ export async function fetchConditions(
  * card, that day's real prices are persisted. A collection someone actually
  * browses builds genuine history without any scheduled job running at all.
  */
-export function buildPricing(raw: RawCard, opts: { record?: boolean } = {}): PricingResult {
+export function buildPricing(raw: RawCard, opts: { record?: boolean; variant?: PrintVariant } = {}): PricingResult {
   const quotes = quotesForCard(raw);
   const spreads = spreadsForCard(raw);
   const caveats: string[] = [];
@@ -127,7 +127,7 @@ export function buildPricing(raw: RawCard, opts: { record?: boolean } = {}): Pri
     quotes,
     series,
     spreads,
-    headline: headlineQuote(quotes),
+    headline: headlineQuote(quotes, { variant: opts.variant }),
     caveats,
     fetchedAt: new Date().toISOString(),
   };
