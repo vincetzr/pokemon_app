@@ -39,10 +39,10 @@ authenticate a holder. Compare the card, label, grade and official holder images
 - [CGC lookup](https://www.cgccards.com/certlookup/) and
   [scale](https://www.cgccards.com/card-grading/grading-scale/). Gem Mint and
   Pristine are distinct designations.
-- [PCG Cert Lookup & Pop Search](https://pop.premiercardgrading.com/) and
+- [PCG Cert Lookup & Pop Search](https://pcgpopreport.com/) and
   [standards](https://premiercardgrading.com/pages/grading-standards). The app
-  copies the certificate into the actual search workflow and does not invent
-  an unsupported deep link.
+  uses the verified `/report/{cert}` route for nine-digit certificates, including
+  leading zeroes. Other certificate formats link to the search form.
 
 ## Prices
 

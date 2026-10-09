@@ -39,8 +39,9 @@ export function verificationUrl(company: GradingCompany, cert: string): string |
   if (company === 'PSA') return 'https://www.psacard.com/cert/' + cert;
   if (company === 'CGC') return 'https://www.cgccards.com/certlookup/' + cert + '/';
   if (company === 'BGS') return 'https://www.beckett.com/grading/card-lookup?flag=1&item_id=' + cert;
-  // PCG exposes a search form; do not invent an unsupported certificate route.
-  return 'https://pop.premiercardgrading.com/';
+  // PCG's current official site links to pcgpopreport.com; verified nine-digit
+  // certificate records use /report/{cert}. Other formats use its search form.
+  return /^\d{9}$/.test(cert) ? 'https://pcgpopreport.com/report/' + cert : 'https://pcgpopreport.com/';
 }
 
 export function certificateFromBarcode(read: BarcodeRead, hint?: GradingCompany | null): { company: GradingCompany; cert: string } | null {
@@ -57,6 +58,8 @@ export function certificateFromBarcode(read: BarcodeRead, hint?: GradingCompany 
       company = 'CGC'; cert = /^\/certlookup\/(\d{10})(?:\/|$)/i.exec(url.pathname)?.[1];
     } else if (['beckett.com', 'www.beckett.com'].includes(host) && /^\/grading\/card-lookup\/?$/i.test(url.pathname) && url.searchParams.get('flag') === '1') {
       company = 'BGS'; cert = url.searchParams.get('item_id') ?? undefined;
+    } else if (['pcgpopreport.com', 'www.pcgpopreport.com', 'pop.premiercardgrading.com'].includes(host)) {
+      company = 'PCG'; cert = /^\/report\/(\d{9})(?:\/|$)/i.exec(url.pathname)?.[1];
     }
     return company && cert && validCert(company, cert) ? { company, cert } : null;
   }

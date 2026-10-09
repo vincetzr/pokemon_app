@@ -64,7 +64,7 @@ try {
   assert.match(summary.after, /market aggregate/);
   assert.doesNotMatch(summary.after, /actually paid|Near Mint/);
   // Synthetic code images exercise the actual bundled decoder, not mock reads.
-  for (const [bcid, text, format] of [['qrcode', 'https://www.psacard.com/cert/00123456', 'QR_CODE'], ['code128', '00123456', 'CODE_128']]) {
+  for (const [bcid, text, format] of [['qrcode', 'https://www.psacard.com/cert/00123456', 'QR_CODE'], ['code128', '00123456', 'CODE_128'], ['qrcode', 'https://pcgpopreport.com/report/000163745', 'QR_CODE']]) {
     const png = await bwip.toBuffer({ bcid, text, scale: 4, padding: 12, backgroundcolor: 'FFFFFF' });
     const reads = await page.evaluate(async image => CardGrading.scanBarcodes(await CardGrading.imageCanvas('data:image/png;base64,' + image)), png.toString('base64'));
     assert.ok(reads.some(r => r.text === text && r.format.toUpperCase() === format), format + ' should decode from pixels');
@@ -107,7 +107,7 @@ try {
   await page.locator('#grading-label-text').fill('Premier Card Grading\nGrade 8.5\nCert ABC-123456');
   await page.locator('#grading-company').selectOption('');
   await page.locator('#btn-parse-label').click();
-  assert.equal(await page.locator('#grading-cert-link').getAttribute('href'), 'https://pop.premiercardgrading.com/');
+  assert.equal(await page.locator('#grading-cert-link').getAttribute('href'), 'https://pcgpopreport.com/');
   await mkdir(resolve(root, 'screenshots'), { recursive: true });
   await page.screenshot({ path: resolve(root, 'screenshots/condition-slab-mobile.png'), fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Mobile page should not overflow horizontally');

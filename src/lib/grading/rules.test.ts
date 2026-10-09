@@ -21,7 +21,8 @@ describe('slab label and certificate parsing', () => {
     expect(parseSlab('CGC\nGEM MINT 10\nCERT 1234567890').designation).toBe('Gem Mint');
   });
   it('supports PCG lookup without inventing a deep link', () => {
-    expect(parseSlab('Premier Card Grading\nGrade 8.5\nCert ABC-123456')).toMatchObject({ company: 'PCG', grade: 8.5, certNumber: 'ABC-123456', verificationUrl: 'https://pop.premiercardgrading.com/' });
+    expect(parseSlab('Premier Card Grading\nGrade 8.5\nCert ABC-123456')).toMatchObject({ company: 'PCG', grade: 8.5, certNumber: 'ABC-123456', verificationUrl: 'https://pcgpopreport.com/' });
+    expect(parseSlab('', [{ text: 'https://pcgpopreport.com/report/000163745', format: 'QR_CODE' }])).toMatchObject({ company: 'PCG', certNumber: '000163745', verificationUrl: 'https://pcgpopreport.com/report/000163745' });
   });
   it('keeps authentic-only and altered cards out of numerical graded pricing', () => {
     expect(parseSlab('PSA\nAUTHENTIC ALTERED\nAutograph 10\nCert 12345678')).toMatchObject({ grade: null, designation: 'Authentic Altered' });
