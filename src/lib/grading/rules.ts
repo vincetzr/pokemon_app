@@ -97,11 +97,11 @@ export function parseSlab(labelText: string, barcodes: BarcodeRead[] = [], hint?
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     if (/cent(?:er|re)ing|corners?|edges?|surface|autograph|\bauto\b|cert|serial/i.test(line)) continue;
-    const match = /(?:overall|final|grade|gem[ -]?(?:mint|mt)|pristine|\bmint\b|\bnm[ -]?(?:mt|mint)\b|\bex[ -]?mt\b|\bvg[ -]?ex\b)\s*[:\-]?\s*(10|[1-9](?:\.5)?)(?![\d.])/i.exec(line)
-      ?? /^(10|[1-9](?:\.5)?)\s+(?:gem|mint|pristine|near|excellent|good|fair|poor|worn|damaged)\b/i.exec(line)
-      ?? (/^(?:overall|final|grade|gem[ -]?(?:mint|mt)|mint|pristine)$/i.test(line) ? /^(10|[1-9](?:\.5)?)$/.exec(lines[i + 1] ?? '') : null);
+    const match = /(?:overall|final|grade|gem[ -]?(?:mint|mt)|pristine|\bmint\b|\bnm[ -]?(?:mt|mint)\b|\bex[ -]?mt\b|\bvg[ -]?ex\b)\s*[:\-]?\s*(10(?:\.0)?|[1-9](?:\.[05])?)(?![\d.])/i.exec(line)
+      ?? /^(10(?:\.0)?|[1-9](?:\.[05])?)\s+(?:gem|mint|pristine|near|excellent|good|fair|poor|worn|damaged)\b/i.exec(line)
+      ?? (/^(?:overall|final|grade|gem[ -]?(?:mint|mt)|mint|pristine)$/i.test(line) ? /^(10(?:\.0)?|[1-9](?:\.[05])?)$/.exec(lines[i + 1] ?? '') : null);
     if (match) grades.push(Number(match[1]));
-    else if (/^(10|[1-9](?:\.5)?)$/.test(line) && /^(gem[ -]?(mint|mt)|mint|pristine|nm[ -]?(mt|mint))$/i.test(lines[i + 1] ?? '')) grades.push(Number(line));
+    else if (/^(10(?:\.0)?|[1-9](?:\.[05])?)$/.test(line) && /^(gem[ -]?(mint|mt)|mint|pristine|nm[ -]?(mt|mint))$/i.test(lines[i + 1] ?? '')) grades.push(Number(line));
   }
   const uniqueGrades = [...new Set(grades)];
   let grade = uniqueGrades.length === 1 && company && validGrade(company, uniqueGrades[0]!) ? uniqueGrades[0]! : null;

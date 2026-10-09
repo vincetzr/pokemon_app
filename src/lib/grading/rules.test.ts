@@ -10,7 +10,7 @@ describe('slab label and certificate parsing', () => {
     expect(read.verificationUrl).toBe('https://www.psacard.com/cert/00123456');
   });
   it('supports half grades for PSA except 9.5', () => { expect(validGrade('PSA', 8.5)).toBe(true); expect(validGrade('PSA', 1.5)).toBe(true); expect(validGrade('PSA', 9.5)).toBe(false); expect(validGrade('BGS', 9.5)).toBe(true); });
-  it('reads a grade on a separate line', () => { expect(parseSlab('BECKETT\n9.5\nGEM MINT\nSerial 0012345678').grade).toBe(9.5); });
+  it('reads a grade on a separate line', () => { expect(parseSlab('BECKETT\n9.5\nGEM MINT\nSerial 0012345678').grade).toBe(9.5); expect(parseSlab('PCG\nMINT 9.0\nCert 000123456').grade).toBe(9); expect(parseSlab('CGC\nPRISTINE 10.0\nCert 1234567890').grade).toBe(10); });
   it('does not confuse subgrades with the overall grade', () => {
     const read = parseSlab('BECKETT\nOverall: 9.5\nCentering 10\nCorners 9.5\nEdges 10\nSurface 9.5\nAutograph 10\nSerial 12345678');
     expect(read.grade).toBe(9.5); expect(read.designation).toBe(null);
