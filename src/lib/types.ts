@@ -90,27 +90,34 @@ export type RawCondition = 'NM' | 'LP' | 'MP' | 'HP' | 'DMG';
 export const RAW_CONDITIONS: readonly RawCondition[] = ['NM', 'LP', 'MP', 'HP', 'DMG'] as const;
 
 /** Professional grading services we model. */
-export type GradingCompany = 'PSA' | 'BGS' | 'CGC';
+export type GradingCompany = 'PSA' | 'BGS' | 'CGC' | 'PCG';
 
 /** A professionally graded slab, e.g. { company: 'PSA', grade: 10 }. */
 export interface GradedCondition {
   company: GradingCompany;
-  /** 1–10. BGS/CGC allow half grades (9.5); PSA does not except for the rare 1.5. */
+  /** 1–10. PSA permits half grades through 8.5, but has no 9.5. */
   grade: number;
+  /** Pristine, Gem Mint, Black Label or qualifiers change which comparables apply. */
+  designation?: string | null;
 }
 
 /** Either a raw condition or a graded slab. */
 export type Condition =
   | { kind: 'raw'; condition: RawCondition }
-  | { kind: 'graded'; graded: GradedCondition };
+  | { kind: 'graded'; graded: GradedCondition }
+  | { kind: 'ungraded' }
+  | { kind: 'cardmarket-ex-plus' };
 
 export function conditionKey(c: Condition): string {
-  return c.kind === 'raw' ? `raw:${c.condition}` : `graded:${c.graded.company}${c.graded.grade}`;
+  if (c.kind === 'raw') return `raw:${c.condition}`;
+  if (c.kind === 'graded') return `graded:${c.graded.company}${c.graded.grade}${c.graded.designation ? ':' + c.graded.designation : ''}`;
+  return c.kind === 'ungraded' ? 'ungraded:any' : 'cardmarket:EX+';
 }
 
 export function conditionLabel(c: Condition): string {
   if (c.kind === 'raw') return RAW_CONDITION_LABELS[c.condition];
-  return `${c.graded.company} ${c.graded.grade}`;
+  if (c.kind === 'graded') return `${c.graded.company} ${c.graded.grade}${c.graded.designation ? ' · ' + c.graded.designation : ''}`;
+  return c.kind === 'ungraded' ? 'Ungraded · condition unspecified' : 'Cardmarket Excellent or better';
 }
 
 export const RAW_CONDITION_LABELS: Record<RawCondition, string> = {
@@ -176,6 +183,7 @@ export interface PriceQuote {
   price: Money;
   provenance: Provenance;
   source: PriceSource;
+  basis?: 'market' | 'trend' | 'asking';
   /** ISO-8601. For `observed` this is the marketplace's own `updatedAt`. */
   asOf: string;
   /**
@@ -340,6 +348,9 @@ export interface ScanResult {
   auth: AuthReport | null;
   /** Data URL or stored path of the captured (perspective-corrected) image. */
   imageRef: string | null;
+  /** Label and decoded codes require review; they do not authenticate a holder. */
+  slab?: import('./grading/rules').SlabRead | null;
+  throughHolder?: boolean;
 }
 
 /** A bulk scan session: many cards, ranked by value. */

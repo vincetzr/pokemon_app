@@ -2,6 +2,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  outputFileTracingIncludes: { '/*': ['./docs/prices/latest.json'] },
   images: {
     // Official card art is served from the Pokemon TCG API's image CDN.
     remotePatterns: [

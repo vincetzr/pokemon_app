@@ -200,19 +200,24 @@ export function readHistory(
     .prepare(
       `SELECT amount, currency, provenance, source, as_of
          FROM price_snapshots
-        WHERE card_id = ? AND variant = ? AND condition_key = ?
+        WHERE card_id = ? AND variant = ? AND (condition_key = ? OR (? = 'ungraded:any' AND condition_key = 'raw:NM'))
           AND (? IS NULL OR as_of >= ?)
-        ORDER BY as_of ASC`,
+        ORDER BY as_of ASC, CASE WHEN condition_key = 'ungraded:any' THEN 0 ELSE 1 END`,
     )
     .all(
       cardId,
       variant,
       conditionKey(condition),
+      conditionKey(condition),
       opts.since ?? null,
       opts.since ?? null,
     ) as SnapshotRow[];
 
-  return rows.map((r) => ({
+  // Legacy snapshots stored aggregate market quotes as NM. Keep their history,
+  // preferring the corrected label if both exist for the same observation.
+  const seen = new Set<string>();
+  return rows.filter(r => { const key = `${r.as_of}|${r.source}|${r.currency}`;
+    if (seen.has(key)) return false; seen.add(key); return true; }).map((r) => ({
     date: r.as_of,
     price: { amount: r.amount, currency: r.currency },
     provenance: r.provenance,

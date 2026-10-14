@@ -1,0 +1,30 @@
+name: Refresh verified market prices
+on:
+  schedule:
+    - cron: '15 21 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: daily-market-prices
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run refresh:prices
+      - name: Commit changed snapshot
+        run: |
+          if git diff --quiet -- docs/prices/latest.json; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/prices/latest.json
+          git commit -m 'Refresh verified daily TCGplayer market snapshot'
+          git push

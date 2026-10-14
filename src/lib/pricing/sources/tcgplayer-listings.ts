@@ -32,6 +32,8 @@
 import 'server-only';
 import type { Card, Money, PrintVariant, RawCondition } from '../../types';
 import { readCache, writeCache } from '../../db';
+import { matchGroup, matchProduct, type TcgCsvGroup, type TcgCsvProduct } from '../catalogue';
+import { matchingAmounts, medianAmount, type Listing } from '../listing-sample';
 
 const TCGCSV = 'https://tcgcsv.com/tcgplayer';
 
@@ -94,31 +96,21 @@ export interface ConditionPrice {
 }
 
 export interface ConditionPricing {
+  cardId: string;
   productId: number;
   variant: PrintVariant;
   prices: ConditionPrice[];
   /** Always 'asking' — these are listings, never completed sales. */
   basis: 'asking';
   fetchedAt: string;
+  verifiedFilters: true;
+  language: 'English';
+  sampleLimit: 25;
 }
 
 // ---------------------------------------------------------------------------
 // Mapping our cards to TCGplayer product ids
 // ---------------------------------------------------------------------------
-
-interface TcgCsvGroup {
-  groupId: number;
-  name: string;
-  abbreviation: string | null;
-  /** ISO date the set was released. Matches our set.releaseDate exactly. */
-  publishedOn?: string;
-}
-
-interface TcgCsvProduct {
-  productId: number;
-  name: string;
-  extendedData?: { name: string; value: string }[];
-}
 
 async function getJson<T>(url: string, cacheKey: string, maxAgeSeconds: number): Promise<T | null> {
   const cached = readCache<T>(cacheKey);
@@ -141,121 +133,24 @@ async function getJson<T>(url: string, cacheKey: string, maxAgeSeconds: number):
   }
 }
 
-/** Normalise a set name for comparison across the two catalogues. */
-function normaliseSetName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]/g, '');
-}
-
-/**
- * Find the TCGplayer group (set) matching one of our cards.
- *
- * Release date is the primary key, not the name. The two catalogues name sets
- * differently — ours says "Base", TCGplayer says "Base Set" — and matching on
- * name containment alone is actively dangerous: the normalised string "base"
- * is a substring of seven different sets including "SV01: Scarlet & Violet Base
- * Set", so taking the first match sent 1999 Base Set Charizard to a 2023
- * product id. Release dates agree exactly between the catalogues and collide
- * far less, so they lead and the name only breaks ties.
- */
 export async function resolveGroupId(card: Card): Promise<number | null> {
   const data = await getJson<{ results: TcgCsvGroup[] }>(
-    `${TCGCSV}/${POKEMON_CATEGORY}/groups`,
-    'tcgcsv:groups',
-    7 * 24 * 3600,
+    `${TCGCSV}/${POKEMON_CATEGORY}/groups`, 'tcgcsv:groups', 7 * 24 * 3600,
   );
-  if (!data) return null;
-
-  const want = normaliseSetName(card.set.name);
-  const wantDate = card.set.releaseDate.replace(/\//g, '-').slice(0, 10);
-
-  const sameDate = data.results.filter(
-    (g) => (g.publishedOn ?? '').slice(0, 10) === wantDate,
-  );
-
-  // Among sets released the same day, prefer the closest name. "Base Set" beats
-  // "Base Set (Shadowless)" for a card whose set we call "Base", because the
-  // parenthesised variant carries extra text our name does not.
-  const best = (groups: TcgCsvGroup[]): TcgCsvGroup | null => {
-    if (groups.length === 0) return null;
-    const scored = groups
-      .map((g) => {
-        const got = normaliseSetName(g.name);
-        if (got === want) return { g, rank: 0, extra: 0 };
-        if (got.includes(want) || want.includes(got)) {
-          return { g, rank: 1, extra: Math.abs(got.length - want.length) };
-        }
-        return { g, rank: 2, extra: Math.abs(got.length - want.length) };
-      })
-      .sort((a, b) => a.rank - b.rank || a.extra - b.extra);
-    return scored[0]!.g;
-  };
-
-  const byDate = best(sameDate);
-  if (byDate) return byDate.groupId;
-
-  // No date match — fall back to names, but only to an exact or near-exact one.
-  // A loose containment match here is what caused the mis-mapping above.
-  const byName = best(
-    data.results.filter((g) => {
-      const got = normaliseSetName(g.name);
-      return got === want || got.includes(want) || want.includes(got);
-    }),
-  );
-  // Reject a fallback that is wildly longer than what we asked for.
-  if (byName && Math.abs(normaliseSetName(byName.name).length - want.length) > 12) return null;
-  return byName?.groupId ?? null;
+  return data && Array.isArray(data.results) ? matchGroup(card, data.results) : null;
 }
-
-/**
- * Find the TCGplayer productId for a card, matching on the printed collector
- * number. TCGCSV stores it as "058/102", so compare the numerator with leading
- * zeros stripped.
- */
 export async function resolveProductId(card: Card): Promise<number | null> {
   const groupId = await resolveGroupId(card);
   if (groupId === null) return null;
-
   const data = await getJson<{ results: TcgCsvProduct[] }>(
-    `${TCGCSV}/${POKEMON_CATEGORY}/${groupId}/products`,
-    `tcgcsv:products:${groupId}`,
-    7 * 24 * 3600,
+    `${TCGCSV}/${POKEMON_CATEGORY}/${groupId}/products`, `tcgcsv:products:${groupId}`, 7 * 24 * 3600,
   );
-  if (!data) return null;
-
-  const wantNumber = card.number.replace(/^0+(?=\d)/, '').toUpperCase();
-  const wantName = card.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-  const candidates = data.results.filter((p) => {
-    const numberField = p.extendedData?.find((e) => e.name === 'Number')?.value;
-    if (!numberField) return false;
-    const numerator = numberField.split('/')[0]?.replace(/^0+(?=\d)/, '').toUpperCase();
-    return numerator === wantNumber;
-  });
-
-  if (candidates.length === 0) return null;
-  if (candidates.length === 1) return candidates[0]!.productId;
-
-  // Several products share a collector number when a set has error variants or
-  // reprints ("Charizard" and "Charizard (Black Dot Error)"). Prefer the exact
-  // name; a parenthesised variant is a different product at a different price.
-  const exact = candidates.find(
-    (p) => p.name.toLowerCase().replace(/[^a-z0-9]/g, '') === wantName,
-  );
-  return (exact ?? candidates[0]!).productId;
+  return data && Array.isArray(data.results) ? matchProduct(card, data.results) : null;
 }
 
 // ---------------------------------------------------------------------------
 // Per-condition listing prices
 // ---------------------------------------------------------------------------
-
-interface Listing {
-  price: number | null;
-  condition: string | null;
-  printing: string | null;
-}
 
 async function fetchListings(
   productId: number,
@@ -266,6 +161,7 @@ async function fetchListings(
     sellerStatus: 'Live',
     channelId: 0,
     condition: [condition],
+    language: ['English'],
   };
   if (printing) term.printing = [printing];
 
@@ -307,33 +203,33 @@ async function fetchListings(
 export async function fetchConditionPricing(
   card: Card,
   variant: PrintVariant,
-  opts: { maxAgeSeconds?: number } = {},
+  opts: { maxAgeSeconds?: number; conditions?: RawCondition[] } = {},
 ): Promise<ConditionPricing | null> {
   const productId = await resolveProductId(card);
   if (productId === null) return null;
 
-  const cacheKey = `tcgp:conditions:${productId}:${variant}`;
+  const requested = opts.conditions?.length ? [...new Set(opts.conditions)].sort() : null;
+  const cacheKey = `tcgp:conditions:v2:English:${productId}:${variant}${requested ? ':' + requested.join(',') : ''}`;
   const cached = readCache<ConditionPricing>(cacheKey);
   // Listings move slowly; six hours keeps figures fresh without hammering.
   if (cached && cached.ageSeconds < (opts.maxAgeSeconds ?? 6 * 3600)) return cached.payload;
 
-  const printing = PRINTING_LABELS[variant] ?? null;
+  const printing = PRINTING_LABELS[variant];
+  if (!printing) return null;
   const prices: ConditionPrice[] = [];
 
   for (const [condition, label] of Object.entries(CONDITION_LABELS) as [RawCondition, string][]) {
+    if (requested && !requested.includes(condition)) continue;
     try {
       const listings = await fetchListings(productId, label, printing);
-      const amounts = listings
-        .map((l) => l.price)
-        .filter((p): p is number => typeof p === 'number' && p > 0)
-        .sort((a, b) => a - b);
+      const amounts = matchingAmounts(listings, label, printing, 'English');
 
       if (amounts.length === 0) continue;
 
       prices.push({
         condition,
         low: { amount: amounts[0]!, currency: 'USD' },
-        median: { amount: amounts[Math.floor(amounts.length / 2)]!, currency: 'USD' },
+        median: { amount: medianAmount(amounts), currency: 'USD' },
         listingCount: amounts.length,
       });
     } catch {
@@ -347,10 +243,14 @@ export async function fetchConditionPricing(
   }
 
   const result: ConditionPricing = {
+    cardId: card.id,
     productId,
     variant,
     prices,
     basis: 'asking',
+    verifiedFilters: true,
+    language: 'English',
+    sampleLimit: 25,
     fetchedAt: new Date().toISOString(),
   };
 

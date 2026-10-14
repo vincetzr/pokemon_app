@@ -50,11 +50,15 @@ export default function BulkPage() {
       }
 
       const scan = body as ScanResult;
+      const quote = scan.pricing?.headline;
+      const age = quote ? Date.now() - Date.parse(quote.asOf) : Infinity;
+      const value = quote && quote.price.currency === 'USD' && quote.basis === 'market' &&
+        age >= -300_000 && age <= 2 * 86_400_000 ? quote.price : null;
       setEntries((prev) => [
         {
           scanId: scan.scanId,
           card: scan.card,
-          value: scan.pricing?.headline?.price ?? null,
+          value,
           thumb: scan.card?.images.small ?? null,
           unidentified: !scan.card,
         },
@@ -96,7 +100,8 @@ export default function BulkPage() {
     <div className="px-4 pt-6">
       <h1 className="text-xl font-semibold tracking-tight">Bulk scan</h1>
       <p className="mt-1.5 text-[13px] leading-relaxed text-ink-300">
-        Scan through a pile. Cards are ranked by value so you can see what deserves a closer look.
+        Rank confirmed matches by USD market quotes from the past 48 hours. Condition is unspecified.
+        Uncertain printings and unavailable or stale prices are excluded from the subtotal.
       </p>
 
       <div className="mt-4">
@@ -114,7 +119,7 @@ export default function BulkPage() {
           <div className="mt-5 grid grid-cols-3 gap-2">
             <Stat label="Scanned" value={String(entries.length)} />
             <Stat label="Worth a look" value={String(valuableCount)} accent />
-            <Stat label="Pile total" value={total ? formatMoney(total) : '—'} />
+            <Stat label="USD subtotal" value={total ? formatMoney(total) : '—'} />
           </div>
 
           <div className="mt-4 flex items-center gap-3 rounded-xl border border-ink-800 bg-ink-900/60 p-3">

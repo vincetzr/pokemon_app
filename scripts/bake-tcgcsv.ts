@@ -207,75 +207,11 @@ async function fetchImage(url: string): Promise<Buffer | null> {
   return null;
 }
 
-interface Listing {
-  price: number | null;
-  condition: string | null;
-  printing: string | null;
-  language: string | null;
-}
-
-async function fetchListings(productId: number, condition: string): Promise<Listing[]> {
-  const res = await fetch(`${LISTINGS}/${productId}/listings`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Origin: 'https://www.tcgplayer.com',
-      Referer: 'https://www.tcgplayer.com/',
-      'User-Agent': BROWSER_USER_AGENT,
-    },
-    body: JSON.stringify({
-      filters: {
-        term: { sellerStatus: 'Live', channelId: 0, condition: [condition] },
-        range: { quantity: { gte: 1 } },
-        exclude: { channelExclusion: 0 },
-      },
-      from: 0,
-      size: 25,
-      sort: { field: 'price+shipping', order: 'asc' },
-      context: { shippingCountry: 'US', cart: {} },
-    }),
-    cache: 'no-store',
-    signal: AbortSignal.timeout(25_000),
-  });
-  if (!res.ok) throw new Error(`listings HTTP ${res.status}`);
-  const data = (await res.json()) as { results?: { results?: Listing[] }[] };
-  return data.results?.[0]?.results ?? [];
-}
-
-/** Per-condition prices straight from a productId, no catalogue matching. */
-async function conditionPricing(productId: number) {
-  const key = `tcgcsv:cond:${productId}`;
-  const cached = readCache<BakedCard['conditions']>(key);
-  if (cached && cached.ageSeconds < 7 * 24 * 3600) return cached.payload;
-
-  const rows: NonNullable<BakedCard['conditions']>['rows'] = [];
-  let printing = 'normal';
-
-  for (const [condition, label] of Object.entries(CONDITION_LABELS) as [string, string][]) {
-    try {
-      const listings = await fetchListings(productId, label);
-      const amounts = listings
-        .map((l) => l.price)
-        .filter((p): p is number => typeof p === 'number' && p > 0)
-        .sort((a, b) => a - b);
-      if (amounts.length === 0) continue;
-      const seen = listings.find((l) => l.printing);
-      if (seen?.printing) printing = seen.printing;
-      rows.push({
-        condition,
-        low: amounts[0]!,
-        median: amounts[Math.floor(amounts.length / 2)]!,
-        listingCount: amounts.length,
-      });
-    } catch {
-      // One condition failing must not lose the others.
-    }
-  }
-
-  if (rows.length === 0) return cached?.payload ?? null;
-  const result = { productId, variant: printing, rows, fetchedAt: new Date().toISOString() };
-  writeCache(key, result);
-  return result;
+/** Catalogue imports do not establish an exact printing/condition listing sample.
+ * Prices come from the separately verified daily product/printing export.
+ */
+async function conditionPricing(_productId: number): Promise<BakedCard['conditions']> {
+  return null;
 }
 
 function extended(p: TcgProduct, name: string): string | null {

@@ -69,6 +69,7 @@ export interface VisionCallOptions {
 export async function visionJson<T>(
   args: {
     image: { media_type: 'image/jpeg'; data: string };
+    additionalImages?: { media_type: 'image/jpeg'; data: string }[];
     system: string;
     prompt: string;
     schema: Record<string, unknown>;
@@ -96,6 +97,8 @@ export async function visionJson<T>(
                 type: 'image',
                 source: { type: 'base64', media_type: args.image.media_type, data: args.image.data },
               },
+              ...(args.additionalImages ?? []).map(image => ({ type: 'image' as const,
+                source: { type: 'base64' as const, media_type: image.media_type, data: image.data } })),
               { type: 'text', text: args.prompt },
             ],
           },

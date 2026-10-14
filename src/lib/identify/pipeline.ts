@@ -74,7 +74,10 @@ export async function identifyCard(
   const outcome = await findCandidates(extracted);
   warnings.push(...outcome.warnings);
 
-  const autoSelected = shouldAutoSelect(outcome.candidates);
+  const autoSelected = shouldAutoSelect(outcome.candidates, 0.8, {
+    ...extracted, requiresConfirmation: extracted.requiresConfirmation || !outcome.complete,
+  });
+  if (!autoSelected) warnings.push('Confirm the name, set, collector number and language before using a price.');
   if (!autoSelected && outcome.candidates.length > 1) {
     warnings.push(
       'Several printings match closely. Pick the right one — prices differ substantially ' +
@@ -139,6 +142,17 @@ export function mergeReadings(ocr: OcrResult | null, vision: VisionResult | null
     setTotal,
     setHint: vision?.extracted.setHint ?? null,
     nameConfidence,
+    collectorConfidence: Math.min(
+      vision?.extracted.number ? vision.confidence : ocr?.collectorConfidence ?? 0,
+      vision?.extracted.setTotal || !setTotal ? vision?.confidence ?? 1 : ocr?.collectorConfidence ?? 0,
+    ),
+    language: vision?.language ?? null,
+    requiresConfirmation: Boolean(
+      (ocrName && visionName && normalise(ocrName) !== normalise(visionName)) ||
+      (ocr?.number && vision?.extracted.number && ocr.number !== vision.extracted.number) ||
+      (ocr?.setTotal && vision?.extracted.setTotal && ocr.setTotal !== vision.extracted.setTotal) ||
+      (vision && vision.confidence < 0.8)
+    ),
   };
 }
 

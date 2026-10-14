@@ -15,9 +15,9 @@
 
 import type { RawCard, RawCardmarketPrices, RawTcgPlayerPrices } from '../tcg-api';
 import { parseApiDate } from '../tcg-api';
-import type { Condition, Money, PriceQuote, PrintVariant } from '../types';
+import { conditionKey, type Condition, type Money, type PriceQuote, type PrintVariant } from '../types';
 
-const NM: Condition = { kind: 'raw', condition: 'NM' };
+const UNGRADED: Condition = { kind: 'ungraded' };
 
 function usd(amount: number): Money {
   return { amount, currency: 'USD' };
@@ -35,7 +35,7 @@ function isUsable(n: number | null | undefined): n is number {
  * TCGplayer's per-variant prices.
  *
  * `market` is the figure to trust: it is TCGplayer's computed market price for
- * that printing, and it corresponds to Near Mint. `low`/`mid`/`high` describe
+ * that printing, across conditions; it does not establish a Near Mint price. `low`/`mid`/`high` describe
  * the spread of current listings, which mixes conditions and sellers, so they
  * are informative context but are not condition-specific quotes.
  */
@@ -51,10 +51,11 @@ export function quotesFromTcgPlayer(
     out.push({
       cardId,
       variant,
-      condition: NM,
+      condition: UNGRADED,
       price: usd(prices.market),
       provenance: 'observed',
       source: 'tcgplayer',
+      basis: 'market',
       asOf,
     });
   }
@@ -114,34 +115,36 @@ export function quotesFromCardmarket(
     out.push({
       cardId,
       variant,
-      condition: NM,
+      condition: UNGRADED,
       price: eur(trend),
       provenance: 'observed',
       source: 'cardmarket',
+      basis: 'trend',
       asOf,
     });
   } else if (isUsable(sell)) {
     out.push({
       cardId,
       variant,
-      condition: NM,
+      condition: UNGRADED,
       price: eur(sell),
       provenance: 'observed',
       source: 'cardmarket',
+      basis: 'market',
       asOf,
     });
   }
 
-  // Excellent-or-better lowest ask. Cardmarket's EX sits between TCGplayer's LP
-  // and MP; we record it against LP as the closest rung and say so in the label.
+  // Keep Cardmarket's own EX+ category: this is not a TCGplayer LP quote.
   if (!isReverse && isUsable(prices.lowPriceExPlus)) {
     out.push({
       cardId,
       variant,
-      condition: { kind: 'raw', condition: 'LP' },
+      condition: { kind: 'cardmarket-ex-plus' },
       price: eur(prices.lowPriceExPlus),
       provenance: 'observed',
       source: 'cardmarket',
+      basis: 'asking',
       asOf,
     });
   }
@@ -155,20 +158,21 @@ export function quotesFromCardmarket(
 export function quotesForCard(raw: RawCard): PriceQuote[] {
   const quotes: PriceQuote[] = [];
 
-  const tcgDate = parseApiDate(raw.tcgplayer?.updatedAt) ?? today();
+  const tcgDate = parseApiDate(raw.tcgplayer?.updatedAt);
   for (const [variant, prices] of Object.entries(raw.tcgplayer?.prices ?? {})) {
-    if (!prices) continue;
+    if (!prices || !tcgDate || tcgDate > new Date().toISOString().slice(0, 10)) continue;
     quotes.push(...quotesFromTcgPlayer(raw.id, variant as PrintVariant, prices, tcgDate));
   }
 
-  const cmDate = parseApiDate(raw.cardmarket?.updatedAt) ?? today();
+  const cmDate = parseApiDate(raw.cardmarket?.updatedAt);
   const cmPrices = raw.cardmarket?.prices;
-  if (cmPrices) {
+  if (cmPrices && cmDate && cmDate <= new Date().toISOString().slice(0, 10)) {
     // Cardmarket does not break its main fields out by printing, so attribute
     // them to the card's primary variant, plus reverse holo when that exists.
     const variants = Object.keys(raw.tcgplayer?.prices ?? {}) as PrintVariant[];
-    const primary = variants.find((v) => v !== 'reverseHolofoil') ?? variants[0] ?? 'normal';
-    quotes.push(...quotesFromCardmarket(raw.id, primary, cmPrices, cmDate));
+    const primary = variants.filter((v) => v !== 'reverseHolofoil');
+    // This aggregate does not distinguish editions.
+    if (primary.length === 1) quotes.push(...quotesFromCardmarket(raw.id, primary[0]!, cmPrices, cmDate));
 
     if (variants.includes('reverseHolofoil')) {
       quotes.push(...quotesFromCardmarket(raw.id, 'reverseHolofoil', cmPrices, cmDate));
@@ -180,37 +184,26 @@ export function quotesForCard(raw: RawCard): PriceQuote[] {
 
 /** All listing spreads for a card. */
 export function spreadsForCard(raw: RawCard): ListingSpread[] {
-  const asOf = parseApiDate(raw.tcgplayer?.updatedAt) ?? today();
+  const asOf = parseApiDate(raw.tcgplayer?.updatedAt);
+  if (!asOf || asOf > new Date().toISOString().slice(0, 10)) return [];
   return Object.entries(raw.tcgplayer?.prices ?? {})
     .filter((entry): entry is [string, RawTcgPlayerPrices] => Boolean(entry[1]))
     .map(([variant, prices]) => spreadFromTcgPlayer(variant as PrintVariant, prices, asOf));
 }
 
-/**
- * Pick the quote to headline and to rank bulk scans by.
- *
- * Preference order: an observed USD Near Mint market price, then observed EUR,
- * then anything real. A modeled figure is only ever chosen if nothing real
- * exists, and the caller can tell because `provenance` says so.
- */
-export function headlineQuote(quotes: PriceQuote[]): PriceQuote | null {
-  if (quotes.length === 0) return null;
-
-  const rank = (q: PriceQuote): number => {
-    let score = 0;
-    if (q.provenance === 'observed' || q.provenance === 'recorded') score += 100;
-    if (q.provenance === 'backfilled') score += 50;
-    if (q.source === 'tcgplayer') score += 10;
-    if (q.condition.kind === 'raw' && q.condition.condition === 'NM') score += 5;
-    // Prefer the more valuable printing when a card exists in several, since
-    // that is the one a user is most likely asking about.
-    score += Math.min(q.price.amount / 1000, 4);
-    return score;
-  };
-
-  return [...quotes].sort((a, b) => rank(b) - rank(a))[0] ?? null;
-}
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
+/** Select a real quote only after the printing is unambiguous. */
+export function headlineQuote(
+  quotes: PriceQuote[],
+  selection: { variant?: PrintVariant; condition?: Condition } = {},
+): PriceQuote | null {
+  const matching = quotes.filter((q) =>
+    q.provenance !== 'modeled' && Number.isFinite(q.price.amount) && q.price.amount > 0 &&
+    (!selection.variant || q.variant === selection.variant) &&
+    (!selection.condition || conditionKey(q.condition) === conditionKey(selection.condition)),
+  );
+  if (new Set(matching.map((q) => q.variant)).size !== 1) return null;
+  const rank = (q: PriceQuote) =>
+    (q.provenance === 'observed' || q.provenance === 'recorded' ? 100 : 50) +
+    (q.source === 'tcgplayer' ? 10 : 0) + (q.basis !== 'asking' ? 2 : 0);
+  return matching.sort((a, b) => rank(b) - rank(a) || b.asOf.localeCompare(a.asOf))[0] ?? null;
 }

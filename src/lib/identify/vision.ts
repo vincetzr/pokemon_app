@@ -112,7 +112,7 @@ export async function readCardWithVision(image: Buffer): Promise<VisionIdentifyR
       setHint: result.setName,
       // Vision reads far more reliably than OCR, so its readings are trusted
       // more heavily when scoring candidates.
-      nameConfidence: result.name ? Math.max(result.confidence, 0.7) : 0,
+      nameConfidence: result.name ? Math.max(0, Math.min(1, result.confidence)) : 0,
     },
     confidence: result.confidence,
     notes: result.legibilityNotes,

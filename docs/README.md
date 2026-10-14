@@ -1,8 +1,11 @@
 # The standalone scanner
 
 `index.html` is the whole scanner in one file — camera, card detection,
-authenticity checks, 2,023 baked cards with prices, and the matcher. No
-server, no network at run time.
+authenticity checks, 2,148 embedded catalogue entries, and the matcher. When served,
+it loads additional corpus shards (5,577 entries total), historical data, and the
+verified daily price snapshot from sibling folders. Serve the entire `docs/` folder.
+Opening only the HTML file offline supports the embedded matcher but has no fresh
+price lookup. Prices require a confirmed card and printing and show their date.
 
 ## Why this exists as a file
 
@@ -33,13 +36,18 @@ sounds like boilerplate and is not: the page began life as an artifact body,
 where the platform supplies all of it at publish time. Served as a file of its
 own, nothing does, and a browser with no doctype lays the page out in quirks
 mode against a 980px viewport — on a tablet, the whole scanner rendered
-shrunk into a corner. `test-served.mjs` measures `document.compatMode` and the
+shrunk into a corner. `scripts/test-scanner-browser.mjs` measures `document.compatMode` and the
 layout width over HTTP rather than trusting the markup.
 
 ## Rebuilding it
 
-The file is generated, not hand-edited. Edit `scripts/scanner-template.html`,
-which is the page with a `__CORPUS__` placeholder where the data island goes.
+The file is generated. Edit `scripts/scanner-template.html`,
+`scripts/scanner-rules.cjs` or `scripts/scanner-prices.js`, then run:
+
+    npm run build:scanner:reuse
+    npm run refresh:prices
+
+This preserves the shipped corpus descriptors. A full corpus rebuild instead uses:
 
     npm run bake            # the Pokemon TCG API      → /tmp/bake/corpus.json
     npm run bake:catalogue  # the TCGplayer catalogue  → /tmp/bake/tcgcsv.json

@@ -11,8 +11,9 @@
  * fixture set that only covered one era would hide that.
  */
 
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import sharp from 'sharp';
 
 export const FIXTURE_IDS = [
   'base1-2',    // Blastoise      - WOTC holo, classic yellow border
@@ -29,6 +30,24 @@ const OUT_DIR = join(process.cwd(), 'test-fixtures', 'cards');
 
 async function main(): Promise<void> {
   mkdirSync(OUT_DIR, { recursive: true });
+
+  // An independently served reference set for deterministic image regression
+  // tests. IDs are read from the verified catalogue mapping, never guessed.
+  if (process.argv.includes('--catalogue')) {
+    const snapshot = JSON.parse(readFileSync(join(process.cwd(), 'docs/prices/latest.json'), 'utf8'));
+    for (const id of ['base1-2', 'base1-4', 'base1-58', 'swsh45-18', 'sv3pt5-6']) {
+      const entry = snapshot.cards[id];
+      if (!entry?.productId) throw new Error(`No verified product for ${id}`);
+      const dest = join(OUT_DIR, `${id}.png`);
+      if (existsSync(dest)) continue;
+      const url = `https://tcgplayer-cdn.tcgplayer.com/product/${entry.productId}_in_1000x1000.jpg`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      if (!res.ok) throw new Error(`${id}: HTTP ${res.status}`);
+      await sharp(Buffer.from(await res.arrayBuffer())).png().toFile(dest);
+      console.log(`${id}: ${url}`);
+    }
+    return;
+  }
 
   for (const id of FIXTURE_IDS) {
     const dest = join(OUT_DIR, `${id}.png`);

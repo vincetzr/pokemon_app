@@ -8,6 +8,7 @@ import {
   shouldAutoSelect,
 } from './lookup';
 import type { Card } from '../types';
+import type { ExtractedText } from './lookup';
 
 function card(partial: Partial<Card> & Pick<Card, 'id' | 'name' | 'number'>): Card {
   return {
@@ -29,6 +30,24 @@ function card(partial: Partial<Card> & Pick<Card, 'id' | 'name' | 'number'>): Ca
     ...partial,
   } as Card;
 }
+
+describe('identity evidence required before automatic pricing', () => {
+  const candidate = { card: card({ id: 'base1-4', name: 'Charizard', number: '4' }), confidence: 1, evidence: [] };
+  const complete: ExtractedText = { name: 'Charizard', number: '4', setTotal: '102', setHint: null, nameConfidence: 0.95, language: 'English' };
+  it('accepts a clear matching name, number and denominator', () => {
+    expect(shouldAutoSelect([candidate], 0.8, complete)).toBe(true);
+  });
+  it.each([
+    { number: null }, { name: null }, { setTotal: null }, { setTotal: '130' },
+    { language: 'Japanese' }, { requiresConfirmation: true }, { nameConfidence: 0.3 }, { number: '5' },
+    { setHint: 'Base Set (Shadowless)' }, { collectorConfidence: 0.2 },
+  ])('abstains despite a perfect normalized score when evidence is %j', change => {
+    expect(shouldAutoSelect([candidate], 0.8, { ...complete, ...change })).toBe(false);
+  });
+  it('requires separation from a competing printing', () => {
+    expect(shouldAutoSelect([candidate, { ...candidate, confidence: 0.94 }], 0.8, complete)).toBe(false);
+  });
+});
 
 describe('parseCollectorLine', () => {
   it.each([

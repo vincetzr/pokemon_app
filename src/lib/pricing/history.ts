@@ -19,7 +19,7 @@ import { parseApiDate } from '../tcg-api';
 import type { Condition, PricePoint, PriceSeries, PrintVariant } from '../types';
 import { readHistory } from '../db';
 
-const NM: Condition = { kind: 'raw', condition: 'NM' };
+const UNGRADED: Condition = { kind: 'ungraded' };
 
 /**
  * Cardmarket publishes avg1 / avg7 / avg30: the mean sale price over the
@@ -149,7 +149,7 @@ export function buildRealSeries(
   void cmDate;
 
   // Everything the daily snapshot job has captured for this card.
-  const points = readHistory(raw.id, variant, NM);
+  const points = readHistory(raw.id, variant, UNGRADED);
 
   if (points.length < 4) {
     caveats.push(
@@ -162,7 +162,7 @@ export function buildRealSeries(
     series: {
       cardId: raw.id,
       variant,
-      condition: NM,
+      condition: UNGRADED,
       points,
       allReal: points.every((p) => p.provenance !== 'modeled'),
     },

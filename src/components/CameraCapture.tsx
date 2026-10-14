@@ -31,6 +31,7 @@ interface Props {
   busy?: boolean;
   /** Label for the shutter button, e.g. "Scan card" or "Add to pile". */
   shutterLabel?: string;
+  subject?: 'raw' | 'slab';
 }
 
 type CameraState =
@@ -39,7 +40,7 @@ type CameraState =
   | { status: 'live' }
   | { status: 'unavailable'; reason: string };
 
-export function CameraCapture({ onCapture, busy = false, shutterLabel = 'Scan card' }: Props) {
+export function CameraCapture({ onCapture, busy = false, shutterLabel = 'Scan card', subject = 'raw' }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [state, setState] = useState<CameraState>({ status: 'idle' });
@@ -133,7 +134,7 @@ export function CameraCapture({ onCapture, busy = false, shutterLabel = 'Scan ca
     // The guide is centred and sized to the same fraction of the preview as the
     // CSS overlay, so downstream code can crop to it without re-deriving layout.
     const guideH = h * 0.78;
-    const guideW = guideH * CARD_ASPECT;
+    const guideW = guideH * (subject === 'slab' ? .63 : CARD_ASPECT);
     const guide = {
       x: Math.round((w - guideW) / 2),
       y: Math.round((h - guideH) / 2),
@@ -141,8 +142,8 @@ export function CameraCapture({ onCapture, busy = false, shutterLabel = 'Scan ca
       height: Math.round(guideH),
     };
 
-    onCapture({ dataUrl: canvas.toDataURL('image/jpeg', 0.92), width: w, height: h, guide });
-  }, [onCapture]);
+    onCapture({ dataUrl: canvas.toDataURL('image/jpeg', 0.92), width: w, height: h, guide: subject === 'slab' ? null : guide });
+  }, [onCapture, subject]);
 
   const onFile = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,7 +174,7 @@ export function CameraCapture({ onCapture, busy = false, shutterLabel = 'Scan ca
             className={`h-full w-full object-cover ${state.status === 'live' ? '' : 'invisible'}`}
           />
 
-          {state.status === 'live' && <AlignmentGuide />}
+          {state.status === 'live' && <AlignmentGuide subject={subject} />}
 
           {state.status !== 'live' && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
@@ -191,7 +192,7 @@ export function CameraCapture({ onCapture, busy = false, shutterLabel = 'Scan ca
                     <p className="max-w-xs text-sm text-ink-300">{state.reason}</p>
                   ) : (
                     <p className="max-w-xs text-sm text-ink-300">
-                      Point your camera at a single card, filling the frame.
+                      {subject === 'slab' ? 'Include the whole slab and its label. Photograph the reverse barcode separately if needed.' : 'Point your camera at a single card, filling the frame.'}
                     </p>
                   )}
                   <button
@@ -260,12 +261,12 @@ export function CameraCapture({ onCapture, busy = false, shutterLabel = 'Scan ca
 }
 
 /** Card-shaped cutout with corner ticks, at the true 63×88mm aspect ratio. */
-function AlignmentGuide() {
+function AlignmentGuide({ subject }: { subject: 'raw' | 'slab' }) {
   return (
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
       <div
         className="relative h-[78%] rounded-xl outline outline-2 outline-bolt-400/80"
-        style={{ aspectRatio: String(CARD_ASPECT) }}
+        style={{ aspectRatio: String(subject === 'slab' ? .63 : CARD_ASPECT) }}
       >
         {(['-top-px -left-px border-t-4 border-l-4 rounded-tl-xl',
            '-top-px -right-px border-t-4 border-r-4 rounded-tr-xl',

@@ -77,6 +77,7 @@ describe('mergeReadings', () => {
 
     expect(merged.number).toBe('188');
     expect(merged.setTotal).toBe('185');
+    expect(merged.requiresConfirmation).toBe(true);
   });
 
   it('falls back to the OCR number when vision could not read one', () => {
