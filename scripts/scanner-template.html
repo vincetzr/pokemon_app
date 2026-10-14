@@ -9723,7 +9723,7 @@ function showCameraFallback() {
 
   $('cam-fallback').hidden = false;
   $('lnk-scanner').href = SCANNER_URL;
-  $('lnk-scanner').hidden = topLevelWeb;
+  $('lnk-scanner').hidden = topLevelWeb || !/^https:\/\//i.test(SCANNER_URL);
 }
 $('btn-use-photo').addEventListener('click', takePhoto);
 $('btn-retry-camera').addEventListener('click', () => void tryLiveCamera());

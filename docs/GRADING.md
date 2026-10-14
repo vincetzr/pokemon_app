@@ -83,3 +83,8 @@ capture or open the standalone HTTPS scanner in Safari/Chrome and grant camera
 permission there. Opening another tab does not guarantee permission, and this
 page cannot override its host's policy. Synthetic code fixtures and catalogue references are
 not a benchmark of real camera photos or professional grading accuracy.
+
+The browser-opening link is hidden unless a deployed HTTPS scanner URL is set
+as `SCANNER_URL` when building. The previous default CDN link returned HTTP 403
+during the camera review and is no longer offered. Photo capture and uploads
+remain available without an external host.

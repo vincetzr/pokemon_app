@@ -198,7 +198,7 @@ const setList = setNames.join(' · ');
 // case only: when it is embedded in another page, which refuses it a camera and
 // leaves it unable to work out its own address. Override with SCANNER_URL.
 const servedAt = process.env.SCANNER_URL
-  ?? 'https://raw.githack.com/vincetzr/pokemon_app/codex/recognition-pricing-correctness/docs/index.html';
+  ?? '';
 
 const gradingBundle = buildSync({ entryPoints: [resolve(ROOT, 'src/lib/grading/browser.ts')], bundle: true,
   format: 'iife', globalName: 'CardGrading', platform: 'browser', target: 'es2020', minify: true,

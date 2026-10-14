@@ -55,6 +55,7 @@ try {
   const frame = embedded.frameLocator('iframe');
   await frame.locator('#capture-target').waitFor();
   assert.match(await frame.locator('#capture-note').innerText(), /preview blocks live camera/);
+  assert.equal(await frame.locator('#lnk-scanner').isVisible(), false, 'Do not offer an unconfigured external host');
   await assertPhotoPicker(embedded, frame.locator('#capture-target'));
   const libraryEvent = embedded.waitForEvent('filechooser');
   await frame.locator('#btn-library').click();
