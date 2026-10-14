@@ -75,6 +75,11 @@ Run `npm run build:scanner:reuse`, then `npm run build:preview` to produce a
 single HTML file with every shipped card and the dated market snapshot.
 Barcode readers and image measurements are bundled. OCR language assets,
 official/reference links, optional AI and live offers need internet. Camera
-access depends on secure-context and embedding permissions; upload works when
-the camera is denied. Synthetic code fixtures and catalogue references are
+access depends on secure-context and embedding permissions. In the portable
+preview, **Take a photo** opens the device photo picker directly (native rear
+camera on supported phones/tablets); **Choose an existing photo** stays separate.
+Live video starts only from a tap. If the embedding host blocks it, use photo
+capture or open the standalone HTTPS scanner in Safari/Chrome and grant camera
+permission there. Opening another tab does not guarantee permission, and this
+page cannot override its host's policy. Synthetic code fixtures and catalogue references are
 not a benchmark of real camera photos or professional grading accuracy.

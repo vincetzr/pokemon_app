@@ -20,6 +20,7 @@
     "refresh:prices": "node --import tsx scripts/refresh-prices.mts",
     "build:scanner:reuse": "node scripts/build-scanner.mjs --reuse-corpus",
     "test:scanner:browser": "node scripts/test-scanner-browser.mjs",
+    "test:camera:browser": "node scripts/test-camera-browser.mjs",
     "fixtures:catalogue": "node --import tsx scripts/fetch-fixtures.ts --catalogue",
     "build:preview": "node scripts/build-preview.mjs",
     "test:grading:browser": "node scripts/test-next-grading-browser.mjs"

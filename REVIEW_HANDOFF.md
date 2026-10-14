@@ -1,5 +1,18 @@
 # Pokémon app review — continuation checkpoint
 
+## Camera preview follow-up — 2026-10-14
+
+The user reported that the preview camera did not work. The portable preview
+now leads with direct photo capture and always exposes a separate photo picker.
+Unsupported/policy-blocked contexts no longer route a Take a photo button through
+getUserMedia. Live video starts from a tap, has a bounded permission wait and
+stops late streams after switching to photos. New Chromium coverage includes
+actual iframe policy denial, missing API, declined permission, file picker,
+late/cancelled permission, timeout and a permitted fake-device video stream.
+Source is checkpointed before final GitHub validation. Local Chromium download
+failed and local native SQLite installation is unavailable; use GitHub's build
+and browser checks. Do not merge or deploy as part of this fix.
+
 Updated: 2026-10-10 (Asia/Shanghai). User: continue the previous review, especially correct card
 recognition and pricing, and save all progress before session limits.
 

@@ -58,6 +58,7 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:scanner:browser
+      - run: npm run test:camera:browser
       - run: npm run test:grading:browser
       - run: npm run build:preview
         env:

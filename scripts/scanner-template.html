@@ -727,11 +727,11 @@
          frame with the same refusal. A cross-origin link is also the one
          navigation an embedded page can reliably ask its host to perform. -->
     <div class="row" id="cam-fallback" hidden>
-      <a class="ghost primary" id="lnk-scanner" target="_blank" rel="noopener">Open the live scanner →</a>
-      <button class="ghost" id="btn-retry-camera" type="button">Try again</button>
-      <button class="ghost quiet" id="btn-use-photo" type="button">Photograph it instead</button>
+      <a class="ghost primary" id="lnk-scanner" target="_blank" rel="noopener">Open scanner in browser →</a>
+      <button class="ghost" id="btn-retry-camera" type="button">Try live camera</button>
     </div>
     <div class="row">
+      <button class="ghost primary" id="btn-use-photo" type="button">Take a photo</button>
       <button class="ghost" id="btn-library" type="button">Choose an existing photo</button>
       <button class="ghost" id="btn-bulk" type="button">Scan a pile</button>
       <button class="ghost primary" id="btn-reset" type="button" hidden>Scan another card</button>
@@ -7881,6 +7881,17 @@ function camSupported() {
   return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 }
 
+function cameraAccessProblem() {
+  if (window.isSecureContext === false) return 'insecure-context';
+  const policy = document.permissionsPolicy || document.featurePolicy;
+  try {
+    if (policy && typeof policy.allowsFeature === 'function' && !policy.allowsFeature('camera')) {
+      return 'blocked-by-policy';
+    }
+  } catch { /* unavailable on some browsers */ }
+  return camSupported() ? null : 'unsupported';
+}
+
 /**
  * Find out whether a camera is even possible before offering one.
  *
@@ -7895,14 +7906,8 @@ function camSupported() {
  * That is why the error branch below exists as well as this check.
  */
 async function cameraPreflight() {
-  if (!camSupported()) return 'unsupported';
-
-  const policy = document.featurePolicy || document.permissionsPolicy;
-  try {
-    if (policy && typeof policy.allowsFeature === 'function' && !policy.allowsFeature('camera')) {
-      return 'blocked-by-policy';
-    }
-  } catch { /* not implemented here; fall through to the permission query */ }
+  const problem = cameraAccessProblem();
+  if (problem) return problem;
 
   try {
     const status = await navigator.permissions.query({ name: 'camera' });
@@ -7943,12 +7948,23 @@ async function openCamera() {
   let lastErr = null;
   for (const constraints of attempts) {
     try {
-      return await navigator.mediaDevices.getUserMedia(constraints);
+      return await new Promise((resolve, reject) => {
+        let expired = false;
+        const timer = setTimeout(() => {
+          expired = true;
+          reject(new DOMException('Camera permission did not respond in time', 'TimeoutError'));
+        }, 20000);
+        Promise.resolve().then(() => navigator.mediaDevices.getUserMedia(constraints)).then(stream => {
+          clearTimeout(timer);
+          if (expired) stream.getTracks().forEach(track => track.stop());
+          else resolve(stream);
+        }, err => { clearTimeout(timer); reject(err); });
+      });
     } catch (err) {
       lastErr = err;
       // A refusal is final — looser constraints only re-prompt for the same no.
       if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError' ||
-                  err.name === 'NotFoundError')) throw err;
+                  err.name === 'NotFoundError' || err.name === 'TimeoutError')) throw err;
     }
   }
   throw lastErr || new Error('No camera available');
@@ -8077,17 +8093,18 @@ async function setZoom(track, value) {
 function cameraFailureMessage(err) {
   const name = (err && err.name) || '';
   if (name === 'NotAllowedError' || name === 'SecurityError') {
-    return 'The camera was blocked. That is usually the page being embedded without camera ' +
-      'permission, or the permission being declined. Use the photo button instead — it opens ' +
-      'your camera app, which also takes a much higher resolution picture.';
+    return 'Live camera access was refused. Allow camera access in your browser and device settings, ' +
+      'then try again, or use Take a photo or Choose an existing photo.';
   }
   if (name === 'NotFoundError' || name === 'OverconstrainedError') {
     return 'No usable camera was found on this device. Use the photo button instead.';
   }
   if (name === 'NotReadableError') {
-    return 'The camera is already in use by another app. Close it and try again, or use the ' +
-      'photo button.';
+    return 'The camera could not be read. It may be in use by another app. Close other camera apps ' +
+      'and try again, or use Take a photo.';
   }
+  if (name === 'TimeoutError') return 'The camera did not respond in time. Check camera permission, ' +
+    'then try again, or use Take a photo.';
   return 'The live camera could not be started (' + (name || 'unknown error') + '). Use the ' +
     'photo button instead.';
 }
@@ -9172,6 +9189,7 @@ async function fireCapture(how) {
 }
 
 function stopCamera() {
+  CAM.requestId = (CAM.requestId || 0) + 1;
   CAM.running = false;
   if (CAM.timer) { clearInterval(CAM.timer); CAM.timer = null; }
   if (CAM.stream) { CAM.stream.getTracks().forEach((t) => t.stop()); CAM.stream = null; }
@@ -9211,6 +9229,8 @@ function stopCamera() {
 }
 
 async function startCamera() {
+  if (CAM.running && CAM.stream) return true;
+  const requestId = CAM.requestId = (CAM.requestId || 0) + 1;
   if (!camSupported()) {
     CAM.lastError = 'no camera API in this browser';
     return false;
@@ -9221,9 +9241,15 @@ async function startCamera() {
   try {
     stream = await openCamera();
   } catch (err) {
+    if (requestId !== CAM.requestId) return false;
     CAM.lastError = (err && err.name) || 'unknown error';
     $('sec-camera').hidden = true;
     $('sec-capture').hidden = false;
+    return false;
+  }
+
+  if (requestId !== CAM.requestId) {
+    stream.getTracks().forEach(track => track.stop());
     return false;
   }
 
@@ -9235,6 +9261,11 @@ async function startCamera() {
   video.setAttribute('playsinline', '');
   video.muted = true;
   try { await video.play(); } catch { /* autoplay attribute covers it */ }
+
+  if (requestId !== CAM.requestId) {
+    stream.getTracks().forEach(track => track.stop());
+    return false;
+  }
 
   CAM.scout = CAM.scout || (() => {
     const canvas = document.createElement('canvas');
@@ -9259,6 +9290,7 @@ async function startCamera() {
   // figure quoted below describes what the user is about to see.
   CAM.zoomRange = zoomRange(CAM.track);
   CAM.zoom = CAM.zoomRange ? await setZoom(CAM.track, CAM.zoomRange.min) : null;
+  if (requestId !== CAM.requestId) return false;
   CAM.zoomTries = 0;
   CAM.zoomSettled = false;
 
@@ -9615,94 +9647,102 @@ CAM.debug = new URLSearchParams(location.search).has('debug');
 const SCANNER_URL = '__SCANNERURL__';
 
 let cameraWorked = false;
+let cameraStarting = false;
 
-/**
- * Always ASK the camera; never predict its answer.
- *
- * The preflight used to decide up front that a camera was unavailable and
- * skip straight to the photo app — so on a device where the permission query
- * reports "denied" for an embedded page, getUserMedia was never called at all
- * and the live guide could not appear even if it would have worked. A
- * prediction that suppresses the attempt cannot ever be proved wrong, which
- * is exactly the wrong shape for something that varies by browser, by
- * embedding and by what the user tapped last time. The preflight now only
- * chooses the wording; the tap always tries.
- */
-$('capture-target').addEventListener('click', async () => {
+function preferPhotoCapture() {
+  return !!(window.__PORTABLE_PREVIEW__ || cameraAccessProblem() || CAM.preflight === 'denied');
+}
+
+function takePhoto() {
+  // Keep the file-picker click in the user's tap, with no permission query or
+  // await first. Mobile browsers can then offer their native photo capture.
+  stopCamera();
+  cameraWorked = false;
   $('capture-note').hidden = true;
-  cameraWorked = await startCamera();
-  // Deliberately no automatic fall-through to the photo app. Falling through
-  // is what made the failure invisible: the camera app opens, the live frame
-  // never appears, and nothing says why.
-  if (!cameraWorked) showCameraFallback();
+  $('file-camera').click();
+}
+
+async function tryLiveCamera() {
+  if (cameraStarting) return;
+  cameraStarting = true;
+  $('capture-target').disabled = true;
+  $('btn-retry-camera').disabled = true;
+  const note = $('capture-note');
+  note.hidden = false;
+  note.textContent = 'Waiting for camera access. Allow it if asked, or use Take a photo.';
+  try {
+    cameraWorked = await startCamera();
+    if (cameraWorked) {
+      note.hidden = true;
+      $('cam-fallback').hidden = true;
+    } else if (CAM.lastError) showCameraFallback();
+  } catch (err) {
+    stopCamera();
+    CAM.lastError = (err && err.name) || 'unknown error';
+    showCameraFallback();
+  } finally {
+    cameraStarting = false;
+    $('capture-target').disabled = false;
+    $('btn-retry-camera').disabled = false;
+  }
+}
+
+$('capture-target').addEventListener('click', () => {
+  if (preferPhotoCapture()) takePhoto();
+  else void tryLiveCamera();
 });
 
 /**
  * Explain the failure and offer the two things that can actually help.
  *
- * A live guide needs the page itself to hold the camera. Embedded in another
- * site, it only gets one if that site grants it — which this page cannot do
- * from the inside. The same page in its own tab is not embedded, so the
- * viewfinder works there, and that route is offered first.
+ * A page cannot grant itself a permission withheld by its host. A standalone
+ * HTTPS page can request permission; opening it never guarantees permission.
  */
 function showCameraFallback() {
   const embedded = window.self !== window.top;
   const note = $('capture-note');
-  const why = CAM.lastError ? ' (' + CAM.lastError + ')' : '';
-
-  // Where a copy of this page is served from an origin of its own. A page that
-  // cannot get a camera where it is standing can at least say where one works,
-  // and a page cannot fix that for itself: the permission belongs to whatever
-  // is framing it.
+  const problem = cameraAccessProblem();
   const topLevelWeb = !embedded && /^https?:$/.test(location.protocol);
 
   note.hidden = false;
-  note.textContent = embedded
-    ? 'A page inside another page only gets a camera if the outer page grants one' + why +
-      ', and this one does not. Nothing on this page can change that. The link below opens the ' +
-      'same scanner served on its own — frame, live recognition, automatic capture, no button.'
-    : topLevelWeb
-      ? 'The camera could not start' + why + '. Allow camera access for this site and try again.'
-      : 'A file opened straight from disk is not always given a camera' + why + '. The link below ' +
-        'opens the same scanner served over HTTPS, where it is.';
+  if (problem === 'blocked-by-policy') {
+    note.textContent = 'This preview blocks live camera access. Use Take a photo or Choose an existing photo. ' +
+      'For live video, open the scanner in Safari or Chrome and allow camera access.';
+  } else if (problem === 'insecure-context') {
+    note.textContent = 'Live video needs a secure page. Use Take a photo or Choose an existing photo, ' +
+      'or open the HTTPS scanner in Safari or Chrome and allow camera access.';
+  } else if (problem === 'unsupported') {
+    note.textContent = 'This browser does not expose a live camera here. Use Take a photo ' +
+      '(native camera on supported phones and tablets) or Choose an existing photo.';
+  } else if (CAM.lastError || CAM.preflight === 'denied') {
+    note.textContent = cameraFailureMessage({ name: CAM.lastError || 'NotAllowedError' });
+  } else {
+    note.textContent = 'This portable preview uses photo capture. Live video may be restricted by the preview. ' +
+      'Use Take a photo, choose an existing image, or try live camera with permission.';
+  }
 
   $('cam-fallback').hidden = false;
   $('lnk-scanner').href = SCANNER_URL;
   $('lnk-scanner').hidden = topLevelWeb;
 }
-$('btn-use-photo').addEventListener('click', () => $('file-camera').click());
-$('btn-retry-camera').addEventListener('click', async () => {
-  $('cam-fallback').hidden = true;
-  $('capture-note').hidden = true;
-  cameraWorked = await startCamera();
-  if (!cameraWorked) showCameraFallback();
-});
+$('btn-use-photo').addEventListener('click', takePhoto);
+$('btn-retry-camera').addEventListener('click', () => void tryLiveCamera());
 
-// The preflight now only chooses wording, never whether to try.
+function configureCameraEntry() {
+  const photo = preferPhotoCapture();
+  $('capture-target').querySelector('.big').textContent = photo ? 'Take a photo' : 'Scan a card';
+  $('capture-target').querySelector('.sub').textContent = photo
+    ? 'Use your device photo picker, then confirm the card’s corners.'
+    : 'Hold the card inside the frame. It recognises it by itself.';
+  if (photo) showCameraFallback();
+}
+
+// No automatic permission request on page load. Both live video and the
+// native photo picker must start from an explicit user action.
+configureCameraEntry();
 (async () => {
   CAM.preflight = await cameraPreflight();
-  if (CAM.preflight === 'unsupported') {
-    $('capture-target').querySelector('.big').textContent = 'Take a photo';
-    $('capture-target').querySelector('.sub').textContent =
-      'Then drag the frame onto the card — a guide appears on your photo.';
-    return;
-  }
-
-  // Open the camera without waiting to be asked.
-  //
-  // A browser will only hand over a camera unprompted once the user has
-  // already granted it for this site, so the first visit still needs the tap
-  // that carries the permission prompt. Every visit after that starts
-  // scanning the moment the page loads, which is the whole point: point it at
-  // a card, get the card. Failure here is silent by design — the tap target
-  // is already on screen and says what to do.
-  if (CAM.preflight === 'maybe') {
-    try {
-      cameraWorked = await startCamera();
-    } catch {
-      /* the tap target remains */
-    }
-  }
+  configureCameraEntry();
 })();
 
 $('btn-shutter').addEventListener('click', () => fireCapture('manual'));
