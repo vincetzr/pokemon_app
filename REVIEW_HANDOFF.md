@@ -1,17 +1,33 @@
 # Pokémon app review — continuation checkpoint
 
-## Camera preview follow-up — 2026-10-14
+## Completed camera preview fix — 2026-10-14
 
 The user reported that the preview camera did not work. The portable preview
-now leads with direct photo capture and always exposes a separate photo picker.
+now leads with direct photo capture and always exposes a separate photo button.
 Unsupported/policy-blocked contexts no longer route a Take a photo button through
 getUserMedia. Live video starts from a tap, has a bounded permission wait and
-stops late streams after switching to photos. New Chromium coverage includes
-actual iframe policy denial, missing API, declined permission, file picker,
-late/cancelled permission, timeout and a permitted fake-device video stream.
-Source is checkpointed before final GitHub validation. Local Chromium download
-failed and local native SQLite installation is unavailable; use GitHub's build
-and browser checks. Do not merge or deploy as part of this fix.
+stops late streams after switching to photos. The page cannot override camera
+permissions withheld by its embedding host.
+
+- Verified application commit: `21fae9edd27303274f6b404b1f1e4ac843efab9a`.
+- Successful final workflow: https://github.com/vincetzr/pokemon_app/actions/runs/38536128539
+- All 165 unit/image tests, typecheck, production build, scanner browser checks,
+  new camera browser checks, production UI checks and preview artifact upload pass.
+- Camera checks use actual iframe policy denial plus missing API, declined
+  permission, native file pickers, portable mode, timeout, cancelled permission,
+  late-stream cleanup and a permitted Chromium fake-device video stream. Physical
+  iPad camera hardware was not available for validation.
+- The old default raw.githack.com URL returned HTTP 403 here. It is no longer
+  offered. A browser-opening link appears only with a configured HTTPS SCANNER_URL.
+- The portable preview was rebuilt from the verified application and replaces
+  the existing pokemon-scanner-preview.html deliverable in the conversation.
+  It retains all 5,577 cards and the dated price snapshot.
+- The first camera test run stopped on case-sensitive text matching against
+  CSS-uppercase button text; the test now accounts for the rendered casing.
+- Local Chromium download and native SQLite install are unavailable in this
+  runtime; GitHub performed the full build and browser validation successfully.
+- All code is saved on the review branch. PR #1 remains open, unmerged and not
+  deployed. The final handoff-only commit is excluded from the workflow trigger.
 
 Updated: 2026-10-10 (Asia/Shanghai). User: continue the previous review, especially correct card
 recognition and pricing, and save all progress before session limits.
