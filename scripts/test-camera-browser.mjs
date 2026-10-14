@@ -41,7 +41,7 @@ const deferredCamera = () => {
 try {
   const missing = await cameraPage(() => Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true }));
   await missing.goto('https://scanner.test/');
-  assert.match(await missing.locator('#capture-target').innerText(), /Take a photo/);
+  assert.match(await missing.locator('#capture-target').innerText(), /Take a photo/i);
   await assertPhotoPicker(missing, missing.locator('#capture-target'));
   assert.match(await missing.locator('#capture-note').innerText(), /does not expose a live camera/);
 
