@@ -10018,7 +10018,7 @@ CAM.debug = new URLSearchParams(location.search).has('debug');
  * embedding frame, location.href is the frame's URL, so reopening it lands
  * back in the same frame with the same refused camera.
  */
-const SCANNER_URL = 'https://raw.githack.com/vincetzr/pokemon_app/codex/recognition-pricing-correctness/docs/index.html';
+const SCANNER_URL = '';
 
 let cameraWorked = false;
 let cameraStarting = false;
@@ -10097,7 +10097,7 @@ function showCameraFallback() {
 
   $('cam-fallback').hidden = false;
   $('lnk-scanner').href = SCANNER_URL;
-  $('lnk-scanner').hidden = topLevelWeb;
+  $('lnk-scanner').hidden = topLevelWeb || !/^https:\/\//i.test(SCANNER_URL);
 }
 $('btn-use-photo').addEventListener('click', takePhoto);
 $('btn-retry-camera').addEventListener('click', () => void tryLiveCamera());
